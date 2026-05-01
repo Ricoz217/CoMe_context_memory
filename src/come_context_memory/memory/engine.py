@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import random
 import shutil
+import yaml
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -299,6 +300,9 @@ class BucketHandle:
             with_evidence=with_evidence,
             revision=revision
         )
+
+    async def export_memory_to_markdown(self, memory_id: str) -> dict[str, Any]:
+        return await self._engine.export_memory_to_markdown(memory_id)
 
     async def get_evidence_content(self, key: str, *, revision: str | None = None) -> str:
         return await self._engine.get_evidence_content(key, revision=revision)
@@ -2641,6 +2645,36 @@ class ContextMemoryEngineV3:
         if with_evidence and rec.evidence_ref:
             return replace(rec, evidence_content=self.storage.read_evidence(rec.evidence_ref))
         return rec
+
+    async def export_memory_to_markdown(self, memory_id: str) -> dict[str, Any]:
+        key = str(memory_id or "").strip()
+        if not key:
+            return {"success": False, "memory_id": key, "path": "", "message": "memory id is required"}
+        if key in {".", ".."} or "/" in key or "\\" in key:
+            return {"success": False, "memory_id": key, "path": "", "message": "invalid memory id"}
+
+        async with self._lock:
+            # Explicitly reject bucket ids; this API only exports memory shards.
+            if self.storage.get_bucket_info(key) is not None:
+                return {"success": False, "memory_id": key, "path": "", "message": "bucket id is not allowed"}
+
+            rec = self.storage.get_record(key)
+            if rec is None:
+                return {"success": False, "memory_id": key, "path": "", "message": "memory id not found"}
+
+            export_root = self.base_dir / "exports" / "memory_md"
+            export_root.mkdir(parents=True, exist_ok=True)
+            out_path = export_root / f"{key}.md"
+
+            metadata = rec.to_dict()
+            body = str(metadata.pop("content", "") or "")
+            frontmatter = yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False).strip()
+            markdown_text = f"---\n{frontmatter}\n---\n\n{body}"
+            out_path.write_text(markdown_text, encoding="utf-8")
+
+        final_path = str(out_path.resolve())
+        print(final_path)
+        return {"success": True, "memory_id": key, "path": final_path, "message": "markdown exported"}
 
     async def get_evidence_content(self, key: str, *, revision: str | None = None) -> str:
         return self.storage.get_evidence_content_by_key(key, revision)

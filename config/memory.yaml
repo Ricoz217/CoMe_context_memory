@@ -11,22 +11,22 @@ LLM:
 
 llm_presets:
   CONTEXT_MEMORY:
-    endpoint: "https://api.openai.com/v1/chat/completions"
+    endpoint: https://api.deepseek.com/chat/completions
     token: ""
-    model: "gpt-4.1-mini"
+    model: deepseek-v4-flash
     api_type: "openai"
-    max_context: 200000
+    max_context: 1000000
     auto_compress_gate: 0.7
-    extra_parameter: {}
+    extra_parameter: {"thinking": {"type": "disabled"}}
     proxy_mode: ""
     price: {}
 
   KIMI2.6:
-    endpoint: "https://api.openai.com/v1/chat/completions"
-    token: ""
-    model: "gpt-4.1-mini"
+    endpoint: https://api.siliconflow.cn/v1/chat/completions
+    token: sk-fetujatdhuuggekxfrxnyffjkmfhziizckifpursblmuobxk
+    model: Pro/moonshotai/Kimi-K2.6
     api_type: "openai"
-    max_context: 200000
+    max_context: 256000
     auto_compress_gate: 0.7
     extra_parameter: {}
     proxy_mode: ""
