@@ -1,0 +1,230 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>903</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_diag_failure_stage&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_diag_failure_stage</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>19</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>921</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_should_skip_auto_summary&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_should_skip_auto_summary</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>25</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>4095</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_calc_negative_weight&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_calc_negative_weight</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>21</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>600</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_extract_text_response&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_extract_text_response</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>22</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>733</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_fallback_ingest&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_fallback_ingest</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>16</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>801</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_fallback_compress&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_fallback_compress</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>18</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>829</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_fallback_split&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_fallback_split</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>15</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>886</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_fallback_bucket_summary&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_fallback_bucket_summary</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>24</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>903</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_fallback_optimize&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_fallback_optimize</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>18</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>937</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_normalize_optimize_result&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_normalize_optimize_result</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>26</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>1060</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_normalize_ingest_result&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_normalize_ingest_result</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>24</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py</file>
+  <line>1092</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/llm_pipeline.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_normalize_query_result&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_normalize_query_result</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>23</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>776</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_build_bucket_assignment_plan&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_build_bucket_assignment_plan</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>29</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/query_service.py</file>
+  <line>268</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/query_service.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_resolve_query_llm_output&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_resolve_query_llm_output</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>25</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py</file>
+  <line>385</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_next_alias&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_next_alias</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>11</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py</file>
+  <line>589</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_empty_context_dict&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_empty_context_dict</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>19</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py</file>
+  <line>1274</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;_json_to_memory_record&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>_json_to_memory_record</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>22</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/test_aliasing.py</file>
+  <line>41</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/test_aliasing.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;alias_map_version&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>alias_map_version</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>17</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/test_aliasing.py</file>
+  <line>44</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/test_aliasing.py" />
+  <problem_class id="PyMethodMayBeStaticInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">方法未声明为 static</problem_class>
+  <description>方法 &lt;code&gt;freeze_alias_map&lt;/code&gt; 可能为 'static'</description>
+  <highlighted_element>freeze_alias_map</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>16</length>
+</problem>
+</problems>

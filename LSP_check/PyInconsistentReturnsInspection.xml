@@ -1,0 +1,14 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/utils.py</file>
+  <line>84</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/utils.py" />
+  <problem_class id="PyInconsistentReturnsInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">不一致的 return 语句</problem_class>
+  <description>某些路径缺少 return 语句</description>
+  <highlighted_element>self[key] = value</highlighted_element>
+  <language>Python</language>
+  <offset>8</offset>
+  <length>17</length>
+</problem>
+</problems>

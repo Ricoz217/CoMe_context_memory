@@ -1,0 +1,182 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>965</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'map_ver'</description>
+  <highlighted_element>map_ver</highlighted_element>
+  <language>Python</language>
+  <offset>12</offset>
+  <length>7</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>2025</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'idx'</description>
+  <highlighted_element>idx</highlighted_element>
+  <language>Python</language>
+  <offset>16</offset>
+  <length>3</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>2112</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'idx'</description>
+  <highlighted_element>idx</highlighted_element>
+  <language>Python</language>
+  <offset>20</offset>
+  <length>3</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>2115</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'done_all'</description>
+  <highlighted_element>done_all</highlighted_element>
+  <language>Python</language>
+  <offset>24</offset>
+  <length>8</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>2415</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'out'</description>
+  <highlighted_element>out</highlighted_element>
+  <language>Python</language>
+  <offset>12</offset>
+  <length>3</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py</file>
+  <line>2417</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/engine.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'rec'</description>
+  <highlighted_element>rec</highlighted_element>
+  <language>Python</language>
+  <offset>16</offset>
+  <length>3</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>504</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'rec'</description>
+  <highlighted_element>rec</highlighted_element>
+  <language>Python</language>
+  <offset>29</offset>
+  <length>3</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>600</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'node_key'</description>
+  <highlighted_element>node_key</highlighted_element>
+  <language>Python</language>
+  <offset>12</offset>
+  <length>8</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>609</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'node_key'</description>
+  <highlighted_element>node_key</highlighted_element>
+  <language>Python</language>
+  <offset>12</offset>
+  <length>8</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>618</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'item'</description>
+  <highlighted_element>item</highlighted_element>
+  <language>Python</language>
+  <offset>16</offset>
+  <length>4</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>619</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'node_key'</description>
+  <highlighted_element>node_key</highlighted_element>
+  <language>Python</language>
+  <offset>16</offset>
+  <length>8</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>624</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'keys'</description>
+  <highlighted_element>keys</highlighted_element>
+  <language>Python</language>
+  <offset>34</offset>
+  <length>4</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>626</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'key'</description>
+  <highlighted_element>key</highlighted_element>
+  <language>Python</language>
+  <offset>16</offset>
+  <length>3</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>633</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'keys'</description>
+  <highlighted_element>keys</highlighted_element>
+  <language>Python</language>
+  <offset>29</offset>
+  <length>4</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py</file>
+  <line>637</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/services/optimize_service.py" />
+  <problem_class id="PyShadowingNamesInspection" severity="WEAK WARNING" attribute_key="INFO_ATTRIBUTES">正在从外部作用域隐藏名称</problem_class>
+  <description>从外部作用域隐藏名称 'key'</description>
+  <highlighted_element>key</highlighted_element>
+  <language>Python</language>
+  <offset>16</offset>
+  <length>3</length>
+</problem>
+</problems>

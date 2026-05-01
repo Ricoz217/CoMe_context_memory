@@ -1,0 +1,25 @@
+# CoMe ContextMemory - minimal runtime dependencies
+# Python: >=3.10 (recommended 3.11/3.12)
+
+# Core HTTP + tokenizer
+httpx==0.28.1
+tiktoken==0.12.0
+
+# Lightweight config (replace old TIYA configer)
+PyYAML==6.0.3
+
+# Image/file path in LLM_connect + multimodal helpers
+pillow==12.0.0
+requests==2.32.5
+
+# Optional but recommended for full feature parity:
+# - Louvain-based grouping in memory.rerank
+networkx==3.6
+python-louvain==0.16
+
+# Optional compression backends (only needed if retained utils paths use them)
+Brotli==1.2.0
+zstandard==0.23.0
+
+# Compatibility helper for some Python/runtime combos
+typing_extensions==4.15.0

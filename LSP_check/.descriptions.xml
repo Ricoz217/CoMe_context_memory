@@ -1,0 +1,2677 @@
+<inspections profile="Project Default"><group name="XML" path=""><inspection shortName="XmlUnboundNsPrefix" defaultSeverity="WARNING" displayName="未绑定的命名空间前缀" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 XML 中未绑定的命名空间前缀。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlUnboundNsPrefix&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="CheckXmlFileWithXercesValidator" defaultSeverity="ERROR" displayName="外部验证失败" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 Xerces 验证程序检测到的 XML 文件和指定 DTD 或架构的差异。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: CheckXmlFileWithXercesValidator&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="CheckDtdRefs" defaultSeverity="ERROR" displayName="未解析的 DTD 引用" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告特定于 DTD 的引用（例如，对 XML 实体或 DTD 元素声明的引用）中的不一致。
+适用于 DTD 和 XML 文件。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: CheckDtdRefs&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlDeprecatedElement" defaultSeverity="WARNING" displayName="弃用的符号" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告弃用的 XML 元素或特性。
+&lt;p&gt;可以通过 XML 注释或带有 'deprecated' 文本的文档标记来标记符号。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlDeprecatedElement&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlDefaultAttributeValue" defaultSeverity="WARNING" displayName="包含默认值的冗余特性" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告对 XML 特性默认值的冗余赋值。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlDefaultAttributeValue&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlPathReference" defaultSeverity="ERROR" displayName="未解析的文件引用" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 XML 中未解析的文件引用。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlPathReference&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="CheckTagEmptyBody" defaultSeverity="WARNING" displayName="空元素内容" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告没有内容的 XML 元素。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;user&gt;
+    &amp;lt;name&gt;&amp;lt;/name&gt;
+  &amp;lt;/user&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;user&gt;
+    &amp;lt;name/&gt;
+  &amp;lt;/user&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: CheckTagEmptyBody&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlDuplicatedId" defaultSeverity="ERROR" displayName="重复 'id' 特性" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 XML 和 HTML 中 &lt;code&gt;id&lt;/code&gt; 特性的重复值。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlDuplicatedId&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlInvalidId" defaultSeverity="ERROR" displayName="未解析的 'id' 引用" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告未在 XML 和 HTML 中的任何地方定义的 &lt;code&gt;id&lt;/code&gt; 的使用情况。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlInvalidId&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlHighlighting" defaultSeverity="ERROR" displayName="XML 高亮显示" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="true">&lt;html&gt;
+&lt;body&gt;
+报告批量代码检查结果中的 XML 验证问题。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlHighlighting&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlUnusedNamespaceDeclaration" defaultSeverity="WARNING" displayName="未使用的架构声明" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 XML 中未使用的命名空间声明或位置提示。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlUnusedNamespaceDeclaration&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlWrongRootElement" defaultSeverity="ERROR" displayName="错误的根元素" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告与 &lt;code&gt;&amp;lt;doctype&amp;gt;&lt;/code&gt; 标记中指定的名称不同的根标记名称。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlWrongRootElement&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="XmlUnresolvedReference" defaultSeverity="ERROR" displayName="未解析的引用" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 XML 中的未解析引用。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: XmlUnresolvedReference&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="安全性" path=""><inspection shortName="MaliciousLibrariesLocal" defaultSeverity="WARNING" displayName="恶意依赖项" enabled="true" language="" pluginId="org.jetbrains.security.package-checker" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告在项目中声明的恶意 NPM 和 PyPI 依赖项。&lt;/p&gt;
+&lt;p&gt;修正报告的问题有助于防止您的软件受到攻击者的破坏。&lt;/p&gt;
+&lt;p&gt;移除恶意软件包以解决问题。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: MaliciousLibrariesLocal&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="VulnerableLibrariesLocal" defaultSeverity="WARNING" displayName="易受攻击的声明依赖项" enabled="true" language="" pluginId="org.jetbrains.security.package-checker" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告在项目中声明的 Gradle、Maven、NPM、PyPI 和 Go 依赖项中的漏洞。
+  Gradle 和 Maven 依赖项的完整列表显示在“项目”工具窗口的“外部库”下。&lt;/p&gt;
+&lt;p&gt;修正报告的问题有助于防止您的软件受到攻击者的破坏。&lt;/p&gt;
+&lt;p&gt;要解决问题，您可以更新到漏洞已修正的版本（如果可用）或切换到没有漏洞的依赖项。&lt;/p&gt;
+&lt;p&gt;可用的快速修复可能会建议更新到安全版本或访问网站以详细了解特定漏洞。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: VulnerableLibrariesLocal&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection></group><group name="TOML" path=""><inspection shortName="TomlUnresolvedReference" defaultSeverity="WARNING" displayName="未解析的引用" enabled="true" language="TOML" pluginId="org.toml.lang" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 TOML 文件中未解析的引用。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: TomlUnresolvedReference&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection></group><group name="Shell 脚本" path=""><inspection shortName="ShellCheck" defaultSeverity="ERROR" displayName="ShellCheck" enabled="true" language="Shell Script" pluginId="com.jetbrains.sh" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告由集成的 &lt;a href="https://github.com/koalaman/shellcheck"&gt;ShellCheck&lt;/a&gt; 静态分析工具检测到的 shell 脚本错误。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: ShellCheck&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="Qodana" path=""><inspection shortName="CyclomaticComplexityInspection" defaultSeverity="WARNING" displayName="代码指标" enabled="false" language="" pluginId="org.intellij.qodana" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+计算循环复杂度。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: CyclomaticComplexityInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="JSON 和 JSON5" path=""><inspection shortName="JsonDuplicatePropertyKeys" defaultSeverity="WARNING" displayName="对象字面量中的重复键" enabled="true" language="JSON" pluginId="com.intellij.modules.json" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告对象字面量中的重复键。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: JsonDuplicatePropertyKeys&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="JsonSchemaDeprecation" defaultSeverity="WEAK WARNING" displayName="弃用的 JSON 属性" enabled="true" language="JSON" pluginId="com.intellij.modules.json" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 JSON 文件中弃用的属性。&lt;br&gt;
+请注意，JSON 架构规范中尚未定义弃用机制，
+并且该检查使用了非标准的扩展 'deprecationMessage'。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: JsonSchemaDeprecation&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="JsonSchemaCompliance" defaultSeverity="WARNING" displayName="符合 JSON 架构" enabled="true" language="JSON" pluginId="com.intellij.modules.json" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 JSON 文件与分配给它的 &lt;a href="https://json-schema.org"&gt;JSON 模式&lt;/a&gt;之间的不一致。&lt;br&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: JsonSchemaCompliance&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="JsonSchemaRefReference" defaultSeverity="WARNING" displayName="未解析的 '$ref' 和 '$schema' 引用" enabled="true" language="JSON" pluginId="com.intellij.modules.json" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 JSON 架构中未解析的 &lt;code&gt;$ref&lt;/code&gt; 或 &lt;code&gt;$schema&lt;/code&gt; 路径。&lt;br&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: JsonSchemaRefReference&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="Json5StandardCompliance" defaultSeverity="ERROR" displayName="符合 JSON5 标准" enabled="true" language="JSON5" pluginId="com.intellij.modules.json" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 JSON5 文件中&lt;a href="http://json5.org"&gt;语言规范&lt;/a&gt;不一致的情况。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: Json5StandardCompliance&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="JsonStandardCompliance" defaultSeverity="ERROR" displayName="符合 JSON 标准" enabled="true" language="JSON" pluginId="com.intellij.modules.json" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 JSON 文件与&lt;a href="https://tools.ietf.org/html/rfc7159"&gt;语言规范&lt;/a&gt;的以下差异：
+&lt;ul&gt;
+  &lt;li&gt;行或块注释（可配置）。&lt;/li&gt;
+  &lt;li&gt;多个顶层值（用于 JSON Lines 文件，可针对其他文件配置）。&lt;/li&gt;
+  &lt;li&gt;对象或数组中的尾随逗号（可配置）。&lt;/li&gt;
+  &lt;li&gt;用单引号引用的字符串。&lt;/li&gt;
+  &lt;li&gt;属性键不是由双引号引用的字符串。&lt;/li&gt;
+  &lt;li&gt;用 NaN 或正无穷大/负无穷大数值作为浮点字面量（可配置）。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: JsonStandardCompliance&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="Python" path=""><inspection shortName="PyNewTypeInspection" defaultSeverity="WARNING" displayName="NewType 的无效用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告 &lt;a href="https://docs.python.org/3/library/typing.html#typing.NewType"&gt;NewType&lt;/a&gt; 的无效用法。
+&lt;/p&gt;
+&lt;p&gt;
+  &lt;b&gt;示例：&lt;/b&gt;
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  from typing import NewType
+
+  InvalidName = NewType("Name", int)  # 变量名称 'InvalidName' 与 NewType 名称 'Name' 不匹配
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code&gt;
+  from typing import Literal
+
+  InvalidType = NewType("InvalidType", Literal[1])  # NewType 不能与 'Literal[1]' 一起使用
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code&gt;
+  Base = NewType("Base", str)
+
+  class Derived(Base):  # 'Base' cannot be subclassed
+      pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyNewTypeInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyTypedDictInspection" defaultSeverity="WARNING" displayName="无效的 TypedDict 定义和用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;a href="https://www.python.org/dev/peps/pep-0589/"&gt;TypedDict&lt;/a&gt; 无效的定义和用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import TypedDict
+
+
+class Movie(TypedDict):
+    name: str
+    year: int
+    rate: int = 10  # 右侧值不受支持
+
+    def method(self): # TypedDict 中的语句无效
+        pass
+
+
+m = Movie(name="name", year=1000, rate=9)
+print(m["director"])  # 'Movie' 中没有 'director' 键
+del m["name"]  # 不能删除 'name' 键
+m["year"] = "1001"  # 应为 'int'，得到的是 'str'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyTypedDictInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PySimplifyBooleanCheckInspection" defaultSeverity="WEAK WARNING" displayName="冗余布尔变量检查" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告与布尔字面量的相等比较。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def func(s):
+    if s.isdigit() == True:
+        return int(s)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，这段代码将简化为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def func(s):
+    if s.isdigit():
+        return int(s)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PySimplifyBooleanCheckInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyInconsistentIndentationInspection" defaultSeverity="WARNING" displayName="缩进不一致" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 Python 源文件中缩进不一致的情况，例如在代码中混用制表符和空格。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyInconsistentIndentationInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyNoneFunctionAssignmentInspection" defaultSeverity="WEAK WARNING" displayName="分配不返回任何内容的函数调用" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告使用不返回任何内容的函数进行赋值的情况。&lt;/p&gt;
+此检查与 &lt;a href="https://docs.pylint.org/en/1.6.0/features.html#id6"&gt;pylint 检查 E1111&lt;/a&gt; 相似。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def just_print():
+    print("Hello!")
+
+
+action = just_print()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;IDE 提议的快速修复是移除此赋值。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyNoneFunctionAssignmentInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyCallingNonCallableInspection" defaultSeverity="WARNING" displayName="尝试调用不可调用的对象" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告尝试调用属性等不可调用对象的问题：&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Record:
+    @property
+    def as_json(self):
+
+json = Record().as_json()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyCallingNonCallableInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyDocstringTypesInspection" defaultSeverity="WEAK WARNING" displayName="docstring 中的类型与推断的类型不匹配" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 docstring 中与动态推断类型不匹配的类型。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyDocstringTypesInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyDunderSlotsInspection" defaultSeverity="WARNING" displayName="具有 '__slots__' 定义的无效类用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告包含 &lt;code&gt;__slots__&lt;/code&gt; 定义的类的无效用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Foo:
+    __slots__ = ['foo', 'bar']
+
+
+foo = Foo()
+foo.baz = 'spam'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyDunderSlotsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyGlobalUndefinedInspection" defaultSeverity="WEAK WARNING" displayName="全局变量并非在模块级别定义" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告通过 &lt;code&gt;global&lt;/code&gt; 语句定义的变量未在模块范围中定义的问题。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def foo():
+    global bar
+    print(bar)
+
+foo()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;可以移动该全局变量声明来进行修正：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+global bar
+
+
+def foo():
+    print(bar)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyGlobalUndefinedInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyShadowingNamesInspection" defaultSeverity="WEAK WARNING" displayName="正在从外部作用域隐藏名称" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告在外部范围中定义的名称被隐藏。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def outer(p):
+    def inner(p):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;IDE 提议的快速修复是移除形参或重命名形参。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyShadowingNamesInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyPep8Inspection" defaultSeverity="INFORMATION" displayName="PEP 8 编码样式违规" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;通过运行绑定的 &lt;a
+  href="https://github.com/PyCQA/pycodestyle"&gt;pycodestyle.py&lt;/a&gt; 工具报告违反 &lt;a href="https://www.python.org/dev/peps/pep-0008/"&gt;PEP 8 编码风格指南&lt;/a&gt;的情况。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyPep8Inspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyOverridesInspection" defaultSeverity="WARNING" displayName="@override 装饰器的无效用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;当使用 @override 装饰的方法在其上级类中没有匹配的方法时报告&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import override
+
+class Parent:
+    def foo(self) -&gt; int:
+        return 1
+
+    def bar(self, x: str) -&gt; str:
+        return x
+
+class Child(Parent):
+    @override
+    def foo(self) -&gt; int:
+        return 2
+
+    @override # 重写函数缺少 super 方法
+    def baz(self) -&gt; int:
+        return 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyOverridesInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyMissingOrEmptyDocstringInspection" defaultSeverity="WEAK WARNING" displayName="缺失或空 docstring" enabled="false" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告缺失的和空的 docstring。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;缺失 docstring 的示例&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def demo(a):
+    c = a ** 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;b&gt;空 docstring 的示例&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def demo(a):
+    """
+    """
+    c = a ** 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，这段代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def demo(a):
+    """
+
+    :param a:
+    """
+    c = a ** 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;您需要提供一些有关所生成模板中的形参的详细信息。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyMissingOrEmptyDocstringInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyAsyncCallInspection" defaultSeverity="WARNING" displayName="协程调用中缺少 `await` 语法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告在未使用 &lt;code&gt;await&lt;/code&gt; 语法的情况下调用的协程。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+async def bar():
+    pass
+
+
+async def foo():
+    bar()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+async def bar():
+    pass
+
+
+async def foo():
+    await bar()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyAsyncCallInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyIncorrectDocstringInspection" defaultSeverity="WEAK WARNING" displayName="不正确的 docstring" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 docstring 中不匹配的形参。 例如，&lt;code&gt;b&lt;/code&gt; 处于高亮显示状态，因为 &lt;code&gt;add&lt;/code&gt; 函数中没有此类形参。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+    def add(a, c):
+    """
+    @param a:
+    @param b:
+    @return:
+    """
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;如果 docstring 中没有提及其中任何一个形参，则检查不会警告您缺少这些形参：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def mult(a, c):
+    """
+    @return:
+    """
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyIncorrectDocstringInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyRedundantParenthesesInspection" defaultSeverity="WEAK WARNING" displayName="冗余圆括号" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告表达式中冗余的圆括号。&lt;/p&gt;
+&lt;p&gt;IDE 提供用于移除冗余圆括号的快速修复操作。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyRedundantParenthesesInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyAugmentAssignmentInspection" defaultSeverity="WEAK WARNING" displayName="赋值可被替换为增强赋值" enabled="false" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告可以替换为增量赋值的赋值。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+a = 23
+b = 3
+a = a + b
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+a = 23
+b = 3
+a += b
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyAugmentAssignmentInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PySingleQuotedDocstringInspection" defaultSeverity="WEAK WARNING" displayName="带单引号的 docstring" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告不符合三个双引号引用字符串格式的 docstring。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def calc(self, balance=0):
+    'param: balance'
+    self.balance = balance
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def calc(self, balance=0):
+    """param: balance"""
+    self.balance = balance
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PySingleQuotedDocstringInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyShadowingBuiltinsInspection" defaultSeverity="WEAK WARNING" displayName="隐藏内置名称" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告隐藏的内置名称，例如 &lt;code&gt;len&lt;/code&gt; 或 &lt;code&gt;list&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def len(a, b, c):
+    d = a + b + c
+    return d
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在此代码段中，使用了 &lt;code&gt;len&lt;/code&gt; 内置名称。 IDE 提议的修复方式是应用重命名重构。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyShadowingBuiltinsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PoetryPackageVersionsInspection" defaultSeverity="WARNING" displayName="Poetry 软件包版本已过时" enabled="true" language="TOML" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;code&gt;pyproject.toml&lt;/code&gt; 的 &lt;code&gt;[tool.poetry.dependencies]&lt;/code&gt; 和 &lt;code&gt;[tool.poetry.dev-dependencies]&lt;/code&gt; 部分中过时的软件包版本。
+&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PoetryPackageVersionsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyClassicStyleClassInspection" defaultSeverity="WARNING" displayName="经典样式类用法" enabled="false" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告&lt;a href="https://docs.python.org/2/reference/datamodel.html#new-style-and-classic-classes"&gt;经典样式类&lt;/a&gt;的用法。 此检查仅适用于 Python 2。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class A:
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用 IDE 提供的快速修复后，这段代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class A(object):
+    def __init__(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyClassicStyleClassInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="CommandLineInspection" defaultSeverity="WARNING" displayName="不正确的 CLI 语法" enabled="true" language="CommandLine" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告您在控制台中键入的命令实参顺序不正确的问题。 此检查还会验证选项名称和实参是否正确。&lt;/p&gt;
+&lt;p&gt;如果您将使用命令行界面（例如 &lt;a
+  href="https://www.jetbrains.com/help/pycharm/running-manage-py.html"&gt;Django 中的 manage.py&lt;/a&gt;），请不要禁用此检查。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: CommandLineInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyMissingTypeHintsInspection" defaultSeverity="WEAK WARNING" displayName="缺少函数定义的类型提示" enabled="false" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告缺失的采用其中一种或两种格式的函数声明的类型提示：形参注解或类型注释。&lt;/p&gt;
+&lt;p&gt;如果希望检查从运行时收集的类型或推断的类型，请选中&lt;b&gt;仅当类型已知时&lt;/b&gt;复选框。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyMissingTypeHintsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyNewStyleGenericSyntaxInspection" defaultSeverity="WARNING" displayName="新型类型形参和类型别名的无效用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;a href="https://www.python.org/dev/peps/pep-0695/"&gt;PEP 695&lt;/a&gt; 类型形参语法的无效用法
+&lt;p&gt;
+  在函数和类定义以及新样式类型别名语句中查找以下问题：
+&lt;ul&gt;
+  &lt;li&gt;在新样式泛型类中扩展 typing.Generic&lt;/li&gt;
+  &lt;li&gt;在新样式泛型类中扩展形参化的 typing.Protocol&lt;/li&gt;
+  &lt;li&gt;对 ParamSpec 和 TypeVarTuple 使用具有类型形参的泛型上限和约束&lt;/li&gt;
+  &lt;li&gt;混合传统和新样式类型变量&lt;/li&gt;
+  &lt;li&gt;在新样式类型别名中使用传统类型变量&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  示例：
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  from typing import Generic
+
+  class Example[T](Generic[T]): ... # 具有类型形参列表的类不应扩展 'Generic'
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;
+  class Example[T: (list[S], str)]: ... # 在类型形参的约束和边界内不允许使用泛型类型
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;
+  from typing import TypeVar
+
+  K = TypeVar("K")
+
+  class ClassC[V]:
+      def method2[M](self, a: M, b: K) -&gt; M | K: ... # 不允许混合使用传统和新样式 TypeVars
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyNewStyleGenericSyntaxInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyUnresolvedReferencesInspection" defaultSeverity="WARNING" displayName="未解析的引用" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告代码中无法解析的引用。&lt;/p&gt;
+&lt;p&gt;在动态类型语言中，少数情况下可能会这样。 &lt;/p&gt;
+&lt;p&gt;如果引用类型未知，其特性不会被高亮显示为未解析，即便它应该被高亮显示:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def print_string(s):
+  print(s.abc())
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在这段代码中，&lt;code&gt;s&lt;/code&gt; 始终为字符串，&lt;code&gt;abc&lt;/code&gt; 应高亮显示为未解析状态。 但是，&lt;code&gt;s&lt;/code&gt; 类型被推断为 &lt;code&gt;Any&lt;/code&gt;，并且未报告任何警告。&lt;/p&gt;
+&lt;p&gt;IDE 提供快速修复操作来即时添加缺少的引用。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyUnresolvedReferencesInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyPropertyDefinitionInspection" defaultSeverity="WARNING" displayName="不正确的属性定义" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;code&gt;property()&lt;/code&gt; 的实参和用 &lt;code&gt;@property&lt;/code&gt; 注解的函数的问题。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class C:
+    @property
+    def abc(self):  # Getter 应返回或生成一些内容
+        pass
+
+    @abc.setter
+    def foo(self, value):  # 函数名称与装饰器不匹配
+        pass
+
+    @abc.setter
+    def abc(self, v1, v2):  # Setter 签名应为 (self, value)
+        pass
+
+    @abc.deleter
+    def abc(self, v1):  # Deleter 签名应为 (self)
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;快速修复提议更新形参。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyPropertyDefinitionInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyInitNewSignatureInspection" defaultSeverity="WARNING" displayName="__new__ 和 __init__ 的签名不兼容" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;code&gt;__new__&lt;/code&gt; 和 &lt;code&gt;__init__&lt;/code&gt; 方法不兼容的签名。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class MyClass(object):
+    def __new__(cls, arg1):
+        return super().__new__(cls)
+
+    def __init__(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;如果 &lt;code&gt;__new__&lt;/code&gt; 和 &lt;code&gt;__init__&lt;/code&gt; 有不同的实参，则无法实例化 &lt;code&gt;MyClass&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;IDE 提议的修复方法是应用“更改签名”重构。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyInitNewSignatureInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyPropertyAccessInspection" defaultSeverity="WARNING" displayName="不当的属性访问" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告对属性访问不当的情况：
+&lt;ul&gt;
+  &lt;li&gt;设置只读属性&lt;/li&gt;
+  &lt;li&gt;读取只写属性&lt;/li&gt;
+  &lt;li&gt;删除了不可删除的属性&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class MyClass:
+    @property
+    def read_only(self): return None
+
+    def __write_only_setter(self, value): pass
+
+    write_only = property(None, __write_only_setter)
+
+
+a = MyClass()
+a.read_only = 10 # 不能设置属性
+del a.read_only # 不能删除属性
+print(a.write_only) # 不能读取属性
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyPropertyAccessInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyRedeclarationInspection" defaultSeverity="WARNING" displayName="无用法的重新声明名称" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告对中间未使用的名称的无条件重新声明。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def x(): pass
+
+
+x = 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;它适用于函数和类声明以及顶层赋值。 &lt;/p&gt;
+&lt;p&gt;在显示警告时，您可以尝试进行推荐的操作，例如可能会提示您重命名变量。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyRedeclarationInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyUnreachableCodeInspection" defaultSeverity="WARNING" displayName="不可到达的代码" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告通常无法到达的代码段。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+if True:
+    print('Yes')
+else:
+    print('No')
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;修复方法是检查和修改算法，确保其实现预期逻辑。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyUnreachableCodeInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+</inspection><inspection shortName="PyNonAsciiCharInspection" defaultSeverity="WARNING" displayName="文件包含非 ASCII 字符" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 Python 2 中的文件包含非 ASCII 字符且顶部没有编码声明的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class A(object):
+# &amp;#8470;5
+    def __init__(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在本例中，IDE 报告了注释中有非 ASCII 符号以及缺少编码声明的情况。 应用建议的快速修复以添加缺少的编码声明：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+# coding=utf-8
+class A(object)
+# &amp;#8470;5
+    def __init__(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyNonAsciiCharInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyBroadExceptionInspection" defaultSeverity="WEAK WARNING" displayName="不明确的异常子句" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告不提供有关此问题的特定信息的异常子句。 &lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;不指定异常类的子句&lt;/li&gt;
+  &lt;li&gt;指定为 &lt;code&gt;Exception&lt;/code&gt; 的子句&lt;/li&gt;
+&lt;/ul&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyBroadExceptionInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyStubPackagesAdvertiser" defaultSeverity="WARNING" displayName="存根软件包广播程序" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告存根软件包的可用性。&lt;/p&gt;
+&lt;p&gt;
+  &lt;a href="https://www.python.org/dev/peps/pep-0561/"&gt;存根软件包&lt;/a&gt;是指包含相应运行时软件包的类型信息的软件包。
+&lt;/p&gt;
+&lt;p&gt;使用存根软件包可以确保为相应的 Python 软件包提供更好的编码辅助。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyStubPackagesAdvertiser&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyPackageRequirementsInspection" defaultSeverity="WARNING" displayName="未满足的软件包要求" enabled="true" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告需求文件 (例如 &lt;code&gt;requirements.txt&lt;/code&gt; 或 &lt;code&gt;Pipfile&lt;/code&gt;) 中提及但未安装的软件包，或已导入但需求文件中未提及的软件包。&lt;/p&gt;
+&lt;p&gt;
+  IDE 显示快速修复横幅，以便您一键安装缺失的软件包。
+&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyPackageRequirementsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyCompatibilityInspection" defaultSeverity="WARNING" displayName="代码与特定的 Python 版本不兼容" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告与指定的 Python 版本不兼容的情况。
+  如果要自己的代码与一系列 Python 版本兼容（以构建库为例），则可以启用此检查。&lt;/p&gt;
+&lt;p&gt;要定义所检查的 Python 版本的范围，请在&lt;b&gt;选项&lt;/b&gt;部分中选择相应的复选框。&lt;/p&gt;
+&lt;p&gt;有关 IDE 支持的 Python 版本的详细信息，请参阅 &lt;a href="https://www.jetbrains.com/help/pycharm/python.html#support"&gt;Web 帮助&lt;/a&gt;。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyCompatibilityInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyTupleAssignmentBalanceInspection" defaultSeverity="WARNING" displayName="元组赋值 balance 不正确" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告右侧的表达式数量和左侧目标数量不相同的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+t = ('red', 'blue', 'green', 'white')
+(c1, c2, c3) = t
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;可以修改高亮显示的代码段以恢复元组平衡来进行快速修复。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyTupleAssignmentBalanceInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyPep8NamingInspection" defaultSeverity="WEAK WARNING" displayName="PEP 8 命名约定违规" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告违反 &lt;a href="https://www.python.org/dev/peps/pep-0008/"&gt;PEP8&lt;/a&gt; 命名约定的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class mammalia(object):
+    extremities = 4
+
+    def feeds(self):
+        print("milk")
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在这段代码中，IDE 提议将 &lt;code&gt;mammalia&lt;/code&gt; 重命名为 &lt;code&gt;Mammalia&lt;/code&gt;。
+  应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Mammalia(object):
+    extremities = 4
+
+    def feeds(self):
+        print("milk")
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyPep8NamingInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyMethodParametersInspection" defaultSeverity="WEAK WARNING" displayName="不正确的第一个形参" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告缺少通常命名为 &lt;code&gt;self&lt;/code&gt; 的第一个形参的方法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Movie:
+
+   def show():
+       pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Movie:
+
+   def show(self):
+       pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;检查还报告类方法中的命名问题。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Movie:
+    @classmethod
+    def show(abc):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;由于类方法的第一个形参应当为 &lt;code&gt;cls&lt;/code&gt;，所以 IDE 提供了快速修复来对其重命名。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyMethodParametersInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyTrailingSemicolonInspection" defaultSeverity="WARNING" displayName="语句中的禁止尾随分号" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告语句中的尾随分号。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def my_func(a):
+    c = a ** 2;
+    return c
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;IDE 提供移除尾随分号的快速修复。 应用后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def my_func(a):
+    c = a ** 2
+    return c
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyTrailingSemicolonInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyMethodMayBeStaticInspection" defaultSeverity="WEAK WARNING" displayName="方法未声明为 static" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告任何无需创建类实例并且可以设置为 static 的方法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class MyClass(object):
+    def my_method(self, x):
+        print(x)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;如果应用&lt;b&gt;从方法中生成函数&lt;/b&gt;快速修复，代码将变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def my_method(x):
+    print(x)
+
+
+class MyClass(object):
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;如果选择&lt;b&gt;将方法设为 static&lt;/b&gt; 快速修复，将添加 &lt;code&gt;@staticmethod&lt;/code&gt; 装饰器：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class MyClass(object):
+    @staticmethod
+    def my_method(x):
+        print(x)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyMethodMayBeStaticInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyUnnecessaryCastInspection" defaultSeverity="WEAK WARNING" displayName="不必要的类型转换" enabled="false" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告在表达式已经具有指定目标类型时不必要调用 typing.cast 的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import cast
+
+a: int
+b = &lt;b&gt;cast(int, a)&lt;/b&gt;  # 不必要，a 已经为 int
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyUnnecessaryCastInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyInvalidCastInspection" defaultSeverity="WARNING" displayName="使用不可能的类型进行类型转换" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告对 `typing.cast` 的调用，其中源类型的任何可能值都无法赋给目标类型。 我们可以将这称为“非重叠”类型。&lt;/p&gt;
+&lt;p&gt;这通常表明有错误。 如果转换是有意为之，首先将表达式转换为公共父类型，以明确表达意图。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import cast
+
+# 非重叠类型 — 可能是错误
+&lt;b&gt;cast(int, "a")&lt;/b&gt;          # 'str' -&gt; 'int'
+&lt;b&gt;cast(list[int], ["a"])&lt;/b&gt;  # 'list[str]' -&gt; 'list[int]'
+
+# 推荐的显式逃生舱口是使用“双重转换”
+cast(int, &lt;b&gt;cast(object, "a")&lt;/b&gt;)  # 正常
+
+# 合法的重叠情况
+cast(int, object())    # 有效的向下转换
+cast(object, 1)        # 有效的向上转换
+
+# 但以下是无效转换，因为 &lt;code&gt;list&lt;/code&gt; 不可变。 当前不受此检查支持
+int_list = [1, 2, 3]
+cast(list[object], int_list)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;该检查依赖于静态类型信息；当类型未知时，不会报告警告。
+
+  尚未考虑泛型类型的差异。&lt;/p&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: PyInvalidCastInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PySuperArgumentsInspection" defaultSeverity="WARNING" displayName="错误的调用 super 实参" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告对 &lt;code&gt;super(A, B)&lt;/code&gt; 的任何调用不符合以下要求的情况：&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;code&gt;B&lt;/code&gt; 是 &lt;code&gt;A&lt;/code&gt; 的实例&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;B&lt;/code&gt; 是 &lt;code&gt;A&lt;/code&gt; 的子类&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Figure:
+    def color(self):
+        pass
+
+
+class Rectangle(Figure):
+    def color(self):
+        pass
+
+
+class Square(Figure):
+    def color(self):
+        return super(Rectangle, self).color() # Square 不是 Rectangle 的子类
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;作为修复，您可以令 &lt;code&gt;Square&lt;/code&gt; 为 &lt;code&gt;Rectangle&lt;/code&gt; 类的实例。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PySuperArgumentsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyTypeHintsInspection" defaultSeverity="WARNING" displayName="无效的类型提示定义和用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告类型提示的无效用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import TypeVar
+
+T0 = TypeVar('T1') # 'TypeVar' 的实参必须为 'T0'
+
+
+def b(p: int) -&gt; int:  # 注释和注解中都指定了类型
+    # type: (int) -&gt; int
+    pass
+
+
+def c(p1, p2): # 类型签名的实参太多
+    # type: (int) -&gt; int
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;可以进行的快速修复提议各种各样的操作。 您可以重命名、移除或移动有问题的元素。 也可以手动修改类型声明，以确保不显示警告。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyTypeHintsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyArgumentListInspection" defaultSeverity="WARNING" displayName="错误的调用实参" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告声明的形参和实际实参之间的差异，也报告不正确的实参（例如重复的命名实参）和不正确的实参顺序。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Foo:
+    def __call__(self, p1: int, *, p2: str = "%"):
+        return p2 * p1
+
+
+bar = Foo()
+bar.__call__() # 形参未填
+bar(5, "#") # 非预期实参
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;正确的代码段如下所示：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Foo:
+    def __call__(self, p1: int, *, p2: str = "%"):
+        return p2 * p1
+
+
+bar = Foo()
+bar.__call__(5)
+bar(5, p2="#")
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyArgumentListInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyEnumInspection" defaultSeverity="WARNING" displayName="无效的枚举定义和用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告 &lt;a href="https://peps.python.org/pep-0435/"&gt;Enum&lt;/a&gt; 的无效定义和用法。
+&lt;/p&gt;
+&lt;p&gt;
+  &lt;b&gt;示例：&lt;/b&gt;
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from enum import Enum
+
+
+class Shape(Enum):
+    SQUARE = 1
+    CIRCLE = 2
+
+
+class ExtendedShape(Shape):  # 枚举类 'Shape' 为 final，无法被子类化
+    TRIANGLE = 3
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code&gt;
+  from enum import Enum
+
+
+  class Color(Enum):
+    _value_: int
+    RED = 1
+    GREEN = "green"  # 类型 'str' 不可赋值给已声明的类型 'int'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code&gt;
+  from enum import Enum
+
+
+  class Pet(Enum):
+    CAT = 1
+    DOG: int = 2  # 不允许为枚举成员使用类型注解
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyEnumInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyStatementEffectInspection" defaultSeverity="WARNING" displayName="语句不起任何作用" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告不起任何作用的语句。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Car:
+    def __init__(self, speed=0):
+        self.speed = speed
+        self.time # 不起任何作用
+
+2 + 3 # 不起任何作用
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在本例中，您可以向 &lt;code&gt;Car&lt;/code&gt; 类添加字段 &lt;code&gt;time&lt;/code&gt;，或者为有问题的语句引入变量。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyStatementEffectInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyInconsistentReturnsInspection" defaultSeverity="WEAK WARNING" displayName="不一致的 return 语句" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+高亮显示函数中不一致的 return 语句。
+根据 PEP8，函数中的所有 return 语句要么都应该返回一个表达式，要么都不应该返回。
+&lt;p&gt;
+  PEP8 的建议：函数中的所有 return 语句要么都应该返回一个表达式，要么都不应该返回。
+  如果任何 return 语句返回一个表达式，则任何不返回值的 return 语句都应明确地将其声明为 return None，并且在函数末尾（如果可到达）应存在显式 return 语句：
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+# 正确：
+
+def foo(x):
+    if x &gt;= 0:
+        return math.sqrt(x)
+    else:
+        return None
+
+def bar(x):
+    if x &lt; 0:
+        return None
+    return math.sqrt(x)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code&gt;
+# 错误：
+
+def foo(x):
+    if x &gt;= 0:
+        return math.sqrt(x)
+
+def bar(x):
+    if x &lt; 0:
+        return
+    return math.sqrt(x)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: PyInconsistentReturnsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyDecoratorInspection" defaultSeverity="WARNING" displayName="在类的外部使用了特定于类的装饰器" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告类外部方法中的 &lt;code&gt;@classmethod&lt;/code&gt; 或 &lt;code&gt;@staticmethod&lt;/code&gt; 装饰器的用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class State(object):
+
+    @classmethod
+    def my_state(cls, name):
+        cls.name = name
+
+
+@classmethod
+def change_state(self):
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;change_state&lt;/code&gt; 方法不应使用 &lt;code&gt;@classmethod&lt;/code&gt; 装饰器，或应将其移动到 &lt;code&gt;state&lt;/code&gt; 类声明。 &lt;/p&gt;
+&lt;p&gt;如果应用&lt;code&gt;移除装饰器&lt;/code&gt;操作，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class State(object):
+
+    @classmethod
+    def my_state(cls, name):
+        cls.name = name
+
+
+def change_state(self):
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyDecoratorInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyListCreationInspection" defaultSeverity="WEAK WARNING" displayName="非最优列表声明" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告可以用列表字面量重写列表声明的情况。&lt;/p&gt;
+&lt;p&gt;这样可以确保应用程序更出色的性能。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+l = [1]
+l.append(2)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+l = [1, 2]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyListCreationInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyMethodOverridingInspection" defaultSeverity="WARNING" displayName="方法签名与被重写方法的签名不匹配" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告重写方法签名的不一致。&lt;/p&gt;
+
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Book:
+    def add_title(self):
+        pass
+
+
+class Novel(Book):
+    def add_title(self, text):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;code&gt;Novel&lt;/code&gt; 类中的 &lt;code&gt; add_title&lt;/code&gt; 方法的形参与 &lt;code&gt;Book&lt;/code&gt; 类中指定的方法签名不匹配。 IDE 提议的修复方法是应用“更改签名”重构。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyMethodOverridingInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyClassHasNoInitInspection" defaultSeverity="WEAK WARNING" displayName="类没有 `__init__` 方法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 Python 2 中的类没有&lt;code&gt;__init__&lt;/code&gt; 方法且其父类也没有此方法的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Book():
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;快速修复将添加 &lt;code&gt;__init__&lt;/code&gt; 方法：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Book():
+    def __init__(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyClassHasNoInitInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyTestUnpassedFixtureInspection" defaultSeverity="WARNING" displayName="测试函数未请求固定例程" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告是否在未传递给测试函数形参或 &lt;code&gt;@pytest.mark.usefixtures&lt;/code&gt; 装饰器的情况下使用了固定例程&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyTestUnpassedFixtureInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyStringFormatInspection" defaultSeverity="WARNING" displayName="字符串格式设置操作中的错误" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告字符串格式化操作中的错误。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例 1：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+"Hello {1}".format("people")
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;b&gt;示例 2：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def bar():
+    return 1
+
+
+"%s %s" % bar()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;修复方法是重写字符串格式化片段，以遵守&lt;a href="https://docs.python.org/3/library/string.html#format-string-syntax"&gt;格式化语法&lt;/a&gt;。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyStringFormatInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyUnusedImportsInspection" defaultSeverity="WARNING" displayName="未使用的 import" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 Python 代码中未使用的 import 语句。
+
+&lt;p&gt;
+  此检查会检测代码中未使用并且可以安全移除的 import 语句。
+  移除未使用的 import 有助于保持代码整洁，并降低名称冲突的风险。
+&lt;/p&gt;
+
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;
+import os           # Unused import
+import sys         # Used import
+from math import pi # Unused import
+
+print(sys.version)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;
+  该检查提供了一项优化 import 的快速修复，可以移除所有未使用的 import 语句。
+&lt;/p&gt;
+
+&lt;p&gt;
+  请注意，某些 import 可能会被间接使用（例如，用于副作用），不应被移除。
+  如果某些 import 是为了副作用而存在，您可以对其禁止此检查。
+&lt;/p&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: PyUnusedImportsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyFromFutureImportInspection" defaultSeverity="WARNING" displayName="位置不当的 from __future__ import" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告未在文件开头使用的 &lt;code&gt;from __future__ import&lt;/code&gt; 语句&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+a = 1
+from __future__ import print_function
+print()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from __future__ import print_function
+
+a = 1
+print()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyFromFutureImportInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyDeprecationInspection" defaultSeverity="WARNING" displayName="弃用的函数、类或模块" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告标记为已弃用并引发 &lt;code&gt;DeprecationWarning&lt;/code&gt; 或 &lt;code&gt;PendingDeprecationWarning&lt;/code&gt; 警告的 Python 函数或方法的用法。&lt;/p&gt;
+&lt;p&gt;此外，该检查还高亮显示 &lt;code&gt;abc.abstractstaticmethod&lt;/code&gt;、&lt;code&gt;abc.abstractproperty&lt;/code&gt; 和 &lt;code&gt;abc.abstractclassmethod&lt;/code&gt; 装饰器的用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Foo:
+    @property
+    def bar(self):
+        import warnings
+        warnings.warn("this is deprecated", DeprecationWarning, 2)
+        return 5
+
+
+foo = Foo()
+print(foo.bar)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyDeprecationInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyClassVarInspection" defaultSeverity="WARNING" displayName="ClassVar 变量的用法无效" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;a href="https://docs.python.org/3/library/typing.html#typing.ClassVar"&gt;ClassVar&lt;/a&gt; 注解的无效用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import ClassVar
+
+
+class Cat:
+    color: ClassVar[str] = "white"
+    weight: int
+
+    def __init__(self, weight: int):
+        self.weight = weight
+
+
+Cat.color = "black"  # OK
+my_cat = Cat(5)
+my_cat.color = "gray"  # 错误，在实例上设置类变量
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyClassVarInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyInterpreterInspection" defaultSeverity="WARNING" displayName="无效的解释器" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告没有为项目配置 Python 解释器或解释器无效的问题。 如果没有正确配置的解释器，就无法执行 Python 脚本，也无法受益于某些 Python 代码洞察功能。&lt;/p&gt;
+&lt;p&gt;IDE 提供对解释器设置的快速访问。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyInterpreterInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyRelativeImportInspection" defaultSeverity="WEAK WARNING" displayName="可疑的相对 import" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告纯目录（例如既不包含 &lt;code&gt;__init__.py&lt;/code&gt; 也不显式标记为命名空间软件包的目录）中相对 import 的用法。
+&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyRelativeImportInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyDataclassInspection" defaultSeverity="WARNING" displayName="无效的数据类定义和用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告使用 &lt;code&gt;dataclasses&lt;/code&gt; 或 &lt;code&gt;attr&lt;/code&gt; 模块创建的类的无效定义和用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+import dataclasses
+
+
+@dataclasses.dataclass
+class FullName:
+    first: str
+    middle: str = ""
+    last: str
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyDataclassInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyExceptClausesOrderInspection" defaultSeverity="WARNING" displayName="顺序错误的 'except' 子句" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;code&gt;except&lt;/code&gt; 子句没有按照从更具体到更通用的正确顺序列出，或者一个异常类被捕获两次的情况。 &lt;/p&gt;
+&lt;p&gt;
+  如果不修复顺序，最具体的处理程序可能无法捕获某些异常。
+&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+try:
+    call()
+except ValueError:
+    pass
+except UnicodeError:
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;IDE 建议将该子句上移。 应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+try:
+    call()
+except UnicodeError:
+    pass
+except ValueError:
+    pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyExceptClausesOrderInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyExceptionInheritInspection" defaultSeverity="WARNING" displayName="不从标准 'Exception' 类继承异常" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 raise 的自定义异常类不是继承自&lt;a href="https://docs.python.org/3/library/exceptions.html"&gt;内置 Exception 类&lt;/a&gt;的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class A:
+    pass
+
+
+def me_exception():
+    raise A()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;执行提议的快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class A(Exception):
+    pass
+
+
+def me_exception():
+    raise A()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyExceptionInheritInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyUnusedLocalInspection" defaultSeverity="WEAK WARNING" displayName="未使用的局部符号" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告在本地定义但未使用函数中名称的局部变量、形参和函数。
+&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyUnusedLocalInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+</inspection><inspection shortName="PyUnboundLocalVariableInspection" defaultSeverity="WARNING" displayName="未绑定的局部变量" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告赋值前引用的局部变量。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+x = 0
+if x &gt; 10:
+    b = 3
+print(b)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;IDE 报告&lt;code&gt;print(b)&lt;/code&gt; 的问题。 可能的修复方法是：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+x = 0
+if x &gt; 10:
+    b = 3
+    print(b)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyUnboundLocalVariableInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyNamedTupleInspection" defaultSeverity="WARNING" displayName="无效的 'typing.NamedTuple' 定义" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;a href="https://docs.python.org/3/library/typing.html#typing.NamedTuple"&gt;typing.NamedTuple&lt;/a&gt; 的无效定义。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+import typing
+
+
+class FullName(typing.NamedTuple):
+    first: str
+    last: str = ""
+    middle: str
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;修复方法是将有默认值的字段放在没有默认值的字段后面：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+import typing
+
+
+class FullName(typing.NamedTuple):
+    first: str
+    middle: str
+    last: str = ""
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyNamedTupleInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyOldStyleClassesInspection" defaultSeverity="WARNING" displayName="老式类包含新式类功能" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告老式类中出现的&lt;a href="https://www.python.org/doc/newstyle/"&gt;新式类特性&lt;/a&gt;。 这项检查高亮显示老式类中的 &lt;code&gt;__slots__&lt;/code&gt;、&lt;code&gt;__getattribute__&lt;/code&gt; 和 &lt;code&gt;super()&lt;/code&gt;。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyOldStyleClassesInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyDefaultArgumentInspection" defaultSeverity="WARNING" displayName="默认实参是可变实参" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告在实参的默认值中检测到列表或字典形式可变值的问题。 &lt;br/&gt;
+  默认实参值仅在函数定义时进行一次求值，这意味着修改该实参的默认值将影响此函数的所有后续调用。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def func(s, cache={}):
+    cache[s] = None
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def func(s, cache=None):
+    if cache is None:
+        cache = {}
+    cache[s] = None
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyDefaultArgumentInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyComparisonWithNoneInspection" defaultSeverity="WEAK WARNING" displayName="使用相等运算符与 None 进行比较" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告与 &lt;code&gt;None&lt;/code&gt; 的比较。 这种类型的比较应始终使用 &lt;code&gt;is&lt;/code&gt; 或 &lt;code&gt;is not&lt;/code&gt; 进行，不得使用相等运算符。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+a = 2
+
+
+if a == None:
+    print("Success")
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+a = 2
+
+
+if a is None:
+    print("Success")
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyComparisonWithNoneInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyStubPackagesCompatibilityInspection" defaultSeverity="WARNING" displayName="不兼容的存根软件包" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告不支持相应运行时软件包版本的存根软件包。&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://www.python.org/dev/peps/pep-0561/"&gt;存根软件包&lt;/a&gt;包含某些运行时软件包的类型信息。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyStubPackagesCompatibilityInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PySetFunctionToLiteralInspection" defaultSeverity="WARNING" displayName="函数调用可被替换为集合字面量" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告对可以替换为 &lt;code&gt;set&lt;/code&gt; 字面量的 &lt;code&gt;set&lt;/code&gt; 函数的调用。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def do_mult(a, b):
+    c = a * b
+    return set([c, a, b])
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def do_mult(a, b):
+    c = a * b
+    return {c, a, b}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PySetFunctionToLiteralInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyTypeCheckerInspection" defaultSeverity="WARNING" displayName="错误类型" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告函数调用表达式、目标和返回值中的类型错误。 在动态类型语言中，少数情况下可能会这样。 &lt;/p&gt;
+&lt;p&gt;在 docstring 或 Python 3 函数注解中可以指定函数形参的类型。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def foo() -&gt; int:
+    return "abc" # 应为 int，得到的是 str
+
+
+a: str
+a = foo() # 应为 str，得到的是 int
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;进行快速修复可以修改有问题的类型：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def foo() -&gt; str:
+    return "abc"
+
+
+a: str
+a = foo()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyTypeCheckerInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyAbstractClassInspection" defaultSeverity="WEAK WARNING" displayName="无效的抽象类定义和用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告无效的抽象类定义和用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from abc import abstractmethod, ABC
+
+
+class Figure(ABC):
+
+    @abstractmethod
+    def do_figure(self):
+        pass
+
+
+class Triangle(Figure):  # 'Triangle' 类中未定义所有 abstract 方法
+    def do_triangle(self):
+        pass
+
+
+Triangle()  # 无法实例化抽象类 'Triangle'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，IDE 为 &lt;code&gt;Triangle&lt;/code&gt; 类实现抽象方法：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from abc import abstractmethod, ABC
+
+
+class Figure(ABC):
+
+    @abstractmethod
+    def do_figure(self):
+        pass
+
+
+class Triangle(Figure):
+    def do_figure(self):
+        pass
+
+    def do_triangle(self):
+        pass
+
+
+Triangle()
+&lt;/code&gt;&lt;/pre&gt;
+
+如果在元类不是 &lt;code&gt;abc.ABCMeta&lt;/code&gt; 的类中使用 &lt;code&gt;abc.abstractmethod&lt;/code&gt;，它也会发出警告：
+&lt;code&gt;&lt;pre&gt;
+from abc import abstractmethod
+
+
+class MyClass:
+    @abstractmethod  # 'MyClass' 不是抽象类
+    def foo(self):
+        ...
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyAbstractClassInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyDictDuplicateKeysInspection" defaultSeverity="WARNING" displayName="字典包含重复键" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告将同一个值作为字典键使用两次的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+dic = {"a": [1, 2], "a": [3, 4]}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyDictDuplicateKeysInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyProtectedMemberInspection" defaultSeverity="WEAK WARNING" displayName="访问类或模块的 protected 成员" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 protected 成员在类、定义其的类的后代或模块的外部访问的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Foo:
+    def _protected_method(self):
+        pass
+
+
+class Bar(Foo):
+    def public_method(self):
+        self._protected_method()
+
+
+foo = Foo()
+foo._protected_method() # 访问 protected 方法
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyProtectedMemberInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyChainedComparisonsInspection" defaultSeverity="WEAK WARNING" displayName="过于复杂的链式比较" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告可以简化的链式比较。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  def do_comparison(x):
+      xmin = 10
+      xmax = 100
+      if x &gt;= xmin and x &amp;lt;= xmax:
+          pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;IDE 提议简化 &lt;code&gt;if x &gt;= xmin and x &amp;lt;= xmax&lt;/code&gt;。
+  应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  def do_comparison(x):
+      xmin = 10
+      xmax = 100
+      if xmin &amp;lt;= x &amp;lt;= xmax:
+          pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyChainedComparisonsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyProtocolInspection" defaultSeverity="WARNING" displayName="无效的协议定义和用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 &lt;a href="https://www.python.org/dev/peps/pep-0544/"&gt;PEP-544&lt;/a&gt; 中引入的协议的无效定义和用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import Protocol
+
+
+class MyProtocol(Protocol):
+    def method(self, p: int) -&gt; str:
+        pass
+
+
+class MyClass(MyProtocol):
+    def method(self, p: str) -&gt; int: # 'method' 的类型不兼容 'MyProtocol'
+        pass
+
+
+class MyAnotherProtocol(MyClass, Protocol): # 协议的所有基础必须为协议
+    pass
+
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyProtocolInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyMethodFirstArgAssignmentInspection" defaultSeverity="WARNING" displayName="此方法的第一个实参被重新赋值" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告第一个形参（如 &lt;code&gt;self&lt;/code&gt; 或 &lt;code&gt;cls&lt;/code&gt;）在方法中重新赋值的情况。
+  因为在大多数情况下，这种重新赋值中没有目标，所以 IDE 会指示错误。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Account:
+    def calc(self, balance):
+        if balance == 0:
+            self = balance
+        return self
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;修复方法可以是检查和修改算法，以确保有必要进行这样的重新赋值。 如果一切都正确无误，可以调用此代码的意图操作，并选择忽略警告。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyMethodFirstArgAssignmentInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+</inspection><inspection shortName="PyArgumentEqualDefaultInspection" defaultSeverity="WEAK WARNING" displayName="函数实参等于默认形参值" enabled="false" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告传递给函数的实参等于默认形参值问题。&lt;/p&gt;
+&lt;p&gt;为避免性能下降，默认为禁用此检查。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def my_function(a: int = 2):
+    print(a)
+
+
+my_function(2)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyArgumentEqualDefaultInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyAttributeOutsideInitInspection" defaultSeverity="WEAK WARNING" displayName="实例特性在 `__init__` 外部定义" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告实例特性定义在&lt;code&gt;__init__&lt;/code&gt; 方法外部的问题。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+    class Book:
+    def __init__(self):
+        self.author = 'Mark Twain'
+
+    def release(self):
+        self.year = '1889'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;
+  应用快速修复后，代码示例变为：
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+    class Book:
+    def __init__(self):
+        self.year = '1889'
+        self.author = 'Mark Twain'
+
+    def release(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyAttributeOutsideInitInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyTestParametrizedInspection" defaultSeverity="WARNING" displayName="@pytest.mark.parametrize 中的不正确实参" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告用 &lt;a href="https://docs.pytest.org/en/stable/parametrize.html"&gt;@pytest.mark.parametrize&lt;/a&gt; 装饰，但没有实参用于接受装饰器形参的函数。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyTestParametrizedInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyNestedDecoratorsInspection" defaultSeverity="WEAK WARNING" displayName="装饰器嵌套有问题" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告嵌套装饰器的问题。 此检查高亮显示先于另一个装饰器应用 &lt;code&gt;classmethod&lt;/code&gt; 或 &lt;code&gt;staticmethod&lt;/code&gt; 的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def innocent(f):
+    return f
+
+
+class A:
+    @innocent  # 装饰器不会收到预期的可调用对象
+    @classmethod
+    def f2(cls):
+        pass
+
+    @innocent  # 装饰器不会收到预期的可调用对象
+    @staticmethod
+    def f1():
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;IDE 提议的快速修复是移除此装饰器。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyNestedDecoratorsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyDictCreationInspection" defaultSeverity="WEAK WARNING" displayName="通过字典字面量可以重写字典创建" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告可以使用字典字面量重写字典创建的情况。&lt;/p&gt;
+&lt;p&gt;这种方法可以提升性能。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+dic = {}
+dic['var'] = 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+dic = {'var': 1}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyDictCreationInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyAssertTypeInspection" defaultSeverity="WARNING" displayName="typing.assert_type" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+    检查 &lt;code&gt;typing.assert_type(val, typ, /)&lt;/code&gt; 调用，并报告 &lt;code&gt;val&lt;/code&gt; 的推断类型不是 &lt;code&gt;typ&lt;/code&gt; 的情况。
+&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+def greet(name: str) -&gt; None:
+    assert_type(name, str)  # 正常
+    assert_type(name, int)  # 应为类型 'int'，但实际为 'str'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyAssertTypeInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyReturnFromInitInspection" defaultSeverity="WARNING" displayName="返回值的 __init__ 方法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告位于类的 &lt;code&gt;__init__&lt;/code&gt; 方法中的返回值的 &lt;code&gt;return&lt;/code&gt; 语句。
+&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Sum:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+        self.sum = a + b
+        return self.sum
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;构造函数不应返回任何值。 &lt;code&gt;__init__&lt;/code&gt; 方法应只初始化新对象实例成员的值。&lt;/p&gt;
+&lt;p&gt;IDE 提议的快速修复是移除 &lt;code&gt;return&lt;/code&gt; 语句。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyReturnFromInitInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyFinalInspection" defaultSeverity="WARNING" displayName="无效的 final 类、方法和变量用法" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 final 类、方法和变量的无效用法。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import final
+
+
+@final
+class A:
+    def a_method(self):
+        pass
+
+
+class B(A):
+    def a_method(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyFinalInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyMandatoryEncodingInspection" defaultSeverity="WARNING" displayName="未为文件指定编码" enabled="false" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 Python 2 中缺少的编码注释。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Book(object):
+    def __init__(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，将添加缺少的注释：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+# coding=utf-8
+class Book(object):
+    def __init__(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyMandatoryEncodingInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyTupleItemAssignmentInspection" defaultSeverity="WARNING" displayName="禁止元组条目赋值" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告对元组项的赋值。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+t = ('red', 'blue', 'green', 'white')
+t[3] = 'black'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;快速修复提议将此元组替换为列表。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyTupleItemAssignmentInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyByteLiteralInspection" defaultSeverity="WARNING" displayName="字节字面量包含非 ASCII 字符" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告在 ASCII 范围外部的字节字面量中的字符。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  s = b'&amp;#8470;5'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyByteLiteralInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyMissingConstructorInspection" defaultSeverity="WARNING" displayName="缺少对超类 '__init__' 的调用" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告类中缺少对 &lt;code&gt;super&lt;/code&gt; 构造函数进行调用的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Fruit:
+    def __init__(self):
+        pass
+
+
+class Pear(Fruit):
+    def __init__(self):
+        pass
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;Pear&lt;/code&gt; 类在 &lt;code&gt;__init__&lt;/code&gt; 方法中应有 &lt;code&gt;super&lt;/code&gt; 调用。&lt;/p&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+class Fruit:
+    def __init__(self):
+        pass
+
+
+class Pear(Fruit):
+    def __init__(self):
+        super().__init__()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyMissingConstructorInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyOverloadsInspection" defaultSeverity="WARNING" displayName="常规 Python 文件中的重载" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告常规 Python 文件中的重载放置在实现之后或其签名与实现不兼容的情况。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+from typing import overload
+
+
+@overload
+def foo(p1, p2): # 重载签名不兼容实现
+    pass
+
+
+@overload
+def foo(p1): # 重载签名不兼容实现
+    pass
+
+
+def foo(p1, p2, p3):
+    print(p1, p2, p3)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyOverloadsInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="PyAssignmentToLoopOrWithParameterInspection" defaultSeverity="WEAK WARNING" displayName="赋值给 'for' 循环或 'with' 语句形参" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告使用内部循环重写循环变量的情况。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+    for i in range(5):
+      for i in range(20, 25):
+          print("Inner", i)
+      print("Outer", i)
+  &lt;/code&gt;&lt;/pre&gt;
+
+如果在 &lt;code&gt;with&lt;/code&gt; 语句中声明的变量在语句体中重新声明，它也会向您发出警告：
+&lt;pre&gt;&lt;code&gt;
+    with open("file") as f:
+      f.read()
+      with open("file") as f:
+  &lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyAssignmentToLoopOrWithParameterInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyUnnecessaryBackslashInspection" defaultSeverity="WARNING" displayName="不必要的反斜杠" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告在 &lt;code&gt;()&lt;/code&gt;、&lt;code&gt;[]&lt;/code&gt; 和 &lt;code&gt;{}&lt;/code&gt; 中隐式续行位置处的反斜杠。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+a = ('first', \
+     'second', 'third')
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，将移除冗余的反斜杠。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyUnnecessaryBackslashInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="常规" path=""><inspection shortName="LongLine" defaultSeverity="WARNING" displayName="行长度超出代码样式的允许范围" enabled="false" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告比在&lt;a href="settings://preferences.sourceCode?Hard%20wrap%20at"&gt;设置 | 编辑器 | 代码样式 | 常规&lt;/a&gt;中指定的&lt;b&gt;强制换行位置&lt;/b&gt;参数长的行。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: LongLine&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="ReassignedToPlainText" defaultSeverity="WARNING" displayName="重新分配为纯文本" enabled="true" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告被显式重新分配为纯文本文件类型的文件。
+这种关联是不必要的，因为平台会根据内容自动检测文本文件。
+
+&lt;p&gt;您可以通过在&lt;b&gt;设置 | 编辑器 | 文件类型 | 文本&lt;/b&gt;中移除文件类型关联来关闭此警告。&lt;/p&gt;
+
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: ReassignedToPlainText&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RedundantSuppression" defaultSeverity="WARNING" displayName="冗余禁止" enabled="true" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="true">&lt;html&gt;
+&lt;body&gt;
+报告由于它们所影响的检查在此上下文中不再适用而可以安全移除的下列元素：
+&lt;ul&gt;
+  &lt;li&gt;&lt;code&gt;@SuppressWarning&lt;/code&gt; 注解或&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;// noinspection&lt;/code&gt; 行注释，或&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;/** noinspection */&lt;/code&gt; JavaDoc 注释&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;示例：&lt;/p&gt;
+&lt;pre&gt;&lt;code lang="java"&gt;
+public class C {
+ // 符号已经为 private，
+ // 但周围仍有注解
+  @SuppressWarnings({"WeakerAccess"})
+ private boolean CONST = true;
+ void f() {
+    CONST = false;
+  }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: RedundantSuppression&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="IncorrectFormatting" defaultSeverity="WEAK WARNING" displayName="格式设置不正确" enabled="false" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告代码不遵循项目代码样式设置时出现的格式问题。
+&lt;/p&gt;
+&lt;p&gt;
+  此检查与需要第三方格式化程序进行代码格式设置的语言（例如启用了 CLangFormat 的 Go 或 C 语言）不兼容。
+&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: IncorrectFormatting&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="InconsistentLineSeparators" defaultSeverity="WARNING" displayName="行分隔符不一致" enabled="false" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告包含的行分隔符与项目设置中指定的行分隔符不同的文件。
+&lt;p&gt;例如，如果在&lt;a href="settings://preferences.sourceCode?Line%20separator"&gt;设置 | 编辑器 | 代码样式 | 行分隔符&lt;/a&gt;中将行分隔符设置为 &lt;code&gt;\n&lt;/code&gt;，而您正在编辑的文件使用 &lt;code&gt;\r\n&lt;/code&gt; 作为行分隔符，就会触发该检查。&lt;/p&gt;
+
+&lt;p&gt;该检查还会警告留意文件中的混合行分隔符。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: InconsistentLineSeparators&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="EmptyDirectory" defaultSeverity="WARNING" displayName="空目录" enabled="false" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="true">&lt;html&gt;
+&lt;body&gt;
+报告空目录。
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;仅适用于&lt;b&gt;代码 | 检查代码&lt;/b&gt;或&lt;b&gt;代码 | 分析代码 | 通过名称运行检查&lt;/b&gt;，并且不会在编辑器中报告。&lt;/p&gt;
+&lt;p&gt;使用&lt;b&gt;仅报告位于源文件夹下的空目录&lt;/b&gt;选项可以仅报告源根下的目录。&lt;p&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: EmptyDirectory&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="TodoComment" defaultSeverity="WARNING" displayName="TODO 注释" enabled="false" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告代码中的 &lt;b&gt;TODO&lt;/b&gt; 注释。
+&lt;p&gt;您可以在&lt;a href="settings://preferences.toDoOptions"&gt;设置 | 编辑器 | TODO&lt;/a&gt; 中配置 &lt;b&gt;TODO&lt;/b&gt; 注释的格式。
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;启用&lt;b&gt;只对没有任何详细信息的 TODO 注释发出警告&lt;/b&gt;选项，以仅对不提供有关应完成任务的任何描述的空 TODO 注释发出警告。 禁用可报告所有 TODO 注释。&lt;/p&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: TodoComment&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="ProblematicWhitespace" defaultSeverity="WARNING" displayName="有问题的空格" enabled="false" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告以下问题：
+&lt;ul&gt;
+  &lt;li&gt;当代码样式配置为只使用空格时使用制表符进行缩进。&lt;/li&gt;
+  &lt;li&gt;当代码样式配置为只使用制表符时使用空格进行缩进。&lt;/li&gt;
+  &lt;li&gt;当代码样式配置为使用智能制表符时，使用空格进行缩进，以及使用制表符进行对齐。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: ProblematicWhitespace&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="Annotator" defaultSeverity="ERROR" displayName="注解器" enabled="true" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="true">&lt;html&gt;
+&lt;body&gt;
+报告批处理代码检查运行结果中对此文件至关重要的问题（例如，语法错误）。
+与检查不同，这些问题通常会在编辑器中高亮显示，并且无法配置。
+这些选项控制此检查所执行检查的作用域：
+&lt;ul&gt;
+  &lt;li&gt;选项&lt;b&gt;报告语法错误&lt;/b&gt;：报告解析器相关问题。&lt;/li&gt;
+  &lt;li&gt;选项&lt;b&gt;报告来自语言特定注解器的问题&lt;/b&gt;：报告由为相关语言配置的注解器发现的问题
+    请参阅&lt;a href="https://plugins.jetbrains.com/docs/intellij/annotator.html"&gt;自定义语言支持：注解器&lt;/a&gt;以了解详情。&lt;/li&gt;
+  &lt;li&gt;选项&lt;b&gt;报告其他高亮显示问题&lt;/b&gt;：报告特定于当前文件语言的问题（例如，类型不匹配或未报告的异常）。
+    请参阅&lt;a href="https://plugins.jetbrains.com/docs/intellij/syntax-highlighting-and-error-highlighting.html#semantic-highlighting"&gt;自定义语言支持：高亮显示&lt;/a&gt;以了解详情。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: Annotator&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="InjectedReferences" defaultSeverity="ERROR" displayName="已注入的引用" enabled="true" language="" pluginId="org.intellij.intelliLang" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告&lt;a href="https://www.jetbrains.com/help/idea/using-language-injections.html"&gt;语言注入&lt;/a&gt;所注入的未解析引用。
+&lt;p&gt;示例：&lt;/p&gt;
+&lt;pre&gt;&lt;code lang="java"&gt;
+    @Language("file-reference")
+    String fileName = "/home/user/nonexistent.file"; // 文件不存在时高亮显示
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: InjectedReferences&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="安全性" path="Python"><inspection shortName="PyVulnerableApiCodeInspection" defaultSeverity="WARNING" displayName="易受攻击的 API 用法" enabled="true" language="Python" pluginId="org.jetbrains.security.package-checker" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告导入依赖项的脆弱 API 的用法。&lt;/p&gt;
+&lt;p&gt;修正报告的问题有助于防止您的软件受到攻击者的破坏。&lt;/p&gt;
+&lt;p&gt;要解决问题，您可以更新到漏洞已修正的版本（如果可用）或切换到没有漏洞的依赖项。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: PyVulnerableApiCodeInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection></group><group name="HTML" path=""><inspection shortName="HtmlMissingClosingTag" defaultSeverity="INFORMATION" displayName="缺少结束标记" enabled="true" language="HTML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告不含结束标记的 HTML 元素。
+即便在可选的情况下，有些编码样式也要求 HTML 元素包含结束标记。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;html&gt;
+    &amp;lt;body&gt;
+      &amp;lt;p&gt;Behold!
+    &amp;lt;/body&gt;
+  &amp;lt;/html&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;html&gt;
+    &amp;lt;body&gt;
+      &amp;lt;p&gt;Behold!&amp;lt;/p&gt;
+    &amp;lt;/body&gt;
+  &amp;lt;/html&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: HtmlMissingClosingTag&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="HtmlUnknownBooleanAttribute" defaultSeverity="WARNING" displayName="不正确的布尔特性" enabled="true" language="HTML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告不含值的 HTML 非布尔特性。 建议配置不应报告的特性。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: HtmlUnknownBooleanAttribute&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RequiredAttributes" defaultSeverity="WARNING" displayName="缺少必要的特性" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 XML/HTML 标记中缺少的强制特性。 建议配置不应报告的特性。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: RequiredAttributes&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="CheckEmptyScriptTag" defaultSeverity="WARNING" displayName="空标记" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告在某些浏览器中无法正常运行的空标记。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;html&gt;
+    &amp;lt;script/&gt;
+  &amp;lt;/html&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;html&gt;
+    &amp;lt;script&gt;&amp;lt;/script&gt;
+  &amp;lt;/html&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: CheckEmptyScriptTag&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="HtmlUnknownTarget" defaultSeverity="WARNING" displayName="链接中未解析的文件" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告链接中未解析的文件。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: HtmlUnknownTarget&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="HtmlUnknownAttribute" defaultSeverity="WARNING" displayName="未知特性" enabled="true" language="HTML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告未知的 HTML 特性。 建议配置不应报告的特性。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: HtmlUnknownAttribute&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="CheckValidXmlInScriptTagBody" defaultSeverity="ERROR" displayName="'script' 标记的内容格式错误" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告是无效 XML 的 &lt;code&gt;script&lt;/code&gt; 标记的内容。&lt;br&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;script type="text/javascript"&gt;
+    console.log('&amp;lt;');
+  &amp;lt;/script&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;script type="text/javascript"&gt;
+    console.log('&amp;amp;lt;');
+  &amp;lt;/script&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: CheckValidXmlInScriptTagBody&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="HtmlWrongAttributeValue" defaultSeverity="WARNING" displayName="特性值错误" enabled="true" language="HtmlCompatible" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告不正确的 HTML 特性值。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: HtmlWrongAttributeValue&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="HtmlExtraClosingTag" defaultSeverity="WARNING" displayName="冗余结束标记" enabled="true" language="HTML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告空元素的冗余结束标记，例如 &lt;code&gt;img&lt;/code&gt; 或 &lt;code&gt;br&lt;/code&gt;。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;html&gt;
+    &amp;lt;body&gt;
+      &amp;lt;br&gt;&amp;lt;/br&gt;
+    &amp;lt;/body&gt;
+  &amp;lt;/html&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  &amp;lt;html&gt;
+    &amp;lt;body&gt;
+      &amp;lt;br&gt;
+    &amp;lt;/body&gt;
+  &amp;lt;/html&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: HtmlExtraClosingTag&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="HtmlUnknownTag" defaultSeverity="WARNING" displayName="未知标记" enabled="true" language="HTML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告未知的 HTML 标记。 建议配置不应报告的标记。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: HtmlUnknownTag&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="HtmlUnknownAnchorTarget" defaultSeverity="WARNING" displayName="链接中未解析的片段" enabled="true" language="XML" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 &lt;code&gt;#&lt;/code&gt; 符号后面的 URL 中未解析的最后部分。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: HtmlUnknownAnchorTarget&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="Markdown" path=""><inspection shortName="MarkdownNoTableBorders" defaultSeverity="WARNING" displayName="表没有边框" enabled="true" language="Markdown" pluginId="org.intellij.plugins.markdown" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+检查表是否有正确的边框。
+出于兼容性原因，所有表行的开头和结尾都应该有边框（管道符号）。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: MarkdownNoTableBorders&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="MarkdownUnresolvedHeaderReference" defaultSeverity="WARNING" displayName="未解析的头引用" enabled="true" language="Markdown" pluginId="org.intellij.plugins.markdown" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 Markdown 文件中的未解析头引用。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: MarkdownUnresolvedHeaderReference&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="MarkdownOutdatedTableOfContents" defaultSeverity="WARNING" displayName="过期的目录部分" enabled="true" language="Markdown" pluginId="org.intellij.plugins.markdown" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+检查特定目录部分是否与文档的实际结构相对应。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: MarkdownOutdatedTableOfContents&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="MarkdownLinkDestinationWithSpaces" defaultSeverity="WARNING" displayName="链接不应包含空格" enabled="true" language="Markdown" pluginId="org.intellij.plugins.markdown" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+为确保不同工具之间的一致性，文件链接不应包含空格。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [Some file link](some file.md)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;快速修复会将空格替换为它们的 URL 编码等效项：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [Some file link](some%20file.md)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: MarkdownLinkDestinationWithSpaces&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="MarkdownIncorrectlyNumberedListItem" defaultSeverity="WARNING" displayName="列表项编号错误" enabled="true" language="Markdown" pluginId="org.intellij.plugins.markdown" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;排序列表条目应从 1 开始连续编号。&lt;/p&gt;
+&lt;p&gt;这背后的动机是，大多数 Markdown 处理器都会忽略有序列表的编号。 处理器将为此类列表生成 &lt;code&gt;&amp;lt;ol&amp;gt;&lt;/code&gt; 元素，该元素将从 1 开始对条目进行连续编号。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: MarkdownIncorrectlyNumberedListItem&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="MarkdownUnresolvedFileReference" defaultSeverity="WARNING" displayName="未解析的文件引用" enabled="true" language="Markdown" pluginId="org.intellij.plugins.markdown" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 Markdown 文件中的未解析文件引用。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: MarkdownUnresolvedFileReference&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="MarkdownUnresolvedLinkLabel" defaultSeverity="WARNING" displayName="未解析的链接标签" enabled="true" language="Markdown" pluginId="org.intellij.plugins.markdown" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 Markdown 文件中的未解析链接标签。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: MarkdownUnresolvedLinkLabel&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="MarkdownIncorrectTableFormatting" defaultSeverity="WEAK WARNING" displayName="表格式设置不正确" enabled="true" language="Markdown" pluginId="org.intellij.plugins.markdown" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+检查表的格式是否正确。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: MarkdownIncorrectTableFormatting&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection></group><group name="要求" path=""><inspection shortName="OutdatedRequirementInspection" defaultSeverity="WEAK WARNING" displayName="要求的软件包已过时" enabled="true" language="Requirements" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告 requirements 文件中提及的过时软件包（例如，&lt;code&gt;requirements.txt&lt;/code&gt;，或 &lt;code&gt;pyproject.toml&lt;/code&gt; 文件中的 &lt;code&gt;dependencies&lt;/code&gt; 部分）
+&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: OutdatedRequirementInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="UnsatisfiedRequirementInspection" defaultSeverity="WARNING" displayName="要求不满足" enabled="true" language="Requirements" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告在要求文件中提及但未安装的软件包（例如，&lt;code&gt;requirements.txt&lt;/code&gt; 或 &lt;code&gt;pyproject.toml&lt;/code&gt; 文件中的 &lt;code&gt;dependencies&lt;/code&gt; 部分），或者已导入但未在要求文件中提及的软件包。&lt;/p&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: UnsatisfiedRequirementInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="Pandas" path=""><inspection shortName="PyPandasTruthValueIsAmbiguousInspection" defaultSeverity="WARNING" displayName="DataFrame 的真值不明确" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;
+  报告布尔上下文（例如 &lt;code&gt;if&lt;/code&gt;、&lt;code&gt;while&lt;/code&gt; 或逻辑表达式）中 pandas &lt;code&gt;DataFrame&lt;/code&gt; 或 &lt;code&gt;Series&lt;/code&gt; 的模糊用法。
+  这通常会导致运行时错误：&lt;code&gt;ValueError: The truth value of a DataFrame is ambiguous&lt;/code&gt;。
+&lt;/p&gt;
+
+&lt;p&gt;
+  在 pandas 中，类似 &lt;code&gt;df&lt;/code&gt; 或 &lt;code&gt;df == other&lt;/code&gt; 的表达式不会返回单个布尔值，而是返回布尔值的 DataFrame 或 Series。 在控制流中使用这些表达式而不进行显式规约（例如 &lt;code&gt;.any()&lt;/code&gt;、&lt;code&gt;.all()&lt;/code&gt; 或 &lt;code&gt;.empty&lt;/code&gt;）是模糊的，将会引发异常。
+&lt;/p&gt;
+
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre style="font-family: monospace"&gt;
+if df:  # ❌ 引发 ValueError：DataFrame 的真值不明确
+    print("DataFrame exists")
+
+if not df.empty:  # ✅ 检查 DataFrame 是否有任何行
+    print("DataFrame exists")
+&lt;/pre&gt;
+
+&lt;p&gt;
+  应用该快速修复后，条件将根据上下文替换为适当的归约器，如 &lt;code&gt;.any()&lt;/code&gt;、&lt;code&gt;.all()&lt;/code&gt; 或 &lt;code&gt;.empty&lt;/code&gt;。
+&lt;/p&gt;
+
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyPandasTruthValueIsAmbiguousInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="PyPandasSeriesToListInspection" defaultSeverity="WARNING" displayName="推荐方法 Series.to_list()" enabled="true" language="Python" pluginId="PythonCore" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 pandas 和 polars 库的 &lt;code&gt;list(Series.values)&lt;/code&gt; 语句中的冗余 &lt;code&gt;list&lt;/code&gt;。
+  此类 &lt;code&gt;Series&lt;/code&gt; 值提取可被替换为 &lt;code&gt;to_list()&lt;/code&gt; 函数调用。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre style="font-family: monospace"&gt;
+list(df['column'].values)
+&lt;/pre&gt;
+&lt;p&gt;应用快速修复后，代码变为：&lt;/p&gt;
+&lt;pre style="font-family: monospace"&gt;
+df['column'].to_list()
+&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: PyPandasSeriesToListInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="属性文件" path=""><inspection shortName="TrailingSpacesInProperty" defaultSeverity="WARNING" displayName="属性中有尾随空格" enabled="true" language="Properties" pluginId="com.intellij.properties" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告键或值以空格结尾的所有属性。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: TrailingSpacesInProperty&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="UnusedProperty" defaultSeverity="WARNING" displayName="未使用的属性" enabled="true" language="Properties" pluginId="com.intellij.properties" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告未在包含它们的 .properties 文件外部引用的属性。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: UnusedProperty&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="AlphaUnsortedPropertiesFile" defaultSeverity="WEAK WARNING" displayName="属性文件或资源包未按字母顺序排序" enabled="false" language="Properties" pluginId="com.intellij.properties" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告未按字母顺序排序的资源包或 .properties 文件。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: AlphaUnsortedPropertiesFile&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="WrongPropertyKeyValueDelimiter" defaultSeverity="WEAK WARNING" displayName="属性键/值分隔符与代码样式设置不匹配" enabled="true" language="Properties" pluginId="com.intellij.properties" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告键或值分隔符与代码样式设置不匹配的属性。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: WrongPropertyKeyValueDelimiter&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="DuplicatePropertyInspection" defaultSeverity="WARNING" displayName="重复属性" enabled="false" language="Properties" pluginId="com.intellij.properties" pluginVersion="252.27397.106" isGlobalTool="true">&lt;html&gt;
+&lt;body&gt;
+报告具有不同值的重复属性键、重复键或重复属性值。
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;示例：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+property1=&lt;b&gt;&lt;font color="#000080"&gt;value&lt;/font&gt;&lt;/b&gt;;
+property2=&lt;b&gt;&lt;font color="#000080"&gt;value&lt;/font&gt;&lt;/b&gt;;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;b&gt;选项&lt;/b&gt; 列表允许选择检查应搜索重复项的区域。&lt;/p&gt;
+
+&lt;p&gt;&lt;small&gt;Inspection ID: DuplicatePropertyInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="UseEllipsisInPropertyInspection" defaultSeverity="WARNING" displayName="使用三点字符而不是省略号" enabled="false" language="Properties" pluginId="com.intellij.properties" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 UTF-8 属性文件中用于代替省略号字符的三个“点”字符。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: UseEllipsisInPropertyInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection></group><group name="EditorConfig" path=""><inspection shortName="EditorConfigOptionRedundancy" defaultSeverity="WARNING" displayName="冗余属性" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告另一个适用的部分已经包含相同的属性和值的冗余的属性。
+&lt;p&gt;
+例如：
+&lt;pre&gt;&lt;code&gt;
+[*]
+indent_size=4
+[*.java]
+indent_size=4
+&lt;/code&gt;&lt;/pre&gt;
+都适用于 &lt;code&gt;*.java&lt;/code&gt; 文件并定义相同的 &lt;code&gt;indent_size&lt;/code&gt; 值。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigOptionRedundancy&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigPatternRedundancy" defaultSeverity="WARNING" displayName="重复或冗余模式" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告已经有另一个模式定义了具有相同或更广泛文件范围的冗余的文件模式。
+例如，在 &lt;code&gt;[{*.java,*}]&lt;/code&gt; 中，第一个 &lt;code&gt;*.java&lt;/code&gt; 模式定义了比 &lt;code&gt;*&lt;/code&gt; 更窄的范围。
+这使得第一个模式变得多余并且可以被移除。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigPatternRedundancy&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigValueUniqueness" defaultSeverity="ERROR" displayName="非唯一列表值" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告值列表中的重复项。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigValueUniqueness&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigEncoding" defaultSeverity="WARNING" displayName="文件编码与 EditorConfig 字符集不匹配" enabled="true" language="" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+检查当前文件编码是否与 .editorconfig 文件 "charset" 属性中定义的编码匹配。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigEncoding&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="EditorConfigCharClassRedundancy" defaultSeverity="WARNING" displayName="不必要的字符类" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告由单个字符组成的字符类。
+这种类可以简化为一个字符，例如 &lt;code&gt;[a]&lt;/code&gt;&amp;rarr;&lt;code&gt;a&lt;/code&gt;。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigCharClassRedundancy&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigNumerousWildcards" defaultSeverity="WEAK WARNING" displayName="过多通配符" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告包含过多通配符的部分。 使用大量通配符可能会导致性能问题。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigNumerousWildcards&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="EditorConfigEmptySection" defaultSeverity="WARNING" displayName="空部分" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告不包含任何 EditorConfig 属性的部分。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigEmptySection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigCharClassLetterRedundancy" defaultSeverity="WARNING" displayName="重复的字符类字母" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告 EditorConfig 部分中在字符类中包含重复字符的通配符模式，例如 &lt;code&gt;[aa]&lt;/code&gt;。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigCharClassLetterRedundancy&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigHeaderUniqueness" defaultSeverity="WARNING" displayName="EditorConfig 部分不唯一" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告定义与其他部分相同的文件模式的部分。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigHeaderUniqueness&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigShadowedOption" defaultSeverity="WARNING" displayName="被重写的属性" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告已在其他部分中定义的属性。
+&lt;p&gt;例如：
+&lt;pre&gt;&lt;code&gt;
+[*.java]
+indent_size=4
+[{*.java,*.js}]
+indent_size=2
+&lt;/code&gt;&lt;/pre&gt;
+第二部分也包括所有 &lt;code&gt;*.java&lt;/code&gt; 文件，但它也重新定义了 indent_size。
+因此，值 "2" 将用于匹配 &lt;code&gt;*.java&lt;/code&gt; 的文件。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigShadowedOption&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigReferenceCorrectness" defaultSeverity="ERROR" displayName="无效引用" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告未知或类型错误的标识符。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigReferenceCorrectness&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigValueCorrectness" defaultSeverity="ERROR" displayName="无效属性值" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告不符合值限制的属性值。 例如，某些属性可能只能为 “true” 或 “false”、其他属性仅包含整数等。 如果一个值的变体集合有限，请使用代码完成来查看所有变体。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigValueCorrectness&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigListAcceptability" defaultSeverity="ERROR" displayName="意外的值列表" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告在不支持列表的属性中使用的值列表。 在这种情况下，只能指定一个值。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigListAcceptability&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigPatternEnumerationRedundancy" defaultSeverity="ERROR" displayName="不必要的大括号" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告要么为空 &lt;code&gt;{}&lt;/code&gt;，要么只包含一个模式（例如 &lt;code&gt;{foo}&lt;/code&gt;）而非包含多个模式的列表（例如 &lt;code&gt;{foo,bar}&lt;/code&gt;）的模式列表。 在这种情况下，大括号会被作为名称的一部分进行处理。 例如，模式 &lt;code&gt;*.{a}&lt;/code&gt; 将匹配 &lt;code&gt;my.{a}&lt;/code&gt; 文件而非 &lt;code&gt;my.a&lt;/code&gt; 文件。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigPatternEnumerationRedundancy&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigDeprecatedDescriptor" defaultSeverity="WARNING" displayName="弃用的属性" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告不再支持的 EditorConfig 属性。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigDeprecatedDescriptor&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigShadowingOption" defaultSeverity="WARNING" displayName="重写属性" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告覆盖文件中先前定义的相同属性的属性。
+&lt;p&gt;例如：
+&lt;pre&gt;&lt;code&gt;
+[*.java]
+indent_size=4
+[{*.java,*.js}]
+indent_size=2
+&lt;/code&gt;&lt;/pre&gt;
+第二部分同样包含 &lt;code&gt;[*.java]&lt;/code&gt; 文件，但还将 indent_size 设置为值 2。
+因此第一个声明 &lt;code&gt;indent_size=4&lt;/code&gt; 将被忽略。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigShadowingOption&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigKeyCorrectness" defaultSeverity="WARNING" displayName="未知属性" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告 IDE 不支持的属性。 注意：一些 “ij” 域属性可能需要特定的语言插件。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigKeyCorrectness&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigNoMatchingFiles" defaultSeverity="WARNING" displayName="无匹配文件" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告通配符模式与 &lt;code&gt;.editorconfig&lt;/code&gt; 文件所在目录下的任何文件都不匹配的部分。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigNoMatchingFiles&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigMissingRequiredDeclaration" defaultSeverity="ERROR" displayName="缺少必需声明" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告缺少所需声明的属性。 有关更多信息，请参阅文档。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigMissingRequiredDeclaration&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigSpaceInHeader" defaultSeverity="WEAK WARNING" displayName="文件模式中的空格" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告影响模式匹配的通配符模式中的空格字符。
+如果这些字符不是故意的，则应将其删除。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigSpaceInHeader&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigVerifyByCore" defaultSeverity="ERROR" displayName="无效的 .editorconfig 文件" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+使用备份 EditorConfig 核心库验证整个文件，并报告任何失败。
+任何此类失败都会阻止 EditorConfig 属性的正确应用。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigVerifyByCore&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="EditorConfigEmptyHeader" defaultSeverity="ERROR" displayName="空标头" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告带有空标题的部分。 部分标题必须包含格式类似于 &lt;code&gt;gitignore&lt;/code&gt; 支持的格式的文件路径 glob。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigEmptyHeader&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigWildcardRedundancy" defaultSeverity="WARNING" displayName="冗余通配符" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告在同一部分中使用 “**” 通配符时变得冗余的通配符。
+&lt;p&gt;
+“**” 通配符定义了比其他通配符更广泛的文件集。
+因此，同一部分中使用的任何其他通配符都是无效的，可以删除。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigWildcardRedundancy&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigUnusedDeclaration" defaultSeverity="WARNING" displayName="未使用的声明" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告未使用的声明。 可以删除此类声明。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigUnusedDeclaration&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigPairAcceptability" defaultSeverity="ERROR" displayName="意外的键值对" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告当前上下文中不允许的键值对。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigPairAcceptability&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigRootDeclarationCorrectness" defaultSeverity="ERROR" displayName="意外的顶层声明" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告非预期的顶层声明。 EditorConfig 文件中不允许使用除 “root=true” 之外的顶级声明。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigRootDeclarationCorrectness&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="EditorConfigUnexpectedComma" defaultSeverity="ERROR" displayName="意外逗号" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告不能在当前上下文中使用的逗号。 逗号只能用作分隔符来分隔列表中的值。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigUnexpectedComma&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigPartialOverride" defaultSeverity="WEAK WARNING" displayName="重叠的部分" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告当前部分中指定的文件子集与其他部分中的其他子集重叠。 例如：&lt;code&gt;[{foo,bar}]&lt;/code&gt; 和 &lt;code&gt;[{foo,bas}]&lt;/code&gt; 都包含 “foo”。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigPartialOverride&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;
+</inspection><inspection shortName="EditorConfigRootDeclarationUniqueness" defaultSeverity="ERROR" displayName="额外顶层声明" enabled="true" language="EditorConfig" pluginId="org.editorconfig.editorconfigjetbrains" pluginVersion="252.27397.106" isGlobalTool="false">&lt;!-- Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. --&gt;
+&lt;html&gt;
+&lt;body&gt;
+报告多个顶层声明。 EditorConfig 文件中只能有一个可选的 “root=true” 顶级声明。
+不允许使用多个顶级声明。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: EditorConfigRootDeclarationUniqueness&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="正则表达式" path=""><inspection shortName="RegExpRedundantClassElement" defaultSeverity="WEAK WARNING" displayName="冗余的 '\d', '[:digit:]'，或 '\D' 类元素" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告在同一个类中与 &lt;code&gt;\w&lt;/code&gt; 或 &lt;code&gt;[:word:]&lt;/code&gt;（带 &lt;code&gt;\W&lt;/code&gt; 的 &lt;code&gt;\D&lt;/code&gt;）一起使用且可移除的冗余 &lt;code&gt;\d&lt;/code&gt; 或 &lt;code&gt;[:digit:]&lt;/code&gt;。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [\w\d]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [\w]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2022.2 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpRedundantClassElement&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpUnexpectedAnchor" defaultSeverity="WARNING" displayName="起始或结束定位点在意外位置" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告不在模式开头的 &lt;code&gt;^&lt;/code&gt; 或 &lt;code&gt;\A&lt;/code&gt; 定位标记以及不在模式末尾的 &lt;code&gt;$&lt;/code&gt;、&lt;code&gt;\Z&lt;/code&gt; 或 &lt;code&gt;\z&lt;/code&gt; 定位标记。
+如果这些正则表达式定位标记位于错误的位置，则会阻止模式与任何对象匹配。
+对于 &lt;code&gt;^&lt;/code&gt; 和 &lt;code&gt;$&lt;/code&gt; 定位标记，则很可能是指字面量字符，并且忘记了转义。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  (Price $10)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;
+&lt;small&gt;2018.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpUnexpectedAnchor&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpDuplicateAlternationBranch" defaultSeverity="WARNING" displayName="替代项中存在重复分支" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告正则表达式替换中的重复分支。
+重复分支会降低匹配速度并导致表达式意图不明。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  (alpha|bravo|charlie|alpha)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  (alpha|bravo|charlie)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2017.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpDuplicateAlternationBranch&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpRepeatedSpace" defaultSeverity="WARNING" displayName="连续空格" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告正则表达式中的多个连续空格。
+由于空格默认不可见，因此，很难了解需要的空格数量。
+使用单个空格和计数量词来替换连续空格可以让正则表达式更清晰易懂。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  (     )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  ( {5})
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;
+&lt;small&gt;2017.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpRepeatedSpace&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpOctalEscape" defaultSeverity="INFORMATION" displayName="八进制转义" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告八进制转义（容易与反向引用混淆）。
+使用十六进制转义可避免混淆。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  \07
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  \x07
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2017.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpOctalEscape&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpRedundantNestedCharacterClass" defaultSeverity="WARNING" displayName="冗余嵌套字符类" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告非必要的嵌套字符类。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [a-c[x-z]]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [a-cx-z]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2020.2 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpRedundantNestedCharacterClass&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpDuplicateCharacterInClass" defaultSeverity="WARNING" displayName="字符类中存在重复字符" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告正则表达式字符类中的重复字符。
+重复字符是多余的，可将其移除而不改变正则表达式的语义。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [aabc]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [abc]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpDuplicateCharacterInClass&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpAnonymousGroup" defaultSeverity="WARNING" displayName="匿名捕获组或数字反向引用" enabled="false" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告正则表达式中的匿名捕获组和数字反向引用。
+只有正则表达式方言支持命名组和命名组引用，才支持这些用法。
+命名组和命名反向引用可改进代码可读性，建议改用。
+无需捕获时，使用非捕获组，即使用 &lt;code&gt;(?:xxx)&lt;/code&gt; 而不是 &lt;code&gt;(xxx)&lt;/code&gt;，可以提高匹配效率和减少需要使用的内存。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  (\d\d\d\d)\1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;更好的正则表达式模式如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  (?&amp;lt;quad&gt;\d\d\d\d)\k&amp;lt;quad&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2017.2 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpAnonymousGroup&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpSimplifiable" defaultSeverity="WEAK WARNING" displayName="正则表达式可以简化" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告可以简化的正则表达式。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [a] xx* [ah-hz]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  a x+ [ahz]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2022.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpSimplifiable&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpUnnecessaryNonCapturingGroup" defaultSeverity="WARNING" displayName="不必要的非捕获组" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告不必要的非捕获组（对匹配结果无影响）。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  Everybody be cool, (?:this) is a robbery!
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  Everybody be cool, this is a robbery!
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2021.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpUnnecessaryNonCapturingGroup&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpEmptyAlternationBranch" defaultSeverity="WARNING" displayName="替代项中存在空分支" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告正则表达式替换中的空分支。
+空分支只能匹配空字符串，在大多数情况下，这并不是我们的目的。
+此检查不会报告位于替换开头或末尾的单个空分支。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  (alpha||bravo)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  (alpha|bravo)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2017.2 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpEmptyAlternationBranch&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpSingleCharAlternation" defaultSeverity="WARNING" displayName="单字符替代项" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告正则表达式中的单一字符替换。
+改用一个字符类更简单。
+这还可能提高匹配性能。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  a|b|c|d
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  [abcd]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;
+&lt;small&gt;2017.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpSingleCharAlternation&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpSuspiciousBackref" defaultSeverity="WARNING" displayName="可疑的反向引用" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告在运行时无法解析的反向引用。
+这意味着反向引用永远无法匹配任何内容。
+如果组是在反向引用之后定义的，或者组是在替代项的不同分支中定义的，则反向引用将不可解析。
+&lt;p&gt;&lt;b&gt;在其反向引用之后定义的组的示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  \1(abc)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;b&gt;不同分支中的组和反向引用的示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  a(b)c|(xy)\1z
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2022.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpSuspiciousBackref&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpEscapedMetaCharacter" defaultSeverity="INFORMATION" displayName="转义元字符" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告转义元字符。
+某些正则表达式代码样式指定应将元字符放在字符类中，从而使正则表达式更易于理解。
+此检查不会警告元字符 &lt;code&gt;[&lt;/code&gt;, &lt;code&gt;]&lt;/code&gt; 和 &lt;code&gt;^&lt;/code&gt;，因为这些字符可能需要在字符类中进行额外的转义。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  \d+\.\d+
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  \d+[.]\d+
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;&lt;small&gt;2017.1 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpEscapedMetaCharacter&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="CustomRegExpInspection" defaultSeverity="WARNING" displayName="自定义正则表达式检查" enabled="true" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+自定义正则表达式检查
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: CustomRegExpInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="RegExpRedundantEscape" defaultSeverity="WARNING" displayName="冗余字符转义" enabled="true" language="RegExp" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告可以替换为保留其含义的非转义字符的冗余字符转义序列。
+许多在字符类外部必需的转义序列在字符类的方括号 &lt;code&gt;[]&lt;/code&gt; 内部冗余。
+&lt;p&gt;
+  尽管某些方言（JavaScript、Python 等）允许在字符类外部使用未转义的左大括号 &lt;code&gt;{&lt;/code&gt;，但这样可能会导致混乱并降低模式的可移植性，因为某些方言要求将大括号作为字符进行转义。
+  因此，该检查不会报告转义的左大括号。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  \-\;[\.]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;在应用快速修复后：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  -;[.]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;
+&lt;p&gt;
+&lt;b&gt;忽略转义的右括号 '}' 和 ']'&lt;/b&gt; 选项可以指定当 RegExp 方言允许在字符类外部使用未转义的 &lt;code&gt;\}&lt;/code&gt; 和 &lt;code&gt;\]&lt;/code&gt; 时是否报告它们。
+&lt;p&gt;&lt;small&gt;2017.3 最新变化&lt;/small&gt;
+&lt;p&gt;&lt;small&gt;Inspection ID: RegExpRedundantEscape&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="版本控制" path=""><inspection shortName="IgnoreFileDuplicateEntry" defaultSeverity="WARNING" displayName="忽略文件重复项" enabled="true" language="IgnoreLang" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告忽略文件（例如 .gitignore、.hgignore）中的重复条目（模式）。
+这些文件中的重复条目冗余，可以移除。
+
+&lt;p&gt;示例：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+    # 输出目录
+    /out/
+    /target/
+    /out/
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: IgnoreFileDuplicateEntry&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="校对" path=""><inspection shortName="AiaStyle" defaultSeverity="TYPO" displayName="样式" enabled="true" language="" pluginId="com.intellij.ml.llm" pluginVersion="252.27397.150" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+查看在以下位置定义的编写样式：
+&lt;ul&gt;
+    &lt;li&gt;
+        用于此项目或其特定子目录的 Grazie 规则文件（例如，英语的&lt;code&gt;.grazie.en.yaml&lt;/code&gt;）。
+        要创建此类文件，请在项目的任何目录（例如，根）上调用&lt;b&gt;新建&lt;/b&gt;菜单。
+    &lt;/li&gt;
+    &lt;li&gt;
+        &lt;i&gt;编辑器 | 自然语言 | 规则&lt;/i&gt;设置中的&lt;i&gt;样式&lt;/i&gt;规则
+    &lt;/li&gt;
+&lt;/ul&gt;
+
+此检查仅通过&lt;b&gt;代码 | 分析代码 | 按名称运行检查…&lt;/b&gt; 或离线分析返回结果。
+编辑器对样式问题的高亮显示独立于此检查的设置进行。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: AiaStyle&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="SpellCheckingInspection" defaultSeverity="TYPO" displayName="拼写错误" enabled="true" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;&lt;body&gt;报告代码、注释和字面量中的拼写错误并一键修正。&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: SpellCheckingInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+</inspection><inspection shortName="LanguageDetectionInspection" defaultSeverity="WEAK WARNING" displayName="自然语言检测" enabled="true" language="" pluginId="tanvd.grazi" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html lang="zh"&gt;&lt;body&gt;检测自然语言并建议启用相应的语法和拼写检查。&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: LanguageDetectionInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+</inspection><inspection shortName="GrazieInspection" defaultSeverity="GRAMMAR_ERROR" displayName="语法" enabled="true" language="" pluginId="tanvd.grazi" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html lang="zh"&gt;&lt;body&gt;
+报告文本中的语法错误。 您可以在
+&lt;a href="settings://reference.settingsdialog.project.grazie"&gt;设置 | 编辑器 | 自然语言 | 语法和样式&lt;/a&gt;中配置检查。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: GrazieInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+</inspection></group><group name="国际化" path=""><inspection shortName="NonAsciiCharacters" defaultSeverity="WARNING" displayName="非 ASCII 字符" enabled="true" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告在异常上下文中使用非 ASCII 符号的代码元素。
+
+&lt;p&gt;示例：&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;标识符、字符串或注释中使用的非 ASCII 字符。&lt;/li&gt;
+  &lt;li&gt;使用不同语言编写的标识符，例如带有使用西里尔文编写的字母 &lt;code&gt;&lt;b&gt;C&lt;/b&gt;&lt;/code&gt; 的 &lt;code&gt;my&lt;b&gt;С&lt;/b&gt;ollection&lt;/code&gt;。&lt;/li&gt;
+  &lt;li&gt;包含 Unicode 符号（如长划线和箭头）的注释或字符串。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: NonAsciiCharacters&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="LossyEncoding" defaultSeverity="WARNING" displayName="有损编码" enabled="true" language="" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+
+报告由于当前文档编码而无法显示的字符。
+&lt;p&gt;示例：&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;如果在带有 &lt;b&gt;US-ASCII&lt;/b&gt; 字符集的文档中键入国际字符，保存时会丢失某些字符。&lt;/li&gt;
+  &lt;li&gt;如果加载使用 &lt;b&gt;ISO-8859-1&lt;/b&gt; 一字节字符集的 &lt;b&gt;UTF-8&lt;/b&gt; 编码文件，某些字符将无法正确显示。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;要解决此问题，可以直接在文件中指定编码来更改文件编码，例如编辑 XML 文件的 XML prolog 中的 &lt;code&gt;encoding=&lt;/code&gt; 特性，或者在&lt;b&gt;设置 | 编辑器 | 文件编码&lt;/b&gt;中更改相应选项。&lt;/p&gt;
+
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: LossyEncoding&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="YAML" path=""><inspection shortName="YAMLDuplicatedKeys" defaultSeverity="ERROR" displayName="重复的 YAML 键" enabled="true" language="yaml" pluginId="org.jetbrains.plugins.yaml" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 YAML 文件中的重复键。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  same_key: some value
+  same_key: another value
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: YAMLDuplicatedKeys&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="YAMLSchemaDeprecation" defaultSeverity="WEAK WARNING" displayName="弃用的 YAML 键" enabled="true" language="yaml" pluginId="org.jetbrains.plugins.yaml" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 YAML 文件中已弃用的键。
+&lt;p&gt;仅当存在与相应 YAML 文件关联的 JSON 架构时，才会检查是否弃用。&lt;/p&gt;
+&lt;p&gt;请注意，JSON 架构规范中尚未定义弃用机制，并且此检查使用非标准的 &lt;code&gt;deprecationMessage&lt;/code&gt; 扩展。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;方案弃用示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  {
+    "properties": {
+      "SomeDeprecatedProperty": {
+        "deprecationMessage": "Baz",
+        "description": "Foo bar"
+      }
+    }
+  }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;b&gt;以下是带有相应警告的示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  SomeDeprecatedProperty: some value
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: YAMLSchemaDeprecation&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="YAMLRecursiveAlias" defaultSeverity="ERROR" displayName="递归别名" enabled="true" language="yaml" pluginId="org.jetbrains.plugins.yaml" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 YAML 别名中的递归。
+&lt;p&gt;别名不能递归并在相应定位标记引用的数据中使用。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  some_key: &amp;some_anchor
+    sub_key1: value1
+    sub_key2: *some_anchor
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: YAMLRecursiveAlias&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="YAMLIncompatibleTypes" defaultSeverity="WARNING" displayName="可疑的类型不匹配" enabled="true" language="yaml" pluginId="org.jetbrains.plugins.yaml" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 YAML 文件中的标量值类型与相似位置中的值类型不匹配。
+
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+myElements:
+  - value1
+  - value2
+  - false # &amp;lt;- 已报告，因为它是布尔值，而其他值是字符串
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: YAMLIncompatibleTypes&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="YAMLSchemaValidation" defaultSeverity="WARNING" displayName="由 JSON 架构验证" enabled="true" language="yaml" pluginId="org.jetbrains.plugins.yaml" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+如果指定了架构，则报告 YAML 文件和 JSON 架构之间的不一致。
+&lt;p&gt;&lt;b&gt;方案示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  {
+    "properties": {
+      "SomeNumberProperty": {
+        "type": "number"
+      }
+    }
+  }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;b&gt;以下是带有相应警告的示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  SomeNumberProperty: hello world
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: YAMLSchemaValidation&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="YAMLUnresolvedAlias" defaultSeverity="ERROR" displayName="未解析的别名" enabled="true" language="yaml" pluginId="org.jetbrains.plugins.yaml" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 YAML 文件中的未解析别名。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  some_key: *unknown_alias
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: YAMLUnresolvedAlias&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="YAMLUnusedAnchor" defaultSeverity="WARNING" displayName="未使用的定位标记" enabled="true" language="yaml" pluginId="org.jetbrains.plugins.yaml" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告未使用的定位标记。
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+  some_key: &amp;some_anchor
+    key1: value1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: YAMLUnusedAnchor&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="RELAX NG" path=""><inspection shortName="UnusedDefine" defaultSeverity="WARNING" displayName="未使用的定义" enabled="false" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告 RELAX-NG 文件 (XML 或 Compact 语法) 中未使用的命名模式 (&lt;code&gt;define&lt;/code&gt;)。
+通过另一个文件中的 include 使用的 &lt;code&gt;define&lt;/code&gt; 元素将被忽略。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: UnusedDefine&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection><inspection shortName="UnresolvedReference" defaultSeverity="ERROR" displayName="未解析的引用" enabled="true" pluginId="com.intellij" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+报告使用 XML 语法的 RELAX-NG 文件中对命名模式 (&lt;code&gt;define&lt;/code&gt;) 的未解析引用。
+建议创建引用的 &lt;code&gt;define&lt;/code&gt; 元素。
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: UnresolvedReference&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group><group name="ReST" path=""><inspection shortName="RestRoleInspection" defaultSeverity="WARNING" displayName="未定义角色" enabled="false" language="ReST" pluginId="org.jetbrains.plugins.rest" pluginVersion="252.27397.106" isGlobalTool="false">&lt;html&gt;
+&lt;body&gt;
+&lt;p&gt;报告 reStructuredText 文件中未定义的角色。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;示例：&lt;/b&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+.. role:: custom
+.. role:: newcustom(emphasis)
+
+:custom:`interpreted text` 使用示例
+:newcustom:`interpreted text` 使用示例
+:emphasis:`interpreted text` 使用示例
+
+
+某些文本使用未定义的角色 :undef:`interpreted text`
+&lt;/code&gt;&lt;/pre&gt;
+&lt;!-- tooltip end --&gt;&lt;p&gt;&lt;small&gt;Inspection ID: RestRoleInspection&lt;/small&gt;&lt;/p&gt;&lt;/body&gt;
+&lt;/html&gt;</inspection></group></inspections>

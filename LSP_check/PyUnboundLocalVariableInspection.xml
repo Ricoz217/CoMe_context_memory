@@ -1,0 +1,26 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/multimodal.py</file>
+  <line>136</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/multimodal.py" />
+  <problem_class id="PyUnboundLocalVariableInspection" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">未绑定的局部变量</problem_class>
+  <description>局部变量 'result' 可能在赋值前引用</description>
+  <highlighted_element>result</highlighted_element>
+  <language>Python</language>
+  <offset>11</offset>
+  <length>6</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/multimodal.py</file>
+  <line>140</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/multimodal.py" />
+  <problem_class id="PyUnboundLocalVariableInspection" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">未绑定的局部变量</problem_class>
+  <description>局部变量 'result' 可能在赋值前引用</description>
+  <highlighted_element>result</highlighted_element>
+  <language>Python</language>
+  <offset>25</offset>
+  <length>6</length>
+</problem>
+</problems>

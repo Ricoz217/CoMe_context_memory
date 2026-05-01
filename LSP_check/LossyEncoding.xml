@@ -1,0 +1,194 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/memory_manager.py</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/memory_manager.py" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>from __future__ import annotations import time from dataclasses import dataclass from typing import...</highlighted_element>
+  <language>Python</language>
+  <offset>0</offset>
+  <length>4154</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/models.py</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/models.py" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>from __future__ import annotations from dataclasses import asdict, dataclass, field from datetime i...</highlighted_element>
+  <language>Python</language>
+  <offset>0</offset>
+  <length>13188</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/multimodal.py</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/multimodal.py" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>from __future__ import annotations from pathlib import Path from come_context_memory.LLM_connect i...</highlighted_element>
+  <language>Python</language>
+  <offset>0</offset>
+  <length>7411</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/bucket_split_schema.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/bucket_split_schema.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>Return JSON only. Schema: { &quot;merge_groups&quot;: [ { &quot;title&quot;: &quot;string&quot;, &quot;summary&quot;: &quot;st...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>310</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/bucket_split_system.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/bucket_split_system.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>You are a bucket split planner for context-memory. Task: Return a split plan with two outputs: 1) m...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>863</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/bucket_summary_schema.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/bucket_summary_schema.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>Return JSON only. Schema: { &quot;content&quot;: &quot;string&quot;, &quot;summary&quot;: &quot;string&quot; }</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>76</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/bucket_summary_system.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/bucket_summary_system.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>You summarize a set of records into one bucket profile. Rules: 1. content: detailed summary &lt;=1000 ...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>198</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/compress_schema.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/compress_schema.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>Return JSON only. Schema: { &quot;keep_keys&quot;: [&quot;string&quot;], &quot;drop_keys&quot;: [&quot;string&quot;], &quot;merged_summary...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>268</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/compress_system.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/compress_system.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>You are a context compression planner. Goal: Produce a low-cost compression plan while preserving m...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>431</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/ingest_schema.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/ingest_schema.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>Return JSON only. Allowed relation categories and types: - entity_links: about | actor | owner | me...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>1069</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/query_schema.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/query_schema.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>Return JSON only. Schema: { &quot;answer&quot;: &quot;one sentence summary based on returned matches&quot;, &quot;matche...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>248</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/query_system.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/query_system.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>You are the retrieval model for a context-native memory engine. Priority: 1) matches (primary, reca...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>1444</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/split_schema.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/split_schema.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>Return JSON only. Schema: { &quot;groups&quot;: [ { &quot;title&quot;: &quot;string&quot;, &quot;summary&quot;: &quot;string&quot;,...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>165</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/split_system.md</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/split_system.md" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>You are a bucket split planner for context-memory. Task: Split memory keys into 2~10 coherent group...</highlighted_element>
+  <language>Markdown</language>
+  <offset>0</offset>
+  <length>385</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/rerank.py</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/rerank.py" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>from __future__ import annotations import math import re from collections import Counter, OrderedDi...</highlighted_element>
+  <language>Python</language>
+  <offset>0</offset>
+  <length>8370</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py</file>
+  <line>1</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py" />
+  <problem_class id="LossyEncoding" severity="ERROR" attribute_key="ERRORS_ATTRIBUTES">有损编码</problem_class>
+  <description>该文件以错误的编码加载: 'UTF-8'</description>
+  <highlighted_element>from __future__ import annotations import hashlib import json import re import shutil from datetime...</highlighted_element>
+  <language>Python</language>
+  <offset>0</offset>
+  <length>53696</length>
+</problem>
+</problems>

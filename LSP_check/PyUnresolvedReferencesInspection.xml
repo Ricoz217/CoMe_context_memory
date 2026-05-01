@@ -1,0 +1,14 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/LLM_connect.py</file>
+  <line>1109</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/LLM_connect.py" />
+  <problem_class id="PyUnresolvedReferencesInspection" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">未解析的引用</problem_class>
+  <description>类 'dict' 的未解析的特性引用 'to_dict'</description>
+  <highlighted_element>to_dict</highlighted_element>
+  <language>Python</language>
+  <offset>36</offset>
+  <length>7</length>
+</problem>
+</problems>

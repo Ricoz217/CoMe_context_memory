@@ -1,0 +1,26 @@
+<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/image_extract_system.md</file>
+  <line>7</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/prompts/image_extract_system.md" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">语法</problem_class>
+  <description>Did you mean the formatting language Markdown (= proper noun)?</description>
+  <highlighted_element>markdown</highlighted_element>
+  <language>Markdown</language>
+  <offset>17</offset>
+  <length>8</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py</file>
+  <line>1287</line>
+  <module>CoMe_ContextMemory</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/src/come_context_memory/memory/storage.py" />
+  <problem_class id="GrazieInspection" severity="GRAMMAR_ERROR" attribute_key="GRAMMAR_ERROR">语法</problem_class>
+  <description>The phrase 'in future' is British English. Did you mean: in the future?</description>
+  <highlighted_element>in future</highlighted_element>
+  <language>Python</language>
+  <offset>48</offset>
+  <length>9</length>
+</problem>
+</problems>

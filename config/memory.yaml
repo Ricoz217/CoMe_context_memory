@@ -1,0 +1,43 @@
+# CoMe ContextMemory config
+
+Common:
+  FileCacheExpire: 30
+  MinImageQuality: 20
+  CompressImageSizeAttempt: 5
+  CompressImageSizeFactor: 0.7
+
+LLM:
+  ChatRequestTimeout: 300
+
+llm_presets:
+  CONTEXT_MEMORY:
+    endpoint: "https://api.openai.com/v1/chat/completions"
+    token: ""
+    model: "gpt-4.1-mini"
+    api_type: "openai"
+    max_context: 200000
+    auto_compress_rate: 0.7
+    extra_parameter: {}
+    proxy_mode: ""
+    price: {}
+
+  KIMI2.6:
+    endpoint: "https://api.openai.com/v1/chat/completions"
+    token: ""
+    model: "gpt-4.1-mini"
+    api_type: "openai"
+    max_context: 200000
+    auto_compress_rate: 0.7
+    extra_parameter: {}
+    proxy_mode: ""
+    price: {}
+
+proxies:
+  LOCAL_7890:
+    http: "http://127.0.0.1:7890"
+    https: "http://127.0.0.1:7890"
+
+Logging:
+  stdout_enabled: true
+  write_error_file: true
+  error_log_file: "logs/error.log"
