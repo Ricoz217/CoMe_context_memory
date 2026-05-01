@@ -62,7 +62,7 @@ DEFAULTS: dict[str, Any] = {
             "model": os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
             "api_type": "openai",
             "max_context": 200000,
-            "auto_compress_rate": 0.7,
+            "auto_compress_gate": 0.7,
             "extra_parameter": {},
             "proxy_mode": "",
             "price": {},
@@ -73,7 +73,7 @@ DEFAULTS: dict[str, Any] = {
             "model": os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
             "api_type": "openai",
             "max_context": 200000,
-            "auto_compress_rate": 0.7,
+            "auto_compress_gate": 0.7,
             "extra_parameter": {},
             "proxy_mode": "",
             "price": {},
@@ -145,13 +145,18 @@ def get_llm(preset_name: str) -> ConfigNode:
         raise KeyError(f"llm preset not found: {preset_name}")
 
     node = ConfigNode(target)
+    # Backward-compatible key alias: old `auto_compress_rate` -> new `auto_compress_gate`.
+    if "auto_compress_gate" not in node and "auto_compress_rate" in node:
+        node["auto_compress_gate"] = node["auto_compress_rate"]
+    if "auto_compress_rate" not in node and "auto_compress_gate" in node:
+        node["auto_compress_rate"] = node["auto_compress_gate"]
     for key in (
         "endpoint",
         "token",
         "model",
         "api_type",
         "max_context",
-        "auto_compress_rate",
+        "auto_compress_gate",
         "extra_parameter",
         "proxy_mode",
         "price",

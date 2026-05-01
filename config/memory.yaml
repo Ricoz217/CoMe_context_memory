@@ -16,7 +16,7 @@ llm_presets:
     model: "gpt-4.1-mini"
     api_type: "openai"
     max_context: 200000
-    auto_compress_rate: 0.7
+    auto_compress_gate: 0.7
     extra_parameter: {}
     proxy_mode: ""
     price: {}
@@ -27,7 +27,7 @@ llm_presets:
     model: "gpt-4.1-mini"
     api_type: "openai"
     max_context: 200000
-    auto_compress_rate: 0.7
+    auto_compress_gate: 0.7
     extra_parameter: {}
     proxy_mode: ""
     price: {}

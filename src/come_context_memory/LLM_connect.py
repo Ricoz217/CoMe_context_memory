@@ -2612,17 +2612,21 @@ def parse_llm_setting(preset_name: str) -> ChatConfig | None:
             raise TypeError(f"LLM预设[{preset_name}]基本参数类型错误:\n"
                             f"Key <{key}> should be <str>, got {type(llm[key])}")
 
-    for key in ("max_context", "auto_compress_rate"):
-        if not isinstance(llm[key], (int, float)):
-            raise TypeError(
-                f"LLM预设[{preset_name}]context相关参数类型错误:\n"
-                f"Key <{key}> should be <int | float>, got {type(llm[key])}")
+    auto_compress_gate = llm.get("auto_compress_gate", llm.get("auto_compress_rate"))
+    if not isinstance(llm["max_context"], (int, float)):
+        raise TypeError(
+            f"LLM预设[{preset_name}]context相关参数类型错误:\n"
+            f"Key <max_context> should be <int | float>, got {type(llm['max_context'])}")
+    if not isinstance(auto_compress_gate, (int, float)):
+        raise TypeError(
+            f"LLM预设[{preset_name}]context相关参数类型错误:\n"
+            f"Key <auto_compress_gate> should be <int | float>, got {type(auto_compress_gate)}")
 
     new_setting.endpoint = llm.endpoint
     new_setting.token = llm.token
     new_setting.model = llm.model
     new_setting.api_provider = llm.api_type
     new_setting.max_context = llm.max_context
-    new_setting.auto_compress_rate = llm.auto_compress_rate
+    new_setting.auto_compress_rate = float(auto_compress_gate)
 
     return new_setting
