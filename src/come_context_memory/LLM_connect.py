@@ -1446,21 +1446,25 @@ class Chat:
 
     def _header_constructor(self):
         headers = {"openai": {}, "anthropic": {}}
-        if self._provider.lower() not in headers:
+        provider = str(self._provider or "").strip().lower()
+        token = str(self._token or "").strip()
+        if provider not in headers:
             raise ValueError(f"使用了不支持的API供应商格式: {self._provider}")
+        if provider in {"openai", "anthropic"} and not token:
+            raise ValueError(f"LLM token为空（api_type={provider}）")
 
         headers["openai"].update({
-            "Authorization": f"Bearer {self._token}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Connection": "keep-alive"
         })
         headers["anthropic"].update({
-            "x-api-key": self._token,
+            "x-api-key": token,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
             "Connection": "keep-alive"
         })
-        return headers[self._provider.lower()]
+        return headers[provider]
 
     async def _payload_constructor(self, context: Context) -> dict:
         provider = self._provider.lower()
@@ -2578,6 +2582,10 @@ def parse_llm_setting(preset_name: str) -> ChatConfig | None:
     llm = get_llm(preset_name)
     if not (llm.model and llm.endpoint):
         raise ValueError(f"LLM预设[{preset_name}]未设置endpoint和模型")
+    provider = str(llm.api_type or "").strip().lower()
+    token_text = str(llm.token or "").strip()
+    if provider in {"openai", "anthropic"} and not token_text:
+        raise ValueError(f"LLM预设[{preset_name}]缺少token（api_type={provider}）")
 
     if llm.proxy_mode:
         proxy = get_proxy(llm.proxy_mode)
@@ -2623,7 +2631,7 @@ def parse_llm_setting(preset_name: str) -> ChatConfig | None:
             f"Key <auto_compress_gate> should be <int | float>, got {type(auto_compress_gate)}")
 
     new_setting.endpoint = llm.endpoint
-    new_setting.token = llm.token
+    new_setting.token = token_text
     new_setting.model = llm.model
     new_setting.api_provider = llm.api_type
     new_setting.max_context = llm.max_context

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..aliasing import AliasPayloadError, looks_like_alias
+from ..aliasing import AliasPayloadError, infer_real_key_type, looks_like_alias
 from ..models import (
     BUCKET_KIND_BUCKET,
     BUCKET_KIND_MEMORY,
@@ -21,6 +21,14 @@ def _clamp_score(value: float) -> float:
 class QueryService:
     def __init__(self, runtime: ServiceRuntime) -> None:
         self.runtime = runtime
+
+    @staticmethod
+    def _node_view_key(rec: MemoryRecord) -> str:
+        if rec.kind == BUCKET_KIND_BUCKET:
+            child = str(rec.child_bucket_id or "").strip()
+            if child:
+                return child
+        return rec.key
 
     async def run_query(
         self,
@@ -137,6 +145,13 @@ class QueryService:
         bm25_raw_scores = [score for _, score in bm25_ranked]
         bm25_norm_scores = normalize_scores(bm25_raw_scores)
         bm25_norm_map = {rec.key: bm25_norm_scores[idx] for idx, (rec, _) in enumerate(bm25_ranked)}
+        node_key_to_record_key: dict[str, str] = {}
+        for rec in records:
+            node_key_to_record_key[rec.key] = rec.key
+            if rec.kind == BUCKET_KIND_BUCKET:
+                child = str(rec.child_bucket_id or "").strip()
+                if child:
+                    node_key_to_record_key[child] = rec.key
         alias_fallback_candidates: list[tuple[dict[str, Any], float]] = []
         alias_miss_build = 0
         for rec, score in bm25_ranked:
@@ -149,17 +164,22 @@ class QueryService:
         hint_keys: list[str] = []
         hint_seen: set[str] = set()
         for rec, _score in bm25_ranked:
-            if rec.key in hint_seen:
+            node_key = self._node_view_key(rec)
+            if node_key in hint_seen:
                 continue
-            hint_seen.add(rec.key)
-            hint_keys.append(rec.key)
+            hint_seen.add(node_key)
+            hint_keys.append(node_key)
             if len(hint_keys) >= 50:
                 break
         if not hint_keys:
-            hint_keys = [r.key for r in records[:50]]
+            hint_keys = [self._node_view_key(r) for r in records[:50]]
         alias_key_hints: list[str] = []
         for key in hint_keys:
-            token = eng.storage.find_alias(bucket_id, key, "memory")
+            key_type = infer_real_key_type(key)
+            if not key_type:
+                alias_miss_build += 1
+                continue
+            token = eng.storage.find_alias(bucket_id, key, key_type)
             if token:
                 alias_key_hints.append(token)
             else:
@@ -194,6 +214,8 @@ class QueryService:
             eng=eng,
             bucket_id=bucket_id,
             llm_result_alias=llm_result_alias,
+            node_key_to_record_key=node_key_to_record_key,
+            record_keys=set(r.key for r in records),
         )
         if alias_miss_resolve > 0:
             eng._enqueue_query_side_effect("record_alias_miss_resolve", {"count": alias_miss_resolve})
@@ -271,6 +293,8 @@ class QueryService:
         eng: Any,
         bucket_id: str,
         llm_result_alias: dict[str, Any],
+        node_key_to_record_key: dict[str, str],
+        record_keys: set[str],
     ) -> tuple[dict[str, Any], int]:
         answer = str(llm_result_alias.get("answer", "")).strip()
         raw_matches = llm_result_alias.get("matches", [])
@@ -288,13 +312,17 @@ class QueryService:
                 miss += 1
                 continue
             try:
-                real_key = eng.resolve_alias(bucket_id, raw_key, expected_type="memory")
+                real_key = eng.resolve_alias(bucket_id, raw_key, expected_type=None)
             except Exception:
+                miss += 1
+                continue
+            record_key = node_key_to_record_key.get(real_key, real_key)
+            if record_key not in record_keys:
                 miss += 1
                 continue
             out_matches.append(
                 {
-                    "key": real_key,
+                    "key": record_key,
                     "score": item.get("score", 0.0),
                     "reason": item.get("reason", ""),
                     "summary": item.get("summary", ""),
@@ -387,6 +415,7 @@ class QueryService:
         out: list[QueryMatch] = []
         seen: set[str] = set()
         sub_answer = ""
+        best_sub_answer_score = -1.0
         max_parent_candidates = max(1, int(parent_top_k))
         for match in query_matches[:max_parent_candidates]:
             rec = eng.storage.get_record(match.key)
@@ -417,11 +446,13 @@ class QueryService:
                     depth_limit=depth_limit,
                     visited=visited,
                 )
-                if not sub_answer:
-                    sub_answer = str(child.sub_answer or child.answer or "").strip()
                 if child.matches:
                     child_top = child.matches[0]
                     merged_score = _clamp_score(0.70 * match.score + 0.30 * child_top.score)
+                    candidate_sub_answer = str(child.sub_answer or child.answer or "").strip()
+                    if candidate_sub_answer and merged_score > best_sub_answer_score:
+                        sub_answer = candidate_sub_answer
+                        best_sub_answer_score = merged_score
                     if child_top.key not in seen:
                         out.append(
                             QueryMatch(

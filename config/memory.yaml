@@ -12,7 +12,7 @@ LLM:
 llm_presets:
   CONTEXT_MEMORY:
     endpoint: https://api.deepseek.com/chat/completions
-    token: ""
+    token: sk-a7733b53aee549afa9ffe6b00d1b5abb
     model: deepseek-v4-flash
     api_type: "openai"
     max_context: 1000000

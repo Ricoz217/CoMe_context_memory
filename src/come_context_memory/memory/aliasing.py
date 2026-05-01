@@ -48,7 +48,7 @@ _FIELD_TYPES: dict[str, str] = {
 }
 
 _LIST_FIELD_TYPES: dict[str, str] = {
-    "key_hints": KEY_TYPE_MEMORY,
+    "key_hints": KEY_TYPE_REF,
     "split_keys": KEY_TYPE_MEMORY,
     "keep_keys": KEY_TYPE_MEMORY,
     "drop_keys": KEY_TYPE_MEMORY,
@@ -57,7 +57,7 @@ _LIST_FIELD_TYPES: dict[str, str] = {
     "parent_flat_keys": KEY_TYPE_REF,
     "members": KEY_TYPE_REF,
     "memory_keys": KEY_TYPE_MEMORY,
-    "leaf_nodes": KEY_TYPE_MEMORY,
+    "leaf_nodes": KEY_TYPE_REF,
     "bucket_refs": KEY_TYPE_BUCKET,
     "child_keys": KEY_TYPE_MEMORY,
 }

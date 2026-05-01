@@ -36,6 +36,15 @@ async def main():
     async def optimize():
         print(await memory.optimize())
 
+    async def export(mem_id: str):
+        print(await memory.export_memory_to_markdown(mem_id))
+
+    async def compress():
+        print(await memory.force_compress())
+
+    async def delete(hash_id: str):
+        print(await memory.delete_memory(hash_id))
+
     async def _run():
         if cmd in exec_mapping:
             if params:
@@ -50,7 +59,10 @@ async def main():
         "list": list_memory,
         "query": query,
         "stats": stats,
-        "optimize": optimize
+        "optimize": optimize,
+        "export": export,
+        "compress": compress,
+        "delete": delete
     }
 
     memory = get_context_memory(config=memory_config)
