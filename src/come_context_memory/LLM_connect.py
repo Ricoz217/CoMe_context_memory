@@ -1843,14 +1843,14 @@ class Chat:
                     asyncio.create_task(self._client.aclose())
                     self._client = None
 
-                self._logger.debug("已完成一轮")
+                # self._logger.debug("已完成一轮")
                 self._running.set()
                 task.event.set()
                 self._queue.task_done()
 
     async def post(self, task: AskTask) -> Prompts | None:
         self._running_task_id = task.id
-        self._logger.debug("正在开始请求...")
+        # self._logger.debug("正在开始请求...")
         if not self._endpoint:
             raise ValueError("尚未设置API链接")
 
@@ -1859,7 +1859,7 @@ class Chat:
 
         start_time = time.time()
         new_prompt = task.prompts
-        _log.debug(new_prompt)
+        # _log.debug(new_prompt)
         context = self._context.copy()
         context.append(new_prompt)
         payload = await self._payload_constructor(context)
@@ -2044,7 +2044,7 @@ class Chat:
                                                     _parse_json(data)
 
                                                 except Exception as E:
-                                                    self._logger.debug(f"试图解析首行失败: {E}\n\n首行内容: {data}")
+                                                    # self._logger.debug(f"试图解析首行失败: {E}\n\n首行内容: {data}")
                                                     reasoning_collect.clear()
                                                     response_collect.clear()
                                                     tool_calls_collect.clear()
@@ -2380,9 +2380,9 @@ class Chat:
 
         if self._max_context is not None and self._max_context > 0:
             if self._last_usage.input_t >= (compress_rate - 0.1) * self._max_context:
-                _log.debug(f"当前context: {self._last_usage.input_t:,}")
+                # _log.debug(f"当前context: {self._last_usage.input_t:,}")
                 estimate_tokens = await self._estimate_context_windows(new_ask)
-                _log.debug(f"预估context: {estimate_tokens:,}")
+                # _log.debug(f"预估context: {estimate_tokens:,}")
                 if estimate_tokens >= compress_rate * self._max_context:
                     raise ContextOverflowError
 
@@ -2405,7 +2405,7 @@ class Chat:
 
             # 首次失败自动重试（条件）
             if response is None and self._first_SSE_retry:
-                self._logger.debug("首次请求解析失败，正在自动重试...")
+                # self._logger.debug("首次请求解析失败，正在自动重试...")
                 self._first_SSE_retry = False
                 return await self.ask(new_ask, task_id=task_id, queue=queue, no_wait=no_wait, timeout=timeout)
 
@@ -2432,7 +2432,7 @@ class Chat:
 
                 # 首次失败自动重试（条件）
                 if new_task.response is None and self._first_SSE_retry:
-                    self._logger.debug("首次请求解析失败，正在自动重试...")
+                    # self._logger.debug("首次请求解析失败，正在自动重试...")
                     self._first_SSE_retry = False
                     return await self.ask(new_ask, task_id=task_id, queue=queue, no_wait=no_wait, timeout=timeout)
 
@@ -2454,7 +2454,7 @@ class Chat:
 
                 # 首次失败自动重试（条件）
                 if response is None and self._first_SSE_retry:
-                    self._logger.debug("首次请求解析失败，正在自动重试...")
+                    # self._logger.debug("首次请求解析失败，正在自动重试...")
                     self._first_SSE_retry = False
                     return await self.ask(new_ask, task_id=task_id, queue=queue, no_wait=no_wait, timeout=timeout)
 

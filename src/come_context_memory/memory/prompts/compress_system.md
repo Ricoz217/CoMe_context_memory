@@ -12,5 +12,9 @@ Hard constraints:
    - content is long
    - near token limit
    - content is unclear to you
-3. Prefer key-level keep/drop/reweight operations.
-4. Output JSON only.
+3. Only drop key on below situation:
+   - has clearly `GRAY_SET` event
+   - has new version or update
+   - other `memory_key` contains this key content (has superset)
+4. Prefer key-level keep/drop/reweight operations.
+5. Output JSON only.

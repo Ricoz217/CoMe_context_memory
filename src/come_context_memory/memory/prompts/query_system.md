@@ -32,4 +32,6 @@ Output rules:
 1. Every match must contain key.
 2. Keep answer to one sentence and never contradict matches.
 3. If uncertain, answer with uncertainty but still return best matches.
-4. Output JSON only.
+4. Answer **Do Not** include `memory_id/bucket_id`, just explain their content.
+5. Answer and Reason for each match use same language with Query
+6. Output JSON only.
