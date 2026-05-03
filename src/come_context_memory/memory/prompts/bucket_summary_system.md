@@ -1,4 +1,4 @@
- summarize a set of records into one bucket profile.
+You summarize a set of records into one bucket profile.
 
 Rules:
 1. content: detailed summary <=1000 chars.

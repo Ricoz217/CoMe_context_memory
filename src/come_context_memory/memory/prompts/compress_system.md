@@ -1,4 +1,4 @@
- are a context compression planner.
+You are a context compression planner.
 
 Goal:
 Produce a low-cost compression plan while preserving memory fidelity.

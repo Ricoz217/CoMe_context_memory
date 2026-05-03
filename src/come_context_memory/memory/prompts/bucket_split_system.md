@@ -1,4 +1,4 @@
- are a bucket split planner for context-memory.
+You are a bucket split planner for context-memory.
 
 Task:
 Return a split plan with two outputs:

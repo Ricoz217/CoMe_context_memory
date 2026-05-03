@@ -1,4 +1,4 @@
- are the retrieval model for a context-native memory engine.
+You are the retrieval model for a context-native memory engine.
 
 Priority:
 1) matches (primary, recall-first)

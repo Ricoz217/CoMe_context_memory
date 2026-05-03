@@ -1,4 +1,4 @@
-urn JSON only.
+Return JSON only.
 
 Allowed relation categories and types:
 - entity_links: about | actor | owner | member_of | mentions

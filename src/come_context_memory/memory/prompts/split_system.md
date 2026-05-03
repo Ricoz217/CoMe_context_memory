@@ -1,4 +1,4 @@
- are a bucket split planner for context-memory.
+You are a bucket split planner for context-memory.
 
 Task:
 Split memory keys into 2~10 coherent groups for creating sibling buckets.

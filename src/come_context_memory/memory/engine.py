@@ -260,7 +260,7 @@ class BucketHandle:
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.refresh_bucket_summary(bucket_id, force=force)
 
-    async def delete_memory(self, key: str, *, reason: str = "") -> DeleteResult:
+    async def delete_memory(self, key: Any, *, reason: str = "") -> DeleteResult:
         return await self._engine.delete_memory(key, reason=reason)
 
     async def add_memory_from_file(
@@ -2884,8 +2884,71 @@ class ContextMemoryEngineV3:
             await self._run_memory_gc()
             return UpdateResult(success=True, key=key, revision_id=record.revision_id, message="gray state updated")
 
-    async def delete_memory(self, key: str, *, reason: str = "") -> DeleteResult:
-        info = self.storage.get_bucket_info(key)
+    def _resolve_delete_target_key(self, target: Any) -> str:
+        if isinstance(target, MemoryRecord):
+            return str(target.key).strip()
+        if isinstance(target, BucketInfo):
+            node_key = str(target.node_key or "").strip()
+            if node_key:
+                return node_key
+            bid = str(target.bucket_id or "").strip()
+            if bid:
+                info = self.storage.get_bucket_info(bid)
+                if info is not None and str(info.node_key or "").strip():
+                    return str(info.node_key).strip()
+                return bid
+            return ""
+        if isinstance(target, dict):
+            key_token = str(target.get("key", "")).strip()
+            if key_token:
+                return key_token
+            node_token = str(target.get("node_key", "")).strip()
+            if node_token:
+                return node_token
+            bucket_token = str(target.get("bucket_id", "")).strip()
+            if bucket_token:
+                info = self.storage.get_bucket_info(bucket_token)
+                if info is not None and str(info.node_key or "").strip():
+                    return str(info.node_key).strip()
+                return bucket_token
+            return ""
+        if isinstance(target, str):
+            token = target.strip()
+            if not token:
+                return ""
+            info = self.storage.get_bucket_info(token)
+            if info is not None and str(info.node_key or "").strip():
+                return str(info.node_key).strip()
+            return token
+
+        key_attr = str(getattr(target, "key", "") or "").strip()
+        if key_attr:
+            return key_attr
+        node_attr = str(getattr(target, "node_key", "") or "").strip()
+        if node_attr:
+            return node_attr
+        bucket_attr = str(getattr(target, "bucket_id", "") or "").strip()
+        if bucket_attr:
+            info = self.storage.get_bucket_info(bucket_attr)
+            if info is not None and str(info.node_key or "").strip():
+                return str(info.node_key).strip()
+            return bucket_attr
+        return ""
+
+    async def delete_memory(self, key: Any, *, reason: str = "") -> DeleteResult:
+        target_key = self._resolve_delete_target_key(key)
+        if not target_key:
+            return DeleteResult(success=False, key="", message="invalid delete target")
+
+        current = self.storage.get_record(target_key)
+        info: BucketInfo | None = None
+        if current is not None and current.kind == BUCKET_KIND_BUCKET:
+            child_id = str(current.child_bucket_id or "").strip()
+            if child_id:
+                info = self.storage.get_bucket_info(child_id)
+        if info is None:
+            info = self.storage.get_bucket_info(target_key)
+
         if info is not None:
             if not self.bucket_mapping:
                 self._load_bucket_mapping()
@@ -2895,7 +2958,7 @@ class ContextMemoryEngineV3:
                 self.bucket_mapping.pop(remapping[info.bucket_id], None)
                 atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
 
-        res = await self.set_gray(key, gray=True, reason=reason or "delete")
+        res = await self.set_gray(target_key, gray=True, reason=reason or "delete")
         return DeleteResult(
             success=res.success,
             key=res.key,

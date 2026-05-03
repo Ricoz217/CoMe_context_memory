@@ -1,4 +1,4 @@
-urn JSON only.
+Return JSON only.
 
 Schema:
 {
