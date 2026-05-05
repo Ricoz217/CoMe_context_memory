@@ -1,68 +1,85 @@
-# TODO
+# TODO (Unified)
 
-## add_memory_from_file / add_memory_from_dir 去重策略（设计项）
+## P0 施工主线
 
-1. 增加去重开关：
-   - `add_memory()` 默认不查重。
-   - `add_memory_from_file()` 增加参数 `dedup_in_bucket: bool = True`（默认开启）。
-   - `add_memory_from_dir()` 复用同一参数，默认开启（主要防止重复导入同一文件/目录）。
+- [ ] 锁模型改造：不同桶并发写、同桶串行
+  - 目标语义：
+    - 同一 `bucket_id` 的写操作严格串行。
+    - 不同 `bucket_id` 的写操作可并发执行。
+    - 跨桶操作（如 `move/optimize/split`）按稳定顺序获取多把桶锁，避免死锁。
+  - 现状问题：
+    - 当前大量写路径使用全局 `self._lock`，导致跨桶完全串行。
+  - 新锁结构（建议）：
+    - `BucketLockManager`：`bucket_id -> asyncio.Lock`（惰性创建）。
+    - `GlobalMetaLock`：仅用于全局元数据/全局结构（如 root/active 指针、bucket_mapping、全局树维护）。
+    - `QuerySideEffectLock`：将 query 异步副作用与主写锁解耦，避免无关阻塞。
+  - 锁获取规则（必须落文档并在代码统一复用）：
+    - 单桶写：仅获取该桶锁。
+    - 双桶/多桶写：按 `sorted(bucket_ids)` 顺序获取。
+    - 需要同时改全局结构时：先拿桶锁，再拿 `GlobalMetaLock`；释放反序执行。
+    - 禁止“先全局锁再桶锁”的反向路径（防止循环等待）。
+  - 写路径分级改造（分阶段）：
+    - Phase A（低风险）：`add_memory / update_memory / set_gray / delete_memory` 改为单桶锁。
+    - Phase B（中风险）：`move_item` 改为双桶锁（source+target）+ 必要元数据锁。
+    - Phase C（高风险）：`split_bucket / optimize / force_compress` 改为“源桶锁 + 新桶锁 + 元数据锁”组合。
+    - Phase D（全局维护）：`gc_storage / cleanup_expired / migrate_paths` 保持全局串行（单独维护锁），不与业务写锁混用。
+  - 关键风险点：
+    - 死锁风险：多桶获取顺序不一致。
+    - 竞态风险：`_resolve_bucket_id` 与 sealed redirect 链更新并发。
+    - 原子性风险：跨桶事件写入与桶树更新顺序不一致导致中间态可见。
+    - 兼容风险：alias session / alias map version 在并发下的一致性。
+  - 验收与压测：
+    - 并发压测：N 个协程分别写不同桶，吞吐显著高于全局锁版本。
+    - 串行保证：同桶并发写无乱序/重复 revision。
+    - 死锁测试：高并发 `move(A->B)` 与 `move(B->A)` 不死锁。
+    - 一致性测试：事件流、bucket_tree、state、alias 审计可自洽。
 
-2. 去重范围限定：
-   - 仅查目标桶直属 `memory` 记录。
-   - 不查 `bucket` 记录。
-   - 不递归子桶。
+- [ ] 使最多三层桶树可配置
+  - 新增配置项：`max_bucket_depth`（YAML + `ContextMemoryConfig`）。
+  - 替换引擎中硬编码 `3` 的层级判断与提示。
+  - 保持 `optimize` payload 仍固定两层（不改 prompt/payload 形状）。
+  - 回归：`create/move/split/optimize/query` 在不同深度配置下行为正确。
 
-3. 去重时机：
-   - 在 `split_text` 之后、`clean/ingest` 之前执行。
-   - 对“原始分片文本”计算哈希进行比对（不使用 clean 后文本）。
+- [ ] 增加 `add_memory_from_dir`（`add_dir`）
+  - 递归扫描目录，逐文件调用现有入库链路（不改核心 ingest 逻辑）。
+  - 参数：目标桶、是否按子目录自动建子桶、是否查重、是否统计 token。
+  - 非自动建子桶模式：全部入目标桶，末尾仅对目标桶执行一次 `optimize`。
+  - 自动建子桶模式：不触发 `optimize`。
+  - 若检测到自动建子桶会超出最大层级：拒绝整个任务。
+  - 输出批处理进度与最终统计：`success_count / fail_count / skip_duplicate_count`。
 
-4. 命中处理策略：
-   - `add_memory_from_file`：命中重复直接 `skip`。
-   - `add_memory_from_dir`：命中重复记录批处理错误/跳过信息（`duplicate_in_bucket`），继续处理后续文件。
-   - 明确不做 `merge_relations`。
+- [ ] 增加已有记忆检测（去重）
+  - 开关策略：
+    - `add_memory()` 默认不查重。
+    - `add_memory_from_file()` 默认查重（可关闭）。
+    - `add_memory_from_dir()` 默认查重（可关闭）。
+  - 范围：仅查目标桶直属 `memory`，不查 `bucket`，不递归子桶。
+  - 时机：`split_text` 后、`clean/ingest` 前；按原始分片文本比对。
+  - 命中处理：
+    - `add_memory_from_file`：直接 `skip`。
+    - `add_memory_from_dir`：记录 `duplicate_in_bucket` 并继续后续文件。
+  - 明确不做 `merge_relations`。
 
-5. 批处理统计输出（目录导入）：
-   - 输出 `success_count / fail_count / skip_duplicate_count`。
-   - 输出失败或跳过明细（至少含文件路径与原因）。
+- [ ] 压缩事件数据量
+  - 仅压缩 `GRAY_SET` 事件。
+  - `GRAY_SET` 事件默认不保留完整 `content/title/summary/relations`，仅保留最小审计字段。
+  - 对以下事件保持完整信息（含桶事件）：
+    - `ADD`
+    - `UPDATE`
+    - `MOVE_IN`
+    - `OPTIMIZE_REBUILD`
+    - `COMPRESS_REBUILD`
+  - 回归检查：查询召回与审计可追溯能力不退化。
 
-6. 约束补充（与已确认规则一致）：
-   - 非自动建子桶模式下，`optimize` 只对目标桶执行一次，不对子桶执行。
-   - 若 `success_count == 0`，不触发 `optimize`。
-   - `add_memory_from_dir` 实施排期放在“可配置层级上线”之后。
+- [ ] 提升深层桶召回率和优化路由策略
+  - 保持现有递归 query 主流程不变。
+  - 增加“全局召回”辅助分（优先 BM25），注入现有 rerank 作为 bucket/subtree boost。
+  - 模式策略：`mode=auto|semantic|literal|hybrid`，优先本地规则，不引入额外 LLM 判定。
+  - 缓存策略：引入 `global_index_version` 以支持增量索引和自动失效。
+  - 约束：增加预算阈值，避免全局召回导致延迟失控与噪声路由。
 
-## Query 深层召回缺陷与改进（设计项，暂不施工）
+## P1 依赖与顺序
 
-### 背景缺陷
-
-1. 当前 query 的路由依赖“父层命中桶节点 -> 递归子桶”。
-2. 若目标代码片段位于深层子桶，且上层桶摘要未覆盖该信息，路由可能失败，LLM 可视范围受限。
-3. 这类场景相较传统 RAG（向量库直接全局召回）存在召回风险。
-
-### 已确认方向
-
-1. 引入“全局召回”作为前置/辅助信号（优先 BM25 倒排，后续可扩展向量）。
-2. 不替换现有递归 query 主流程；以低侵入方式增强路由。
-3. 将全局召回结果聚合为子树/桶级 boost 分，注入现有 rerank，提升正确子桶触发概率。
-4. 递归策略保持现有框架，优先做“候选子树递归”，避免全树递归带来的延迟和噪声。
-
-### 模式策略（代码片段查询）
-
-1. 不使用额外 LLM 判断检索模式（避免增加 query 延迟）。
-2. 模式采用“本地规则自动判断 + 用户显式覆盖”：
-   - `mode=auto|semantic|literal|hybrid`
-3. `auto` 基于规则（符号密度、多行代码、路径形态等）选择；低置信度回退 `hybrid`。
-
-### 缓存与内存策略
-
-1. 全局索引采用增量维护（基于事件流更新），避免每次全量重建。
-2. 查询缓存 key 纳入 `global_index_version`，版本变更自动失效。
-3. 内存回收分层：
-   - 先淘汰查询结果缓存
-   - 再按 LRU 淘汰冷索引分片
-   - 保留磁盘索引快照以便快速恢复
-
-### 风险与边界
-
-1. 全局召回会增加计算量，需设置预算：`topN_memory / topM_buckets / depth_limit / time_budget_ms`。
-2. 需防止 boost 过强导致噪声路由；建议加入上限与归一化。
-3. 该方案目标是“提升深层召回率”，不改变现有 API 语义与结果结构。
+- [ ] 先完成 `max_bucket_depth` 配置化，再实施 `add_memory_from_dir`。
+- [ ] `add_memory_from_dir` 上线前，先落地去重能力与批处理统计结构。
+- [ ] 深层召回增强放在 V3 稳定后单独分支施工，避免影响当前主链路。

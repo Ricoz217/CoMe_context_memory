@@ -311,11 +311,16 @@ class BucketHandle:
             self,
             *,
             include_gray: bool = True,
+            include_content: bool = False,
             bucket_id: str | None = None,
     ) -> dict[str, Any]:
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
-        return await self._engine.list_memories(include_gray=include_gray, bucket_id=bucket_id)
+        return await self._engine.list_memories(
+            include_gray=include_gray,
+            include_content=include_content,
+            bucket_id=bucket_id,
+        )
 
     async def get_bucket_context_usage(self, *, bucket_id: str | None = None) -> dict[str, Any]:
         resolved_current = await self._refresh_bucket_id()
@@ -462,7 +467,7 @@ class ContextMemoryEngineV3:
         init_config: bool = True,
         evidence_versions: int = 5,
         auto_manage: bool = True,
-        max_context_window: int = 200_000,
+        max_context_window: int = 256_000,
         max_memory_bytes: int = 1_000_000_000,
         auto_compress_trigger_ratio: float = 0.70,
         auto_split_trigger_ratio: float = 0.50,
@@ -2683,6 +2688,7 @@ class ContextMemoryEngineV3:
         self,
         *,
         include_gray: bool = True,
+        include_content: bool = False,
         bucket_id: str | None = None,
     ) -> dict[str, Any]:
         resolved = self._resolve_bucket_id(bucket_id)
@@ -2690,10 +2696,11 @@ class ContextMemoryEngineV3:
         memories: list[MemoryRecord] = []
         buckets: list[MemoryRecord] = []
         for rec in records:
+            out_rec = rec if include_content else replace(rec, content="")
             if rec.kind == BUCKET_KIND_BUCKET:
-                buckets.append(rec)
+                buckets.append(out_rec)
             elif rec.kind == BUCKET_KIND_MEMORY:
-                memories.append(rec)
+                memories.append(out_rec)
         total_memory_count = self._count_subtree_memories(resolved, include_gray=include_gray)
         usage = await self.get_bucket_context_usage(bucket_id=resolved)
         return {
