@@ -9,12 +9,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from come_context_memory.config import DATA_DIR
+
 
 _EPOCH_MS = 1_704_067_200_000  # 2024-01-01T00:00:00Z
 _SEQUENCE_BITS = 12
 _SEQUENCE_MASK = (1 << _SEQUENCE_BITS) - 1
 _SAVE_RETRY_COUNT = 3
 _SAVE_RETRY_DELAY_SEC = 0.01
+_DEFAULT_STATE_FILE = DATA_DIR / "runtime" / "time_id_state.json"
 
 _log = logging.getLogger(__name__)
 
@@ -33,7 +36,7 @@ class TimeBasedIdGenerator:
         state_file: str | Path | None = None,
         time_ms_fn: Callable[[], int] | None = None,
     ) -> None:
-        self._state_file = Path(state_file) if state_file else Path("cache/time_id_state.json")
+        self._state_file = Path(state_file) if state_file else _DEFAULT_STATE_FILE
         self._time_ms_fn = time_ms_fn or (lambda: time.time_ns() // 1_000_000)
         self._lock = threading.Lock()
         self._state = self._load_state()
@@ -108,18 +111,31 @@ class TimeBasedIdGenerator:
 
 _GLOBAL_GENERATOR: TimeBasedIdGenerator | None = None
 _GLOBAL_LOCK = threading.Lock()
+_GLOBAL_STATE_FILE: Path = _DEFAULT_STATE_FILE
+
+
+def configure_global_time_id_state_file(state_file: str | Path) -> None:
+    """Update global generator persistence file path."""
+    global _GLOBAL_GENERATOR, _GLOBAL_STATE_FILE
+    new_file = Path(state_file)
+    with _GLOBAL_LOCK:
+        _GLOBAL_STATE_FILE = new_file
+        # Recreate so subsequent calls use the new persistence path.
+        _GLOBAL_GENERATOR = TimeBasedIdGenerator(state_file=new_file)
 
 
 def get_global_time_id_generator(
     state_file: str | Path | None = None,
 ) -> TimeBasedIdGenerator:
-    global _GLOBAL_GENERATOR
-    if _GLOBAL_GENERATOR is not None:
+    global _GLOBAL_GENERATOR, _GLOBAL_STATE_FILE
+    target_file = Path(state_file) if state_file else _GLOBAL_STATE_FILE
+    if _GLOBAL_GENERATOR is not None and _GLOBAL_GENERATOR._state_file == target_file:
         return _GLOBAL_GENERATOR
 
     with _GLOBAL_LOCK:
-        if _GLOBAL_GENERATOR is None:
-            _GLOBAL_GENERATOR = TimeBasedIdGenerator(state_file=state_file)
+        if _GLOBAL_GENERATOR is None or _GLOBAL_GENERATOR._state_file != target_file:
+            _GLOBAL_STATE_FILE = target_file
+            _GLOBAL_GENERATOR = TimeBasedIdGenerator(state_file=target_file)
     return _GLOBAL_GENERATOR
 
 

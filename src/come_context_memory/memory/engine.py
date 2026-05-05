@@ -52,6 +52,7 @@ from .rerank import BM25IndexCache, louvain_split_groups
 from .storage import MemoryStorageV3
 
 from come_context_memory.LLM_usage import LLMUsage
+from come_context_memory.time_id import configure_global_time_id_state_file
 from come_context_memory.utils import AutoMapping, atomic_save_json
 
 
@@ -677,6 +678,8 @@ class ContextMemoryEngineV3:
         self.image_extractor = ImageTextExtractor(
             llm_preset=self.image_llm_preset,
             init_config=init_config,
+            usage_store=self._llm_usage_store,
+            image_name_mapping=self._image_name_mapping_store,
         )
         self._global_meta_lock = asyncio.Lock()
         self._query_side_effect_lock = asyncio.Lock()
@@ -744,9 +747,13 @@ class ContextMemoryEngineV3:
         mapping_file = runtime_dir / "llm_connect" / "image_name_mapping.json"
         mapping_file.parent.mkdir(parents=True, exist_ok=True)
         self._image_name_mapping_store = AutoMapping(mapping_file, expire_day=14)
+        configure_global_time_id_state_file(runtime_dir / "time_id_state.json")
         if hasattr(self, "pipeline"):
             self.pipeline.usage_store = self._llm_usage_store
             self.pipeline.image_name_mapping = self._image_name_mapping_store
+        if hasattr(self, "image_extractor"):
+            self.image_extractor.usage_store = self._llm_usage_store
+            self.image_extractor.image_name_mapping = self._image_name_mapping_store
 
     def apply_config(self, config: ContextMemoryConfig | dict[str, Any]) -> None:
         cfg_obj = config if isinstance(config, ContextMemoryConfig) else ContextMemoryConfig.from_dict(config)

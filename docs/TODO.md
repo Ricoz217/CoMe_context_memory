@@ -86,21 +86,21 @@
 
 ## P2 Prompt/Schema Simplification
 
-- [ ] compress prompt/schema remove `keep_keys`, keep only `drop_keys`.
+- [x] compress prompt/schema remove `keep_keys`, keep only `drop_keys`.
   - Rationale: for LLM output, long `keep_keys` lists are high-risk (miss/oversight), increase output tokens, and can cause misunderstanding of downstream keep/drop merge semantics.
   - Target behavior after refactor: default keep-all, apply `drop_keys` only; preserve existing safety validation in post-processing.
-- [ ] add_memory_from_file: when file ingestion triggers bucket split, run one optimize after the whole file shards are ingested.
+- [x] add_memory_from_file: when file ingestion triggers bucket split, run one optimize after the whole file shards are ingested.
   - Keep same principle for add_memory_from_dir without adding separate branch logic.
   - add_memory_from_dir remains automation wrapper; behavior should derive from add_memory_from_file.
-- [ ] add API to switch active bucket explicitly (set_active_bucket / switch_bucket).
+- [x] add API to switch active bucket explicitly (set_active_bucket / switch_bucket).
   - ensure default routing rule is explicit: when `bucket_id` is not provided, operations resolve to `active_bucket_id`.
   - include docs note for default bucket resolution behavior.
-- [ ] add_memory_from_file / add_memory_from_dir should return newly added memory keys for user-side manual rollback.
+- [x] add_memory_from_file / add_memory_from_dir should return newly added memory keys for user-side manual rollback.
   - add_memory_from_file: return `added_keys` for this file ingest batch.
   - add_memory_from_dir: aggregate and return `added_keys` (and optionally `per_file_added_keys`).
   - dedup-skipped chunks/files must not appear in added key lists.
   - users can call delete on returned keys; no built-in rollback API.
-- [ ] runtime persistence instance-scoped: bind `LLM_connect` image mapping and `LLM_usage` usage store to each engine `BASE_DIR`.
+- [x] runtime persistence instance-scoped: bind `LLM_connect` image mapping and `LLM_usage` usage store to each engine `BASE_DIR`.
   - Remove hard dependency on module-level global files under package `DATA_DIR` for library mode.
   - Inject instance stores along `Engine -> LLMPipeline -> Chat` path (fallback to globals only for backward compatibility).
   - Ensure multi-engine same-process isolation when engines use different `BASE_DIR`.
