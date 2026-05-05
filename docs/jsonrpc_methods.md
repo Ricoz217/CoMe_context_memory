@@ -3,6 +3,8 @@
 Endpoint: `POST /jsonrpc`  
 Health: `GET /healthz`
 
+Server runtime options include `--no-forgetting` to disable negative-weight forgetting logic.
+
 ## Core Methods
 
 - `ping`
@@ -65,4 +67,3 @@ If exceeded, server returns:
 - `-32001`: method timeout
 - `-32010`: context overflow related runtime error
 - `-32000`: generic internal error
-

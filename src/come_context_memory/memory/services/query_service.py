@@ -75,7 +75,7 @@ class QueryService:
                 else eng._global_recall_time_budget_ms
             ),
         )
-        global_record_boost, global_bucket_boost = self._build_global_recall_boosts(
+        global_record_boost, global_bucket_boost = await self._build_global_recall_boosts(
             root_bucket_id=root,
             query_text=query_text,
             include_gray=include_gray,
@@ -199,14 +199,15 @@ class QueryService:
             bucket_version=bucket_version,
             records=records,
         )
-        bm25_ranked = rank_records_with_index(
+        rank_top_k = max(top_k * 6, top_k)
+        records_snapshot = tuple(records)
+        bm25_ranked, bm25_norm_scores = await eng._run_cpu_task(
+            self._rank_records_and_normalize_scores,
             query_text,
-            records,
-            top_k=max(top_k * 6, top_k),
-            index=bm25_index,
+            records_snapshot,
+            rank_top_k,
+            bm25_index,
         )
-        bm25_raw_scores = [score for _, score in bm25_ranked]
-        bm25_norm_scores = normalize_scores(bm25_raw_scores)
         bm25_norm_map = {rec.key: bm25_norm_scores[idx] for idx, (rec, _) in enumerate(bm25_ranked)}
         boosted_norm_map: dict[str, float] = {}
         for rec, _score in bm25_ranked:
@@ -612,7 +613,7 @@ class QueryService:
             return "literal"
         return "hybrid"
 
-    def _build_global_recall_boosts(
+    async def _build_global_recall_boosts(
         self,
         *,
         root_bucket_id: str,
@@ -667,15 +668,16 @@ class QueryService:
                 bucket_version=bucket_version,
                 records=records,
             )
-            ranked = rank_records_with_index(
+            records_snapshot = tuple(records)
+            ranked, norms = await eng._run_cpu_task(
+                self._rank_records_and_normalize_scores,
                 query_text,
-                records,
-                top_k=max(1, int(top_m)),
-                index=bm25_index,
+                records_snapshot,
+                max(1, int(top_m)),
+                bm25_index,
             )
             if not ranked:
                 continue
-            norms = normalize_scores([score for _, score in ranked])
             best = 0.0
             for idx, (rec, _raw) in enumerate(ranked):
                 score = _clamp_score(float(norms[idx] if idx < len(norms) else 0.0))
@@ -689,6 +691,24 @@ class QueryService:
             if best > float(bucket_boost.get(bucket_id, 0.0)):
                 bucket_boost[bucket_id] = best
         return record_boost, bucket_boost
+
+    @staticmethod
+    def _rank_records_and_normalize_scores(
+        query_text: str,
+        records: tuple[MemoryRecord, ...],
+        top_k: int,
+        bm25_index: Any,
+    ) -> tuple[list[tuple[MemoryRecord, float]], list[float]]:
+        ranked = rank_records_with_index(
+            query_text,
+            list(records),
+            top_k=max(1, int(top_k)),
+            index=bm25_index,
+        )
+        if not ranked:
+            return [], []
+        norms = normalize_scores([score for _, score in ranked])
+        return ranked, norms
 
     @staticmethod
     def _apply_global_boost(

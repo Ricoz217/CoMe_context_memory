@@ -6,11 +6,13 @@ import hashlib
 import random
 import shutil
 import yaml
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable, TypeVar
 from uuid import uuid4
 
 from .llm_pipeline import LLMPipelineV3
@@ -54,6 +56,8 @@ from .storage import MemoryStorageV3
 from come_context_memory.LLM_usage import LLMUsage
 from come_context_memory.time_id import configure_global_time_id_state_file
 from come_context_memory.utils import AutoMapping, atomic_save_json
+
+TCPU = TypeVar("TCPU")
 
 
 def _clamp_score(value: float) -> float:
@@ -134,6 +138,7 @@ class ContextMemoryConfig:
     init_config: bool = True
     evidence_versions: int = 5
     auto_manage: bool = True
+    enable_forgetting: bool = True
     max_bucket_depth: int = 3
     max_context_window: int = 200_000
     max_memory_bytes: int = 1_000_000_000
@@ -173,6 +178,7 @@ class ContextMemoryConfig:
             init_config=bool(data.get("init_config", True)),
             evidence_versions=int(data.get("evidence_versions", 5)),
             auto_manage=bool(data.get("auto_manage", True)),
+            enable_forgetting=bool(data.get("enable_forgetting", True)),
             max_bucket_depth=int(data.get("max_bucket_depth", 3)),
             max_context_window=int(data.get("max_context_window", 200_000)),
             max_memory_bytes=int(data.get("max_memory_bytes", 1_000_000_000)),
@@ -577,6 +583,7 @@ class ContextMemoryEngineV3:
         init_config: bool = True,
         evidence_versions: int = 5,
         auto_manage: bool = True,
+        enable_forgetting: bool = True,
         max_bucket_depth: int = 3,
         max_context_window: int = 256_000,
         max_memory_bytes: int = 1_000_000_000,
@@ -617,6 +624,7 @@ class ContextMemoryEngineV3:
             init_config = cfg_obj.init_config
             evidence_versions = cfg_obj.evidence_versions
             auto_manage = cfg_obj.auto_manage
+            enable_forgetting = cfg_obj.enable_forgetting
             max_bucket_depth = cfg_obj.max_bucket_depth
             max_context_window = cfg_obj.max_context_window
             max_memory_bytes = cfg_obj.max_memory_bytes
@@ -688,8 +696,13 @@ class ContextMemoryEngineV3:
         self._lock = self._global_meta_lock
         self._query_side_effect_queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue(maxsize=20_000)
         self._query_side_effect_worker: asyncio.Task | None = None
+        self._cpu_executor = ThreadPoolExecutor(
+            max_workers=2,
+            thread_name_prefix="come-query-cpu",
+        )
 
         self._negative_delete_threshold = 0.10
+        self._enable_forgetting = bool(enable_forgetting)
         self._max_depth = max(1, int(max_bucket_depth))
         self._max_memory_chars = 100_000
         self._default_chunk_max_chars = 4000
@@ -789,6 +802,7 @@ class ContextMemoryEngineV3:
         self.image_extractor.init_config = bool(cfg_obj.init_config)
 
         self.auto_manage = bool(cfg_obj.auto_manage)
+        self._enable_forgetting = bool(cfg_obj.enable_forgetting)
         self._max_depth = max(1, int(cfg_obj.max_bucket_depth))
         self.max_context_window = max(100_000, int(cfg_obj.max_context_window))
         self.memory_manager.max_bytes = max(128 * 1024 * 1024, int(cfg_obj.max_memory_bytes))
@@ -1112,6 +1126,24 @@ class ContextMemoryEngineV3:
             cached_input_tokens=usage.get("cached_input_tokens", 0),
             calls=usage.get("calls", 0),
         )
+
+    async def _run_cpu_task(self, fn: Callable[..., TCPU], /, *args: Any, **kwargs: Any) -> TCPU:
+        loop = asyncio.get_running_loop()
+        call = partial(fn, *args, **kwargs)
+        return await loop.run_in_executor(self._cpu_executor, call)
+
+    def shutdown(self, *, wait: bool = False) -> None:
+        executor = getattr(self, "_cpu_executor", None)
+        if executor is None:
+            return
+        self._cpu_executor = None
+        try:
+            executor.shutdown(wait=wait, cancel_futures=True)
+        except TypeError:
+            executor.shutdown(wait=wait)
+
+    async def close(self, *, wait: bool = False) -> None:
+        self.shutdown(wait=wait)
 
     def _record_llm_diag(self) -> None:
         self._record_llm_diag_values(self.pipeline.last_diagnostics)
@@ -4702,6 +4734,8 @@ class ContextMemoryEngineV3:
         return est / max(1, self.max_context_window), count
 
     async def _apply_forgetting(self, bucket_id: str, *, from_compress: bool) -> None:
+        if not bool(getattr(self, "_enable_forgetting", True)):
+            return
         now = datetime.now(timezone.utc)
         for rec in self.storage.list_bucket_records(bucket_id, include_gray=False):
             if rec.kind != BUCKET_KIND_MEMORY:
@@ -4721,6 +4755,8 @@ class ContextMemoryEngineV3:
                 await self.set_gray(rec.key, gray=True, reason="auto_forget")
 
     def _calc_negative_weight(self, rec: MemoryRecord, *, node: dict[str, Any]) -> float:
+        if not bool(getattr(self, "_enable_forgetting", True)):
+            return 0.0
         now = datetime.now(timezone.utc)
         created = parse_iso_or_none(rec.created_at)
         if created is None:
@@ -4744,6 +4780,8 @@ class ContextMemoryEngineV3:
         return -penalty
 
     def _apply_negative_weight_adjust(self, key: str, score: float) -> float:
+        if not bool(getattr(self, "_enable_forgetting", True)):
+            return _clamp_score(score)
         node = self.storage.get_key_node(key) or {}
         neg = float(node.get("last_negative_weight", 0.0))
         adjusted = score + (neg * 0.35)
@@ -4780,6 +4818,7 @@ class ContextMemorySystem:
         ask_timeout: float = 90.0,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
+        enable_forgetting: bool = True,
         init_config: bool = True,
     ) -> ContextMemoryEngineV3:
         if cls._instance is None:
@@ -4797,6 +4836,7 @@ class ContextMemorySystem:
                     ask_timeout=ask_timeout,
                     use_mock_llm=use_mock_llm,
                     enable_cleaning=enable_cleaning,
+                    enable_forgetting=enable_forgetting,
                     init_config=init_config,
                 )
             if cfg_obj is None:
@@ -4825,6 +4865,7 @@ def get_context_memory(
         ask_timeout: float = 180.0,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
+        enable_forgetting: bool = True,
         init_config: bool = True
 ):
     return ContextMemorySystem.get_instance(
@@ -4836,6 +4877,7 @@ def get_context_memory(
         ask_timeout=ask_timeout,
         use_mock_llm=use_mock_llm,
         enable_cleaning=enable_cleaning,
+        enable_forgetting=enable_forgetting,
         init_config=init_config
     )
 

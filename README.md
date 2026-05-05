@@ -92,3 +92,7 @@ Method list:
 - `add_memory_from_dir(...)` returns aggregated `added_keys` and `per_file_added_keys`.
 - Use `set_active_bucket(bucket_id)` (alias: `switch_active_bucket`) to switch the active bucket explicitly.
 - When an API call does not provide `bucket_id`, routing defaults to the current `active_bucket_id`.
+- Forgetting switch:
+  - `ContextMemoryConfig(enable_forgetting=False)` disables negative-weight forgetting and auto-forget graying.
+  - CLI supports `--no-forgetting`.
+  - JSON-RPC server supports `--no-forgetting`.

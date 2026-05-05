@@ -52,6 +52,7 @@ def _make_config(args: argparse.Namespace) -> ContextMemoryConfig:
         ask_timeout=args.timeout,
         use_mock_llm=args.mock,
         enable_cleaning=not args.no_clean,
+        enable_forgetting=not args.no_forgetting,
         init_config=not args.no_debug_mode,
         auto_manage=not args.no_auto_manage,
         max_bucket_depth=args.max_bucket_depth,
@@ -298,6 +299,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=float, default=180.0)
     parser.add_argument("--mock", action="store_true")
     parser.add_argument("--no-clean", action="store_true")
+    parser.add_argument("--no-forgetting", action="store_true")
     parser.add_argument("--no-debug-mode", action="store_true")
     parser.add_argument("--no-auto-manage", action="store_true")
     parser.add_argument("--max-context-window", type=int, default=1_000_000)
