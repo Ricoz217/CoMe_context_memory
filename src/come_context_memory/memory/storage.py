@@ -1050,6 +1050,11 @@ class MemoryStorageV3:
         include_gray: bool,
         bucket_id: str,
         degraded_mode: bool,
+        mode: str = "auto",
+        global_recall_top_n: int = 0,
+        global_recall_top_m: int = 0,
+        global_recall_depth_limit: int = 0,
+        global_recall_time_budget_ms: int = 0,
     ) -> str:
         meta = self.load_meta()
         payload = {
@@ -1059,6 +1064,11 @@ class MemoryStorageV3:
             "bucket_id": bucket_id,
             "bucket_version": self.get_bucket_version(bucket_id),
             "degraded_mode": degraded_mode,
+            "mode": str(mode or "auto"),
+            "global_recall_top_n": int(global_recall_top_n),
+            "global_recall_top_m": int(global_recall_top_m),
+            "global_recall_depth_limit": int(global_recall_depth_limit),
+            "global_recall_time_budget_ms": int(global_recall_time_budget_ms),
             "context_version": int(meta.get("context_version", 0)),
             "prompt_version": str(meta.get("prompt_version", self._prompt_version)),
         }

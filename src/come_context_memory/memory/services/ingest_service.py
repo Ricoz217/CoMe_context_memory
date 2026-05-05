@@ -22,6 +22,7 @@ class IngestService:
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
         chunk_overlap_chars: int | None = None,
+        dedup_in_bucket: bool = True,
     ) -> AddResult:
         eng = self.runtime.engine
         path = Path(file_path)
@@ -41,6 +42,7 @@ class IngestService:
                 create_new_bucket=create_new_bucket,
                 chunk_max_chars=chunk_max_chars,
                 chunk_overlap_chars=chunk_overlap_chars,
+                dedup_in_bucket=dedup_in_bucket,
             )
         if kind == "image":
             extracted = await eng.image_extractor.extract(path, query=query_hint)
@@ -56,6 +58,7 @@ class IngestService:
                 create_new_bucket=create_new_bucket,
                 chunk_max_chars=chunk_max_chars,
                 chunk_overlap_chars=chunk_overlap_chars,
+                dedup_in_bucket=dedup_in_bucket,
             )
         eng.storage.record_file_import_reject()
         suffix = path.suffix or "(no suffix)"

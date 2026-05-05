@@ -6,6 +6,7 @@ import hashlib
 import random
 import shutil
 import yaml
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -65,6 +66,35 @@ class _UnconfiguredStorageProxy:
         )
 
 
+class BucketLockManager:
+    def __init__(self) -> None:
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._guard = asyncio.Lock()
+
+    async def _get_lock(self, bucket_id: str) -> asyncio.Lock:
+        token = str(bucket_id or "").strip() or "__empty_bucket__"
+        async with self._guard:
+            lock = self._locks.get(token)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._locks[token] = lock
+            return lock
+
+    @asynccontextmanager
+    async def acquire_many(self, bucket_ids: list[str] | tuple[str, ...] | set[str]):
+        ordered = sorted({str(x or "").strip() for x in bucket_ids if str(x or "").strip()})
+        locks: list[asyncio.Lock] = []
+        for bucket_id in ordered:
+            locks.append(await self._get_lock(bucket_id))
+        for lock in locks:
+            await lock.acquire()
+        try:
+            yield
+        finally:
+            for lock in reversed(locks):
+                lock.release()
+
+
 TOOL_PRESET_KEYS: tuple[str, ...] = (
     "clean",
     "ingest",
@@ -102,6 +132,7 @@ class ContextMemoryConfig:
     init_config: bool = True
     evidence_versions: int = 5
     auto_manage: bool = True
+    max_bucket_depth: int = 3
     max_context_window: int = 200_000
     max_memory_bytes: int = 1_000_000_000
     auto_compress_trigger_ratio: float = 0.70
@@ -118,6 +149,12 @@ class ContextMemoryConfig:
     gc_revision_retention_days: int = 14
     gc_gray_key_retention_days: int = 45
     gc_archived_bucket_retention_days: int = 45
+    query_mode_default: str = "auto"
+    global_recall_top_n: int = 120
+    global_recall_top_m: int = 8
+    global_recall_depth_limit: int = 8
+    global_recall_time_budget_ms: int = 80
+    global_recall_boost_weight: float = 0.20
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ContextMemoryConfig":
@@ -134,6 +171,7 @@ class ContextMemoryConfig:
             init_config=bool(data.get("init_config", True)),
             evidence_versions=int(data.get("evidence_versions", 5)),
             auto_manage=bool(data.get("auto_manage", True)),
+            max_bucket_depth=int(data.get("max_bucket_depth", 3)),
             max_context_window=int(data.get("max_context_window", 200_000)),
             max_memory_bytes=int(data.get("max_memory_bytes", 1_000_000_000)),
             auto_compress_trigger_ratio=float(data.get("auto_compress_trigger_ratio", 0.70)),
@@ -150,6 +188,12 @@ class ContextMemoryConfig:
             gc_revision_retention_days=int(data.get("gc_revision_retention_days", 14)),
             gc_gray_key_retention_days=int(data.get("gc_gray_key_retention_days", 45)),
             gc_archived_bucket_retention_days=int(data.get("gc_archived_bucket_retention_days", 45)),
+            query_mode_default=str(data.get("query_mode_default", "auto")),
+            global_recall_top_n=int(data.get("global_recall_top_n", 120)),
+            global_recall_top_m=int(data.get("global_recall_top_m", 8)),
+            global_recall_depth_limit=int(data.get("global_recall_depth_limit", 8)),
+            global_recall_time_budget_ms=int(data.get("global_recall_time_budget_ms", 80)),
+            global_recall_boost_weight=float(data.get("global_recall_boost_weight", 0.20)),
         )
 
 
@@ -198,13 +242,29 @@ class BucketHandle:
             chunk_overlap_chars=chunk_overlap_chars,
         )
 
-    async def query(self, query_text: str, *, top_k: int = 5, use_cache: bool = True) -> QueryResult:
+    async def query(
+        self,
+        query_text: str,
+        *,
+        top_k: int = 5,
+        use_cache: bool = True,
+        mode: str = "auto",
+        global_recall_top_n: int | None = None,
+        global_recall_top_m: int | None = None,
+        global_recall_depth_limit: int | None = None,
+        global_recall_time_budget_ms: int | None = None,
+    ) -> QueryResult:
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.query(
             query_text,
             top_k=top_k,
             use_cache=use_cache,
             bucket_id=bucket_id,
+            mode=mode,
+            global_recall_top_n=global_recall_top_n,
+            global_recall_top_m=global_recall_top_m,
+            global_recall_depth_limit=global_recall_depth_limit,
+            global_recall_time_budget_ms=global_recall_time_budget_ms,
         )
 
     async def force_compress(self, *, reason: str = "manual") -> CompressResult:
@@ -274,6 +334,7 @@ class BucketHandle:
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
         chunk_overlap_chars: int | None = None,
+        dedup_in_bucket: bool = True,
     ) -> AddResult:
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
@@ -285,7 +346,37 @@ class BucketHandle:
             force_split=force_split,
             create_new_bucket=create_new_bucket,
             chunk_max_chars=chunk_max_chars,
-            chunk_overlap_chars=chunk_overlap_chars
+            chunk_overlap_chars=chunk_overlap_chars,
+            dedup_in_bucket=dedup_in_bucket,
+        )
+
+    async def add_memory_from_dir(
+        self,
+        dir_path: str,
+        *,
+        bucket_id: str | None = None,
+        auto_create_sub_buckets: bool = False,
+        query_hint: str = "",
+        force_split: bool = True,
+        create_new_bucket: bool = False,
+        chunk_max_chars: int | None = None,
+        chunk_overlap_chars: int | None = None,
+        dedup_in_bucket: bool = True,
+        collect_token_usage: bool = False,
+    ) -> dict[str, Any]:
+        resolved_current = await self._refresh_bucket_id()
+        bucket_id = bucket_id or resolved_current
+        return await self._engine.add_memory_from_dir(
+            dir_path,
+            bucket_id=bucket_id,
+            auto_create_sub_buckets=auto_create_sub_buckets,
+            query_hint=query_hint,
+            force_split=force_split,
+            create_new_bucket=create_new_bucket,
+            chunk_max_chars=chunk_max_chars,
+            chunk_overlap_chars=chunk_overlap_chars,
+            dedup_in_bucket=dedup_in_bucket,
+            collect_token_usage=collect_token_usage,
         )
 
     async def get_memory(
@@ -467,6 +558,7 @@ class ContextMemoryEngineV3:
         init_config: bool = True,
         evidence_versions: int = 5,
         auto_manage: bool = True,
+        max_bucket_depth: int = 3,
         max_context_window: int = 256_000,
         max_memory_bytes: int = 1_000_000_000,
         auto_compress_trigger_ratio: float = 0.70,
@@ -483,6 +575,12 @@ class ContextMemoryEngineV3:
         gc_revision_retention_days: int = 14,
         gc_gray_key_retention_days: int = 45,
         gc_archived_bucket_retention_days: int = 45,
+        query_mode_default: str = "auto",
+        global_recall_top_n: int = 120,
+        global_recall_top_m: int = 8,
+        global_recall_depth_limit: int = 8,
+        global_recall_time_budget_ms: int = 80,
+        global_recall_boost_weight: float = 0.20,
     ) -> None:
         cfg_obj: ContextMemoryConfig | None = None
         if isinstance(config, ContextMemoryConfig):
@@ -500,6 +598,7 @@ class ContextMemoryEngineV3:
             init_config = cfg_obj.init_config
             evidence_versions = cfg_obj.evidence_versions
             auto_manage = cfg_obj.auto_manage
+            max_bucket_depth = cfg_obj.max_bucket_depth
             max_context_window = cfg_obj.max_context_window
             max_memory_bytes = cfg_obj.max_memory_bytes
             auto_compress_trigger_ratio = cfg_obj.auto_compress_trigger_ratio
@@ -516,6 +615,12 @@ class ContextMemoryEngineV3:
             gc_revision_retention_days = cfg_obj.gc_revision_retention_days
             gc_gray_key_retention_days = cfg_obj.gc_gray_key_retention_days
             gc_archived_bucket_retention_days = cfg_obj.gc_archived_bucket_retention_days
+            query_mode_default = cfg_obj.query_mode_default
+            global_recall_top_n = cfg_obj.global_recall_top_n
+            global_recall_top_m = cfg_obj.global_recall_top_m
+            global_recall_depth_limit = cfg_obj.global_recall_depth_limit
+            global_recall_time_budget_ms = cfg_obj.global_recall_time_budget_ms
+            global_recall_boost_weight = cfg_obj.global_recall_boost_weight
             tool_presets = dict(cfg_obj.tool_presets)
 
         normalized_tool_presets = _normalize_tool_presets(tool_presets)
@@ -551,12 +656,16 @@ class ContextMemoryEngineV3:
             llm_preset=self.image_llm_preset,
             init_config=init_config,
         )
-        self._lock = asyncio.Lock()
+        self._global_meta_lock = asyncio.Lock()
+        self._query_side_effect_lock = asyncio.Lock()
+        self._bucket_lock_manager = BucketLockManager()
+        # Keep legacy name for backward compatibility with existing internal code paths.
+        self._lock = self._global_meta_lock
         self._query_side_effect_queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue(maxsize=20_000)
         self._query_side_effect_worker: asyncio.Task | None = None
 
         self._negative_delete_threshold = 0.10
-        self._max_depth = 3
+        self._max_depth = max(1, int(max_bucket_depth))
         self._max_memory_chars = 100_000
         self._default_chunk_max_chars = 4000
         self._default_chunk_overlap_chars = 200
@@ -580,6 +689,12 @@ class ContextMemoryEngineV3:
         self._gc_revision_retention_days = max(1, int(gc_revision_retention_days))
         self._gc_gray_key_retention_days = max(1, int(gc_gray_key_retention_days))
         self._gc_archived_bucket_retention_days = max(1, int(gc_archived_bucket_retention_days))
+        self._query_mode_default = str(query_mode_default or "auto").strip().lower() or "auto"
+        self._global_recall_top_n = max(10, int(global_recall_top_n))
+        self._global_recall_top_m = max(1, int(global_recall_top_m))
+        self._global_recall_depth_limit = max(1, int(global_recall_depth_limit))
+        self._global_recall_time_budget_ms = max(10, int(global_recall_time_budget_ms))
+        self._global_recall_boost_weight = max(0.0, min(1.0, float(global_recall_boost_weight)))
         self._runtime = ServiceRuntime(self)
         self._bucket_handle_cls = BucketHandle
         self._bucket_topology_service = BucketTopologyService(self._runtime)
@@ -633,6 +748,7 @@ class ContextMemoryEngineV3:
         self.image_extractor.init_config = bool(cfg_obj.init_config)
 
         self.auto_manage = bool(cfg_obj.auto_manage)
+        self._max_depth = max(1, int(cfg_obj.max_bucket_depth))
         self.max_context_window = max(100_000, int(cfg_obj.max_context_window))
         self.memory_manager.max_bytes = max(128 * 1024 * 1024, int(cfg_obj.max_memory_bytes))
         self._auto_compress_trigger_ratio = max(0.0, min(float(cfg_obj.auto_compress_trigger_ratio), 0.70))
@@ -654,6 +770,12 @@ class ContextMemoryEngineV3:
         self._gc_revision_retention_days = max(1, int(cfg_obj.gc_revision_retention_days))
         self._gc_gray_key_retention_days = max(1, int(cfg_obj.gc_gray_key_retention_days))
         self._gc_archived_bucket_retention_days = max(1, int(cfg_obj.gc_archived_bucket_retention_days))
+        self._query_mode_default = str(cfg_obj.query_mode_default or "auto").strip().lower() or "auto"
+        self._global_recall_top_n = max(10, int(cfg_obj.global_recall_top_n))
+        self._global_recall_top_m = max(1, int(cfg_obj.global_recall_top_m))
+        self._global_recall_depth_limit = max(1, int(cfg_obj.global_recall_depth_limit))
+        self._global_recall_time_budget_ms = max(10, int(cfg_obj.global_recall_time_budget_ms))
+        self._global_recall_boost_weight = max(0.0, min(1.0, float(cfg_obj.global_recall_boost_weight)))
 
     def root_bucket_id(self) -> str:
         return self.storage.get_root_bucket_id()
@@ -699,6 +821,27 @@ class ContextMemoryEngineV3:
             visited.add(current)
         return current, lineage
 
+    def _resolve_bucket_id_soft(self, bucket_id: str | None) -> str:
+        raw = str(bucket_id or "").strip()
+        if not raw:
+            return raw
+        try:
+            return self._resolve_bucket_id(raw)
+        except Exception:
+            return raw
+
+    @asynccontextmanager
+    async def _bucket_write_lock(self, bucket_id: str | None):
+        resolved = self._resolve_bucket_id_soft(bucket_id) or self.active_bucket_id()
+        async with self._bucket_lock_manager.acquire_many([resolved]):
+            yield resolved
+
+    @asynccontextmanager
+    async def _multi_bucket_write_lock(self, bucket_ids: list[str] | tuple[str, ...] | set[str]):
+        resolved = [self._resolve_bucket_id_soft(x) for x in bucket_ids]
+        async with self._bucket_lock_manager.acquire_many(resolved):
+            yield resolved
+
     async def resolve_bucket_handle_id(self, bucket_id: str) -> str:
         return await self._bucket_topology_service.resolve_bucket_handle_id(bucket_id)
 
@@ -709,7 +852,7 @@ class ContextMemoryEngineV3:
         Useful when caller stores historical bucket ids and wants the current id
         after optimize/successor redirect.
         """
-        async with self._lock:
+        async with self._global_meta_lock:
             return self._resolve_bucket_id(bucket_id)
 
     def get_bucket(self, bucket_id: str) -> BucketHandle:
@@ -802,7 +945,7 @@ class ContextMemoryEngineV3:
         while True:
             op, payload = await self._query_side_effect_queue.get()
             try:
-                async with self._lock:
+                async with self._query_side_effect_lock:
                     try:
                         if op == "set_query_cache":
                             bid = str(payload.get("bucket_id", "")).strip() or self.active_bucket_id()
@@ -1094,24 +1237,45 @@ class ContextMemoryEngineV3:
     ) -> None:
         if payload is None:
             payload = {}
-        event = {
-            "event_type": event_type,
-            "bucket_id": bucket_id,
-            "key": record.key,
-            "revision_id": record.revision_id,
-            "kind": record.kind,
-            "title": record.title,
-            "summary": record.summary,
-            "content": record.content,
-            "weight": record.weight,
-            "gray": record.gray,
-            "relations": record.relations,
-            "evidence_ref": record.evidence_ref,
-            "expires_at": record.expires_at,
-            "created_at": record.created_at,
-            "child_bucket_id": record.child_bucket_id,
-            "payload": payload,
-        }
+        if str(event_type).upper() == "GRAY_SET":
+            min_payload: dict[str, Any] = {}
+            reason = payload.get("reason")
+            from_revision = payload.get("from_revision")
+            if reason is not None:
+                min_payload["reason"] = reason
+            if from_revision is not None:
+                min_payload["from_revision"] = from_revision
+            payload = min_payload
+            event = {
+                "event_type": event_type,
+                "bucket_id": bucket_id,
+                "key": record.key,
+                "revision_id": record.revision_id,
+                "kind": record.kind,
+                "event": record.event,
+                "gray": record.gray,
+                "created_at": record.created_at,
+                "payload": payload,
+            }
+        else:
+            event = {
+                "event_type": event_type,
+                "bucket_id": bucket_id,
+                "key": record.key,
+                "revision_id": record.revision_id,
+                "kind": record.kind,
+                "title": record.title,
+                "summary": record.summary,
+                "content": record.content,
+                "weight": record.weight,
+                "gray": record.gray,
+                "relations": record.relations,
+                "evidence_ref": record.evidence_ref,
+                "expires_at": record.expires_at,
+                "created_at": record.created_at,
+                "child_bucket_id": record.child_bucket_id,
+                "payload": payload,
+            }
         alias_event = self.build_llm_view(bucket_id, event)
         self.assert_alias_only_payload(bucket_id, alias_event)
         self.storage.append_bucket_event(bucket_id, alias_event)
@@ -1123,6 +1287,36 @@ class ContextMemoryEngineV3:
             payload=payload,
         )
         self._invalidate_bucket_context_cache(bucket_id)
+
+    def _has_duplicate_memory_in_bucket(self, bucket_id: str, raw_text: str) -> bool:
+        target = str(raw_text or "")
+        if not target:
+            return False
+        for rec in self.storage.list_bucket_records(bucket_id, include_gray=False):
+            if rec.kind != BUCKET_KIND_MEMORY:
+                continue
+            if str(rec.content or "") == target:
+                return True
+        return False
+
+    def _filter_duplicate_chunks_in_bucket(self, bucket_id: str, chunks: list[str]) -> list[str]:
+        if not chunks:
+            return []
+        existing_contents: set[str] = set()
+        for rec in self.storage.list_bucket_records(bucket_id, include_gray=False):
+            if rec.kind != BUCKET_KIND_MEMORY:
+                continue
+            existing_contents.add(str(rec.content or ""))
+        out: list[str] = []
+        for chunk in chunks:
+            token = str(chunk or "")
+            if not token:
+                continue
+            if token in existing_contents:
+                continue
+            existing_contents.add(token)
+            out.append(token)
+        return out
 
     def _build_record(
         self,
@@ -1256,9 +1450,9 @@ class ContextMemoryEngineV3:
         parent = self.storage.get_bucket_info(parent_id)
         if parent is None:
             raise ValueError(f"bucket not found: {parent_id}")
-        # Keep explicit failure for callers: root included, max depth is 3.
+        # Keep explicit failure for callers: root included, max depth is configurable.
         if parent.level >= self._max_depth:
-            raise ValueError("bucket level exceeds limit: max depth is 3 (root included)")
+            raise ValueError(f"bucket level exceeds limit: max depth is {self._max_depth} (root included)")
 
         node_key = self.storage.generate_key()
         summary_text = summary.strip()
@@ -1319,44 +1513,45 @@ class ContextMemoryEngineV3:
           instead of raising duplicate-key errors.
 
         Exception semantics:
-        - If bucket depth would exceed the max limit (root included, max depth = 3),
+        - If bucket depth would exceed the max limit (root included, max depth = configured limit),
           this method propagates ValueError from internal create path.
         """
-        async with self._lock:
-            if not self.bucket_mapping:
-                self._load_bucket_mapping()
+        async with self._bucket_write_lock(parent_bucket_id) as resolved_parent:
+            async with self._global_meta_lock:
+                if not self.bucket_mapping:
+                    self._load_bucket_mapping()
 
-            exist_bucket_id = self.bucket_mapping.get(title, "")
-            if exist_bucket_id:
-                try:
-                    resolved_existing = self._resolve_bucket_id(exist_bucket_id)
-                except ValueError:
-                    resolved_existing = ""
-                if resolved_existing:
-                    if self.bucket_mapping.get(title) != resolved_existing:
-                        self.bucket_mapping[title] = resolved_existing
-                        if self.base_dir is not None:
-                            atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
-                    await self._run_memory_gc()
-                    return BucketHandle(self, resolved_existing)
-                self.bucket_mapping.pop(title, None)
+                exist_bucket_id = self.bucket_mapping.get(title, "")
+                if exist_bucket_id:
+                    try:
+                        resolved_existing = self._resolve_bucket_id(exist_bucket_id)
+                    except ValueError:
+                        resolved_existing = ""
+                    if resolved_existing:
+                        if self.bucket_mapping.get(title) != resolved_existing:
+                            self.bucket_mapping[title] = resolved_existing
+                            if self.base_dir is not None:
+                                atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
+                        await self._run_memory_gc()
+                        return BucketHandle(self, resolved_existing)
+                    self.bucket_mapping.pop(title, None)
+                    if self.base_dir is not None:
+                        atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
+
+                # Create bucket under lock to keep setdefault semantics under concurrency.
+                child = self._create_bucket_unlocked(
+                    resolved_parent,
+                    title=title,
+                    summary=summary,
+                    content=content,
+                    summary_locked=summary_locked,
+                )
+                self.bucket_mapping[title] = child.bucket_id
                 if self.base_dir is not None:
                     atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
 
-            # Create bucket under lock to keep setdefault semantics under concurrency.
-            child = self._create_bucket_unlocked(
-                parent_bucket_id,
-                title=title,
-                summary=summary,
-                content=content,
-                summary_locked=summary_locked,
-            )
-            self.bucket_mapping[title] = child.bucket_id
-            if self.base_dir is not None:
-                atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
-
-            await self._run_memory_gc()
-            return BucketHandle(self, child.bucket_id)
+                await self._run_memory_gc()
+                return BucketHandle(self, child.bucket_id)
 
     async def set_bucket(
             self,
@@ -1385,39 +1580,17 @@ class ContextMemoryEngineV3:
         summary_locked: bool = False,
     ) -> BucketInfo:
         """杩欎釜鎺ュ彛涓嶄細琚玹itle褰卞搷锛屽嵆浣縯itle鐩稿悓"""
-        async with self._lock:
-            # if not self.bucket_mapping:
-            #     self._load_bucket_mapping()
-            #
-            # if title in self.bucket_mapping:
-            #     # 浜屾纭妗舵槸鍚︾湡瀹炲瓨鍦?            #     bucket_id = self.bucket_mapping[title]
-            #     try:
-            #         resolved_existing = self._resolve_bucket_id(bucket_id)
-            #     except ValueError:
-            #         resolved_existing = ""
-            #     if not resolved_existing:
-            #         self.bucket_mapping.pop(title, None)
-            #
-            #     else:
-            #         if self.bucket_mapping.get(title) != resolved_existing:
-            #             self.bucket_mapping[title] = resolved_existing
-            #             if self.base_dir is not None:
-            #                 atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
-            #         raise KeyError(f"瀛樺湪鐩稿悓鏍囬鐨勬《 [{title}]")
-
-            child = self._create_bucket_unlocked(
-                parent_bucket_id,
-                title=title,
-                summary=summary,
-                content=content,
-                summary_locked=summary_locked,
-            )
-            # self.bucket_mapping[title] = child.bucket_id
-            # if self.base_dir is not None:
-            #     atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
-
-            await self._run_memory_gc()
-            return child
+        async with self._bucket_write_lock(parent_bucket_id) as resolved_parent:
+            async with self._global_meta_lock:
+                child = self._create_bucket_unlocked(
+                    resolved_parent,
+                    title=title,
+                    summary=summary,
+                    content=content,
+                    summary_locked=summary_locked,
+                )
+                await self._run_memory_gc()
+                return child
 
     async def create_child_bucket(
         self,
@@ -1689,8 +1862,8 @@ class ContextMemoryEngineV3:
         return successor.bucket_id
 
     async def refresh_bucket_summary(self, bucket_id: str, *, force: bool = False) -> dict[str, Any]:
-        async with self._lock:
-            return await self._bucket_summary_service.refresh_bucket_summary(bucket_id, force=force)
+        async with self._bucket_write_lock(bucket_id) as resolved:
+            return await self._bucket_summary_service.refresh_bucket_summary(resolved, force=force)
 
     async def _refresh_bucket_summary_unlocked(
         self,
@@ -1842,11 +2015,11 @@ class ContextMemoryEngineV3:
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
         chunk_overlap_chars: int | None = None,
+        dedup_in_bucket: bool = False,
     ) -> AddResult:
         self._begin_alias_session()
         try:
-            async with self._lock:
-                bucket = self._resolve_bucket_id(bucket_id)
+            async with self._bucket_write_lock(bucket_id) as bucket:
                 memory_count_before = self._bucket_memory_count(bucket)
                 text = str(raw_text or "")
                 effective_force_split = bool(force_split)
@@ -1877,6 +2050,7 @@ class ContextMemoryEngineV3:
                         chunk_overlap_chars=overlap_chars,
                         apply_clean_gate=False,
                         split_reason=split_reason,
+                        dedup_in_bucket=dedup_in_bucket,
                     )
     
                 memory_key = key.strip() if isinstance(key, str) and key.strip() else self.storage.generate_key()
@@ -1898,6 +2072,9 @@ class ContextMemoryEngineV3:
                     self.storage.record_ingest_blocked_by_clean()
                     reason = str(clean_result.get("reject_reason", "")).strip() or "clean rejected input"
                     return AddResult(success=False, key=memory_key, message=f"memory rejected: {reason}")
+
+                if dedup_in_bucket and self._has_duplicate_memory_in_bucket(bucket, text):
+                    return AddResult(success=False, key=memory_key, message="duplicate_in_bucket")
     
                 clean_type = str(clean_result.get("input_type", "")).strip().lower()
                 preserve_literal = bool(clean_result.get("preserve_literal", False)) or clean_type == "source_code"
@@ -1957,6 +2134,7 @@ class ContextMemoryEngineV3:
         chunk_overlap_chars: int,
         apply_clean_gate: bool,
         split_reason: str,
+        dedup_in_bucket: bool,
     ) -> AddResult:
         info = self.storage.get_bucket_info(target_bucket_id)
         if info is None:
@@ -2016,6 +2194,12 @@ class ContextMemoryEngineV3:
         chunk_texts = [str(x).strip() for x in chunks if str(x).strip()]
         if not chunk_texts:
             return AddResult(success=False, message="split produced empty chunks")
+
+        if dedup_in_bucket:
+            bucket_for_dedup = self._resolve_bucket_id_soft(target_bucket_id)
+            chunk_texts = self._filter_duplicate_chunks_in_bucket(bucket_for_dedup, chunk_texts)
+            if not chunk_texts:
+                return AddResult(success=False, message="duplicate_in_bucket")
 
         chunk_total = len(chunk_texts)
         chunk_keys: list[str] = []
@@ -2609,7 +2793,7 @@ class ContextMemoryEngineV3:
     async def resume_pending_jobs(self) -> dict[str, Any]:
         self._begin_alias_session()
         try:
-            async with self._lock:
+            async with self._global_meta_lock:
                 return await self._split_ingest_job_service.resume_pending_jobs()
         finally:
             self._end_alias_session(flush=True)
@@ -2625,6 +2809,7 @@ class ContextMemoryEngineV3:
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
         chunk_overlap_chars: int | None = None,
+        dedup_in_bucket: bool = True,
     ) -> AddResult:
         return await self._ingest_service.add_memory_from_file(
             file_path,
@@ -2635,7 +2820,166 @@ class ContextMemoryEngineV3:
             create_new_bucket=create_new_bucket,
             chunk_max_chars=chunk_max_chars,
             chunk_overlap_chars=chunk_overlap_chars,
+            dedup_in_bucket=dedup_in_bucket,
         )
+
+    async def add_memory_from_dir(
+        self,
+        dir_path: str,
+        *,
+        bucket_id: str | None = None,
+        auto_create_sub_buckets: bool = False,
+        query_hint: str = "",
+        force_split: bool = True,
+        create_new_bucket: bool = False,
+        chunk_max_chars: int | None = None,
+        chunk_overlap_chars: int | None = None,
+        dedup_in_bucket: bool = True,
+        collect_token_usage: bool = False,
+    ) -> dict[str, Any]:
+        root_dir = Path(dir_path).expanduser()
+        if not root_dir.exists() or not root_dir.is_dir():
+            return {
+                "success": False,
+                "message": f"directory not found: {dir_path}",
+                "success_count": 0,
+                "fail_count": 0,
+                "skip_duplicate_count": 0,
+            }
+
+        target_bucket_id = self._resolve_bucket_id(bucket_id)
+        root_info = self.storage.get_bucket_info(target_bucket_id)
+        if root_info is None:
+            return {
+                "success": False,
+                "message": f"bucket not found: {target_bucket_id}",
+                "success_count": 0,
+                "fail_count": 0,
+                "skip_duplicate_count": 0,
+            }
+
+        files = sorted([p for p in root_dir.rglob("*") if p.is_file()])
+        if not files:
+            return {
+                "success": True,
+                "message": "empty directory",
+                "success_count": 0,
+                "fail_count": 0,
+                "skip_duplicate_count": 0,
+                "bucket_id": target_bucket_id,
+                "processed_files": 0,
+            }
+
+        if auto_create_sub_buckets:
+            max_rel_depth = 0
+            for file in files:
+                rel_parent = file.parent.relative_to(root_dir)
+                depth = 0 if str(rel_parent) in {".", ""} else len(rel_parent.parts)
+                if depth > max_rel_depth:
+                    max_rel_depth = depth
+            if int(root_info.level) + int(max_rel_depth) > int(self._max_depth):
+                return {
+                    "success": False,
+                    "message": (
+                        f"max bucket depth exceeded: root_level={root_info.level}, "
+                        f"required={root_info.level + max_rel_depth}, limit={self._max_depth}"
+                    ),
+                    "success_count": 0,
+                    "fail_count": 0,
+                    "skip_duplicate_count": 0,
+                }
+
+        llm_before = self.storage.load_meta() if collect_token_usage else {}
+        usage_before = {
+            "llm_calls_total": int(llm_before.get("llm_calls_total", 0)),
+            "llm_input_tokens_total": int(llm_before.get("llm_input_tokens_total", 0)),
+            "llm_output_tokens_total": int(llm_before.get("llm_output_tokens_total", 0)),
+            "llm_cached_input_tokens_total": int(llm_before.get("llm_cached_input_tokens_total", 0)),
+        }
+
+        success_count = 0
+        fail_count = 0
+        skip_duplicate_count = 0
+        details: list[dict[str, str]] = []
+        dir_bucket_cache: dict[tuple[str, ...], str] = {(): target_bucket_id}
+
+        total = len(files)
+        for index, file_path in enumerate(files, start=1):
+            rel_parent = file_path.parent.relative_to(root_dir)
+            rel_parts = () if str(rel_parent) in {".", ""} else tuple(str(x) for x in rel_parent.parts)
+            current_bucket = target_bucket_id
+            if auto_create_sub_buckets and rel_parts:
+                path_acc: list[str] = []
+                for part in rel_parts:
+                    path_acc.append(part)
+                    path_key = tuple(path_acc)
+                    cached_bucket = dir_bucket_cache.get(path_key, "")
+                    if cached_bucket:
+                        current_bucket = cached_bucket
+                        continue
+                    child = await self.set_bucket_with_id(
+                        part,
+                        current_bucket,
+                        summary="",
+                        content="",
+                        summary_locked=False,
+                    )
+                    current_bucket = child.bucket_id
+                    dir_bucket_cache[path_key] = current_bucket
+
+            result = await self.add_memory_from_file(
+                str(file_path),
+                topic=file_path.name,
+                bucket_id=current_bucket,
+                query_hint=query_hint,
+                force_split=force_split,
+                create_new_bucket=create_new_bucket,
+                chunk_max_chars=chunk_max_chars,
+                chunk_overlap_chars=chunk_overlap_chars,
+                dedup_in_bucket=dedup_in_bucket,
+            )
+
+            if result.success:
+                success_count += 1
+                print(f"[add_dir] {index}/{total} OK: {file_path}")
+                continue
+
+            msg = str(result.message or "failed")
+            if msg == "duplicate_in_bucket":
+                skip_duplicate_count += 1
+            else:
+                fail_count += 1
+            details.append({"file": str(file_path), "message": msg})
+            print(f"[add_dir] {index}/{total} FAIL: {file_path} | {msg}")
+
+        optimize_result: dict[str, Any] | None = None
+        if (not auto_create_sub_buckets) and success_count > 0:
+            opt = await self.optimize(bucket_id=target_bucket_id, reason="batch_dir_ingest")
+            optimize_result = opt.to_dict()
+
+        out: dict[str, Any] = {
+            "success": True,
+            "message": "batch completed",
+            "bucket_id": target_bucket_id,
+            "processed_files": total,
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "skip_duplicate_count": skip_duplicate_count,
+            "details": details,
+            "optimize_result": optimize_result,
+        }
+        if collect_token_usage:
+            llm_after = self.storage.load_meta()
+            out["token_usage_delta"] = {
+                "llm_calls_total": int(llm_after.get("llm_calls_total", 0)) - usage_before["llm_calls_total"],
+                "llm_input_tokens_total": int(llm_after.get("llm_input_tokens_total", 0))
+                - usage_before["llm_input_tokens_total"],
+                "llm_output_tokens_total": int(llm_after.get("llm_output_tokens_total", 0))
+                - usage_before["llm_output_tokens_total"],
+                "llm_cached_input_tokens_total": int(llm_after.get("llm_cached_input_tokens_total", 0))
+                - usage_before["llm_cached_input_tokens_total"],
+            }
+        return out
 
     async def get_memory(
         self,
@@ -2658,7 +3002,7 @@ class ContextMemoryEngineV3:
         if key in {".", ".."} or "/" in key or "\\" in key:
             return {"success": False, "memory_id": key, "path": "", "message": "invalid memory id"}
 
-        async with self._lock:
+        async with self._global_meta_lock:
             # Explicitly reject bucket ids; this API only exports memory shards.
             if self.storage.get_bucket_info(key) is not None:
                 return {"success": False, "memory_id": key, "path": "", "message": "bucket id is not allowed"}
@@ -2768,7 +3112,10 @@ class ContextMemoryEngineV3:
     ) -> UpdateResult:
         self._begin_alias_session()
         try:
-            async with self._lock:
+            current0 = self.storage.get_record(key)
+            if current0 is None:
+                return UpdateResult(success=False, key=key, message="memory key not found")
+            async with self._bucket_write_lock(current0.bucket_id):
                 current = self.storage.get_record(key)
                 if current is None:
                     return UpdateResult(success=False, key=key, message="memory key not found")
@@ -2851,7 +3198,10 @@ class ContextMemoryEngineV3:
             self._end_alias_session(flush=True)
 
     async def set_gray(self, key: str, *, gray: bool, reason: str = "manual") -> UpdateResult:
-        async with self._lock:
+        current0 = self.storage.get_record(key)
+        if current0 is None:
+            return UpdateResult(success=False, key=key, message="memory key not found")
+        async with self._bucket_write_lock(current0.bucket_id):
             current = self.storage.get_record(key)
             if current is None:
                 return UpdateResult(success=False, key=key, message="memory key not found")
@@ -2983,6 +3333,11 @@ class ContextMemoryEngineV3:
         use_cache: bool = True,
         bucket_id: str | None = None,
         max_depth: int | None = None,
+        mode: str = "auto",
+        global_recall_top_n: int | None = None,
+        global_recall_top_m: int | None = None,
+        global_recall_depth_limit: int | None = None,
+        global_recall_time_budget_ms: int | None = None,
     ) -> QueryResult:
         self._ensure_query_side_effect_worker()
         return await self._query_service.run_query(
@@ -2993,6 +3348,11 @@ class ContextMemoryEngineV3:
             use_cache=use_cache,
             bucket_id=bucket_id,
             max_depth=max_depth,
+            mode=mode,
+            global_recall_top_n=global_recall_top_n,
+            global_recall_top_m=global_recall_top_m,
+            global_recall_depth_limit=global_recall_depth_limit,
+            global_recall_time_budget_ms=global_recall_time_budget_ms,
         )
 
     async def _query_bucket_recursive(
@@ -3007,6 +3367,13 @@ class ContextMemoryEngineV3:
         depth: int,
         depth_limit: int,
         visited: set[str],
+        mode: str = "auto",
+        global_recall_top_n: int | None = None,
+        global_recall_top_m: int | None = None,
+        global_recall_depth_limit: int | None = None,
+        global_recall_time_budget_ms: int | None = None,
+        global_record_boost: dict[str, float] | None = None,
+        global_bucket_boost: dict[str, float] | None = None,
     ) -> QueryResult:
         return await self._query_service.query_bucket_recursive(
             bucket_id=bucket_id,
@@ -3018,6 +3385,27 @@ class ContextMemoryEngineV3:
             depth=depth,
             depth_limit=depth_limit,
             visited=visited,
+            mode=mode,
+            global_recall_top_n=max(10, int(global_recall_top_n if global_recall_top_n is not None else self._global_recall_top_n)),
+            global_recall_top_m=max(1, int(global_recall_top_m if global_recall_top_m is not None else self._global_recall_top_m)),
+            global_recall_depth_limit=max(
+                1,
+                int(
+                    global_recall_depth_limit
+                    if global_recall_depth_limit is not None
+                    else self._global_recall_depth_limit
+                ),
+            ),
+            global_recall_time_budget_ms=max(
+                10,
+                int(
+                    global_recall_time_budget_ms
+                    if global_recall_time_budget_ms is not None
+                    else self._global_recall_time_budget_ms
+                ),
+            ),
+            global_record_boost=global_record_boost or {},
+            global_bucket_boost=global_bucket_boost or {},
         )
 
     def _merge_llm_bm25_matches(
@@ -3065,8 +3453,8 @@ class ContextMemoryEngineV3:
     async def force_compress(self, *, reason: str = "manual", bucket_id: str | None = None) -> CompressResult:
         self._begin_alias_session()
         try:
-            async with self._lock:
-                return await self._compress_split_service.force_compress(reason=reason, bucket_id=bucket_id)
+            async with self._bucket_write_lock(bucket_id) as resolved:
+                return await self._compress_split_service.force_compress(reason=reason, bucket_id=resolved)
         finally:
             self._end_alias_session(flush=True)
 
@@ -3327,9 +3715,9 @@ class ContextMemoryEngineV3:
     ) -> dict[str, Any]:
         self._begin_alias_session()
         try:
-            async with self._lock:
+            async with self._bucket_write_lock(bucket_id) as resolved:
                 return await self._compress_split_service.split_bucket(
-                    bucket_id,
+                    resolved,
                     reason=reason,
                     target_groups_min=target_groups_min,
                     target_groups_max=target_groups_max,
@@ -3345,8 +3733,8 @@ class ContextMemoryEngineV3:
     ) -> OptimizeResult:
         self._begin_alias_session()
         try:
-            async with self._lock:
-                return await self._optimize_service.optimize(bucket_id=bucket_id, reason=reason)
+            async with self._bucket_write_lock(bucket_id) as resolved:
+                return await self._optimize_service.optimize(bucket_id=resolved, reason=reason)
         finally:
             self._end_alias_session(flush=True)
 
@@ -3359,13 +3747,16 @@ class ContextMemoryEngineV3:
     ) -> MoveResult:
         self._begin_alias_session()
         try:
-            async with self._lock:
+            current = self.storage.get_record(key)
+            source_bucket_id = current.bucket_id if current is not None else ""
+            target_resolved = self._resolve_bucket_id_soft(target_bucket_id)
+            async with self._multi_bucket_write_lock([source_bucket_id, target_resolved]):
                 return await self._move_item_unlocked(key=key, target_bucket_id=target_bucket_id, reason=reason)
         finally:
             self._end_alias_session(flush=True)
 
     async def gc_storage(self, *, dry_run: bool = True, reason: str = "manual_gc") -> GCResult:
-        async with self._lock:
+        async with self._global_meta_lock:
             return await self._gc_storage_unlocked(dry_run=dry_run, reason=reason)
 
     async def _split_bucket_unlocked(
@@ -4146,7 +4537,7 @@ class ContextMemoryEngineV3:
         return GCResult(success=(len(errors) == 0), dry_run=False, message="gc done", deleted=counts, skipped=skipped, errors=errors)
 
     async def cleanup_expired(self) -> CleanupResult:
-        async with self._lock:
+        async with self._global_meta_lock:
             return await self._maintenance_service.cleanup_expired()
 
     async def _auto_manage_bucket(self, bucket_id: str) -> None:
@@ -4243,7 +4634,7 @@ class ContextMemoryEngineV3:
         return await self._maintenance_service.stats()
 
     async def migrate_storage_paths_to_relative(self) -> dict[str, int]:
-        async with self._lock:
+        async with self._global_meta_lock:
             return self.storage.migrate_paths_to_relative()
 
     async def _run_memory_gc(self) -> None:

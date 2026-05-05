@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+import time
+from collections import deque
 from typing import Any
 
 from ..aliasing import AliasPayloadError, infer_real_key_type, looks_like_alias
@@ -16,6 +19,9 @@ from .runtime import ServiceRuntime
 
 def _clamp_score(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+_LITERAL_HINT_PATTERN = re.compile(r"[`/\\._:#()\[\]{}<>]|[A-Za-z0-9_]+\.[A-Za-z0-9_]+")
 
 
 class QueryService:
@@ -40,11 +46,44 @@ class QueryService:
         use_cache: bool = True,
         bucket_id: str | None = None,
         max_depth: int | None = None,
+        mode: str = "auto",
+        global_recall_top_n: int | None = None,
+        global_recall_top_m: int | None = None,
+        global_recall_depth_limit: int | None = None,
+        global_recall_time_budget_ms: int | None = None,
     ) -> QueryResult:
         eng = self.runtime.engine
         root = eng._resolve_bucket_id(bucket_id)
         visited: set[str] = set()
         depth_limit = max_depth if max_depth is not None else eng._max_depth + 2
+        mode_effective = self._resolve_query_mode(mode, query_text, eng._query_mode_default)
+        recall_top_n = max(10, int(global_recall_top_n if global_recall_top_n is not None else eng._global_recall_top_n))
+        recall_top_m = max(1, int(global_recall_top_m if global_recall_top_m is not None else eng._global_recall_top_m))
+        recall_depth_limit = max(
+            1,
+            int(
+                global_recall_depth_limit
+                if global_recall_depth_limit is not None
+                else eng._global_recall_depth_limit
+            ),
+        )
+        recall_time_budget_ms = max(
+            10,
+            int(
+                global_recall_time_budget_ms
+                if global_recall_time_budget_ms is not None
+                else eng._global_recall_time_budget_ms
+            ),
+        )
+        global_record_boost, global_bucket_boost = self._build_global_recall_boosts(
+            root_bucket_id=root,
+            query_text=query_text,
+            include_gray=include_gray,
+            top_n=recall_top_n,
+            top_m=recall_top_m,
+            depth_limit=recall_depth_limit,
+            time_budget_ms=recall_time_budget_ms,
+        )
         result = await self.query_bucket_recursive(
             bucket_id=root,
             query_text=query_text,
@@ -55,6 +94,13 @@ class QueryService:
             depth=1,
             depth_limit=max(1, int(depth_limit)),
             visited=visited,
+            mode=mode_effective,
+            global_recall_top_n=recall_top_n,
+            global_recall_top_m=recall_top_m,
+            global_recall_depth_limit=recall_depth_limit,
+            global_recall_time_budget_ms=recall_time_budget_ms,
+            global_record_boost=global_record_boost,
+            global_bucket_boost=global_bucket_boost,
         )
         return result
 
@@ -70,6 +116,13 @@ class QueryService:
         depth: int,
         depth_limit: int,
         visited: set[str],
+        mode: str,
+        global_recall_top_n: int,
+        global_recall_top_m: int,
+        global_recall_depth_limit: int,
+        global_recall_time_budget_ms: int,
+        global_record_boost: dict[str, float],
+        global_bucket_boost: dict[str, float],
     ) -> QueryResult:
         eng = self.runtime.engine
         if bucket_id in visited:
@@ -95,6 +148,11 @@ class QueryService:
             include_gray=include_gray,
             bucket_id=bucket_id,
             degraded_mode=False,
+            mode=mode,
+            global_recall_top_n=global_recall_top_n,
+            global_recall_top_m=global_recall_top_m,
+            global_recall_depth_limit=global_recall_depth_limit,
+            global_recall_time_budget_ms=global_recall_time_budget_ms,
         )
         degraded_cache_key = eng.storage.compute_cache_key(
             query_text=query_text,
@@ -102,6 +160,11 @@ class QueryService:
             include_gray=include_gray,
             bucket_id=bucket_id,
             degraded_mode=True,
+            mode=mode,
+            global_recall_top_n=global_recall_top_n,
+            global_recall_top_m=global_recall_top_m,
+            global_recall_depth_limit=global_recall_depth_limit,
+            global_recall_time_budget_ms=global_recall_time_budget_ms,
         )
         if use_cache and not bool(meta.get("dirty", False)):
             hit = eng.storage.get_query_cache(normal_cache_key)
@@ -145,6 +208,15 @@ class QueryService:
         bm25_raw_scores = [score for _, score in bm25_ranked]
         bm25_norm_scores = normalize_scores(bm25_raw_scores)
         bm25_norm_map = {rec.key: bm25_norm_scores[idx] for idx, (rec, _) in enumerate(bm25_ranked)}
+        boosted_norm_map: dict[str, float] = {}
+        for rec, _score in bm25_ranked:
+            boosted_norm_map[rec.key] = self._apply_global_boost(
+                rec=rec,
+                base_score=float(bm25_norm_map.get(rec.key, 0.0)),
+                global_record_boost=global_record_boost,
+                global_bucket_boost=global_bucket_boost,
+                boost_weight=float(getattr(eng, "_global_recall_boost_weight", 0.0)),
+            )
         node_key_to_record_key: dict[str, str] = {}
         for rec in records:
             node_key_to_record_key[rec.key] = rec.key
@@ -186,55 +258,63 @@ class QueryService:
                 alias_miss_build += 1
         if alias_miss_build > 0:
             eng._enqueue_query_side_effect("record_alias_miss_build", {"count": alias_miss_build})
-        map_ver = eng.alias_map_version(bucket_id)
-        query_alias_payload = {
-            "query_text": query_text,
-            "top_k": top_k,
-            "include_gray": include_gray,
-            "key_hints": alias_key_hints,
-            "hint_count": len(alias_key_hints),
-        }
-        eng.assert_alias_only_payload(bucket_id, query_alias_payload)
-        llm_result_alias = await eng.pipeline.query(
-            bucket_context=eng._bucket_context(bucket_id),
-            query_text=query_text,
-            top_k=top_k,
-            include_gray=include_gray,
-            key_hints=alias_key_hints,
-            fallback_candidates=alias_fallback_candidates,
-        )
-        eng._audit_alias_llm_call(
-            tool="query",
-            bucket_id=bucket_id,
-            map_version=map_ver,
-            alias_input=query_alias_payload,
-            alias_output=llm_result_alias,
-        )
-        llm_result, alias_miss_resolve = self._resolve_query_llm_output(
-            eng=eng,
-            bucket_id=bucket_id,
-            llm_result_alias=llm_result_alias,
-            node_key_to_record_key=node_key_to_record_key,
-            record_keys=set(r.key for r in records),
-        )
-        if alias_miss_resolve > 0:
-            eng._enqueue_query_side_effect("record_alias_miss_resolve", {"count": alias_miss_resolve})
+        if mode == "literal":
+            llm_result = {"answer": "", "matches": []}
+            llm_accepted_count = 0
+            degraded = False
+            degraded_reason = ""
+            failure_stage = ""
+        else:
+            map_ver = eng.alias_map_version(bucket_id)
+            query_alias_payload = {
+                "query_text": query_text,
+                "top_k": top_k,
+                "include_gray": include_gray,
+                "key_hints": alias_key_hints,
+                "hint_count": len(alias_key_hints),
+            }
+            eng.assert_alias_only_payload(bucket_id, query_alias_payload)
+            llm_result_alias = await eng.pipeline.query(
+                bucket_context=eng._bucket_context(bucket_id),
+                query_text=query_text,
+                top_k=top_k,
+                include_gray=include_gray,
+                key_hints=alias_key_hints,
+                fallback_candidates=alias_fallback_candidates,
+            )
+            eng._audit_alias_llm_call(
+                tool="query",
+                bucket_id=bucket_id,
+                map_version=map_ver,
+                alias_input=query_alias_payload,
+                alias_output=llm_result_alias,
+            )
+            llm_result, alias_miss_resolve = self._resolve_query_llm_output(
+                eng=eng,
+                bucket_id=bucket_id,
+                llm_result_alias=llm_result_alias,
+                node_key_to_record_key=node_key_to_record_key,
+                record_keys=set(r.key for r in records),
+            )
+            if alias_miss_resolve > 0:
+                eng._enqueue_query_side_effect("record_alias_miss_resolve", {"count": alias_miss_resolve})
 
-        eng._enqueue_query_side_effect("record_llm_usage", {"usage": dict(eng.pipeline.last_usage)})
-        eng._enqueue_query_side_effect("record_llm_diag", {"diag": dict(eng.pipeline.last_diagnostics)})
-        diag = eng.pipeline.last_diagnostics
-        degraded = bool(diag.get("degraded", False))
-        degraded_reason = str(diag.get("degraded_reason", ""))
-        failure_stage = eng._diag_failure_stage(diag)
-        if degraded:
-            eng._enqueue_query_side_effect("record_query_degraded", {})
-        if eng._is_context_overflow_diag(diag):
-            eng._enqueue_query_side_effect("record_overflow_query", {})
+            eng._enqueue_query_side_effect("record_llm_usage", {"usage": dict(eng.pipeline.last_usage)})
+            eng._enqueue_query_side_effect("record_llm_diag", {"diag": dict(eng.pipeline.last_diagnostics)})
+            diag = eng.pipeline.last_diagnostics
+            degraded = bool(diag.get("degraded", False))
+            degraded_reason = str(diag.get("degraded_reason", ""))
+            failure_stage = eng._diag_failure_stage(diag)
+            if degraded:
+                eng._enqueue_query_side_effect("record_query_degraded", {})
+            if eng._is_context_overflow_diag(diag):
+                eng._enqueue_query_side_effect("record_overflow_query", {})
+            llm_accepted_count = 0
         query_matches, llm_accepted_count = self.merge_llm_bm25_matches(
             records=records,
             llm_matches=llm_result.get("matches", []),
             bm25_ranked=bm25_ranked,
-            bm25_norm_map=bm25_norm_map,
+            bm25_norm_map=boosted_norm_map,
             top_k=top_k,
         )
 
@@ -248,6 +328,13 @@ class QueryService:
             depth=depth,
             depth_limit=depth_limit,
             visited=visited,
+            mode=mode,
+            global_recall_top_n=global_recall_top_n,
+            global_recall_top_m=global_recall_top_m,
+            global_recall_depth_limit=global_recall_depth_limit,
+            global_recall_time_budget_ms=global_recall_time_budget_ms,
+            global_record_boost=global_record_boost,
+            global_bucket_boost=global_bucket_boost,
         )
         recall_keys = [m.key for m in final_matches if str(m.key).strip()]
         if recall_keys:
@@ -255,7 +342,9 @@ class QueryService:
 
         top_matches = final_matches[:top_k]
         has_local_supplement = any(str(m.source).lower() == "bm25" for m in top_matches)
-        if degraded:
+        if mode == "literal":
+            result_source = "LOCAL"
+        elif degraded:
             result_source = "LOCAL"
         elif llm_accepted_count >= top_k and not has_local_supplement:
             result_source = "LLM"
@@ -264,7 +353,7 @@ class QueryService:
 
         result = QueryResult(
             success=True,
-            answer=str(llm_result.get("answer", "")) or f"hit {len(final_matches)} memories",
+            answer=str(llm_result.get("answer", "")).strip() or self._build_local_answer(query_text, final_matches),
             matches=top_matches,
             result_source=result_source,
             cache_hit=False,
@@ -410,6 +499,13 @@ class QueryService:
         depth: int,
         depth_limit: int,
         visited: set[str],
+        mode: str,
+        global_recall_top_n: int,
+        global_recall_top_m: int,
+        global_recall_depth_limit: int,
+        global_recall_time_budget_ms: int,
+        global_record_boost: dict[str, float],
+        global_bucket_boost: dict[str, float],
     ) -> tuple[list[QueryMatch], str]:
         eng = self.runtime.engine
         out: list[QueryMatch] = []
@@ -445,6 +541,13 @@ class QueryService:
                     depth=depth + 1,
                     depth_limit=depth_limit,
                     visited=visited,
+                    mode=mode,
+                    global_recall_top_n=global_recall_top_n,
+                    global_recall_top_m=global_recall_top_m,
+                    global_recall_depth_limit=global_recall_depth_limit,
+                    global_recall_time_budget_ms=global_recall_time_budget_ms,
+                    global_record_boost=global_record_boost,
+                    global_bucket_boost=global_bucket_boost,
                 )
                 if child.matches:
                     child_top = child.matches[0]
@@ -493,3 +596,126 @@ class QueryService:
 
         out.sort(key=lambda m: m.score, reverse=True)
         return out, sub_answer
+
+    @staticmethod
+    def _resolve_query_mode(mode: str, query_text: str, default_mode: str) -> str:
+        wanted = str(mode or "").strip().lower()
+        if wanted in {"semantic", "literal", "hybrid"}:
+            return wanted
+        fallback = str(default_mode or "auto").strip().lower()
+        if wanted != "auto" and fallback in {"semantic", "literal", "hybrid"}:
+            return fallback
+        text = str(query_text or "")
+        if len(text) >= 24 and _LITERAL_HINT_PATTERN.search(text):
+            return "literal"
+        if _LITERAL_HINT_PATTERN.search(text):
+            return "literal"
+        return "hybrid"
+
+    def _build_global_recall_boosts(
+        self,
+        *,
+        root_bucket_id: str,
+        query_text: str,
+        include_gray: bool,
+        top_n: int,
+        top_m: int,
+        depth_limit: int,
+        time_budget_ms: int,
+    ) -> tuple[dict[str, float], dict[str, float]]:
+        eng = self.runtime.engine
+        start = time.perf_counter()
+        time_budget_sec = max(0.01, float(time_budget_ms) / 1000.0)
+        visited: set[str] = set()
+        queue: deque[tuple[str, int]] = deque([(root_bucket_id, 1)])
+        scanned: list[str] = []
+        while queue and len(scanned) < max(1, int(top_n)):
+            if time.perf_counter() - start > time_budget_sec:
+                break
+            bucket_id, depth = queue.popleft()
+            if bucket_id in visited:
+                continue
+            visited.add(bucket_id)
+            scanned.append(bucket_id)
+            if depth >= max(1, int(depth_limit)):
+                continue
+            records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
+            for rec in records:
+                if rec.kind != BUCKET_KIND_BUCKET:
+                    continue
+                child = str(rec.child_bucket_id or "").strip()
+                if not child:
+                    continue
+                try:
+                    child = eng._resolve_bucket_id(child)
+                except Exception:
+                    pass
+                if child and child not in visited:
+                    queue.append((child, depth + 1))
+
+        record_boost: dict[str, float] = {}
+        bucket_boost: dict[str, float] = {}
+        for bucket_id in scanned:
+            if time.perf_counter() - start > time_budget_sec:
+                break
+            records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
+            if not records:
+                continue
+            bucket_version = eng.storage.get_bucket_version(bucket_id)
+            bm25_index = eng.bm25_cache.get_or_build(
+                bucket_id=bucket_id,
+                bucket_version=bucket_version,
+                records=records,
+            )
+            ranked = rank_records_with_index(
+                query_text,
+                records,
+                top_k=max(1, int(top_m)),
+                index=bm25_index,
+            )
+            if not ranked:
+                continue
+            norms = normalize_scores([score for _, score in ranked])
+            best = 0.0
+            for idx, (rec, _raw) in enumerate(ranked):
+                score = _clamp_score(float(norms[idx] if idx < len(norms) else 0.0))
+                if score <= 0.0:
+                    continue
+                if score > best:
+                    best = score
+                prev = float(record_boost.get(rec.key, 0.0))
+                if score > prev:
+                    record_boost[rec.key] = score
+            if best > float(bucket_boost.get(bucket_id, 0.0)):
+                bucket_boost[bucket_id] = best
+        return record_boost, bucket_boost
+
+    @staticmethod
+    def _apply_global_boost(
+        *,
+        rec: MemoryRecord,
+        base_score: float,
+        global_record_boost: dict[str, float],
+        global_bucket_boost: dict[str, float],
+        boost_weight: float,
+    ) -> float:
+        base = _clamp_score(base_score)
+        boost = _clamp_score(float(global_record_boost.get(rec.key, 0.0)))
+        if rec.kind == BUCKET_KIND_BUCKET:
+            child = str(rec.child_bucket_id or "").strip()
+            if child:
+                boost = max(boost, _clamp_score(float(global_bucket_boost.get(child, 0.0))))
+        weight = _clamp_score(boost_weight)
+        if weight <= 0.0:
+            return base
+        return _clamp_score((1.0 - weight) * base + weight * boost)
+
+    @staticmethod
+    def _build_local_answer(query_text: str, matches: list[QueryMatch]) -> str:
+        if not matches:
+            return "no strong local match"
+        top = matches[0]
+        summary = str(top.summary or "").strip()
+        if summary:
+            return summary
+        return f"hit {len(matches)} memories for query: {query_text}"
