@@ -329,7 +329,8 @@ class BucketHandle:
         *,
         topic: str = "",
         bucket_id: str | None = None,
-        query_hint: str = "",
+        image_extract_hint: str = "",
+        query_hint: str | None = None,
         force_split: bool = True,
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
@@ -338,10 +339,12 @@ class BucketHandle:
     ) -> AddResult:
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
+        effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
         return await self._engine.add_memory_from_file(
             file_path,
             topic=topic,
             bucket_id=bucket_id,
+            image_extract_hint=effective_image_hint,
             query_hint=query_hint,
             force_split=force_split,
             create_new_bucket=create_new_bucket,
@@ -356,7 +359,8 @@ class BucketHandle:
         *,
         bucket_id: str | None = None,
         auto_create_sub_buckets: bool = False,
-        query_hint: str = "",
+        image_extract_hint: str = "",
+        query_hint: str | None = None,
         force_split: bool = True,
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
@@ -366,11 +370,13 @@ class BucketHandle:
     ) -> dict[str, Any]:
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
+        effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
         return await self._engine.add_memory_from_dir(
             dir_path,
             bucket_id=bucket_id,
             auto_create_sub_buckets=auto_create_sub_buckets,
-            query_hint=query_hint,
+            image_extract_hint=effective_image_hint,
+            # query_hint=query_hint,
             force_split=force_split,
             create_new_bucket=create_new_bucket,
             chunk_max_chars=chunk_max_chars,
@@ -2804,18 +2810,21 @@ class ContextMemoryEngineV3:
         *,
         topic: str = "",
         bucket_id: str | None = None,
-        query_hint: str = "",
+        image_extract_hint: str = "",
+        query_hint: str | None = None,
         force_split: bool = True,
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
         chunk_overlap_chars: int | None = None,
         dedup_in_bucket: bool = True,
     ) -> AddResult:
+        effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
         return await self._ingest_service.add_memory_from_file(
             file_path,
             topic=topic,
             bucket_id=bucket_id,
-            query_hint=query_hint,
+            image_extract_hint=effective_image_hint,
+            # query_hint=query_hint,
             force_split=force_split,
             create_new_bucket=create_new_bucket,
             chunk_max_chars=chunk_max_chars,
@@ -2829,7 +2838,8 @@ class ContextMemoryEngineV3:
         *,
         bucket_id: str | None = None,
         auto_create_sub_buckets: bool = False,
-        query_hint: str = "",
+        image_extract_hint: str = "",
+        # query_hint: str | None = None,
         force_split: bool = True,
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
@@ -2837,6 +2847,8 @@ class ContextMemoryEngineV3:
         dedup_in_bucket: bool = True,
         collect_token_usage: bool = False,
     ) -> dict[str, Any]:
+        # effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
+        effective_image_hint = str(image_extract_hint or "").strip()
         root_dir = Path(dir_path).expanduser()
         if not root_dir.exists() or not root_dir.is_dir():
             return {
@@ -2931,7 +2943,8 @@ class ContextMemoryEngineV3:
                 str(file_path),
                 topic=file_path.name,
                 bucket_id=current_bucket,
-                query_hint=query_hint,
+                image_extract_hint=effective_image_hint,
+                # query_hint=query_hint,
                 force_split=force_split,
                 create_new_bucket=create_new_bucket,
                 chunk_max_chars=chunk_max_chars,
@@ -3437,6 +3450,13 @@ class ContextMemoryEngineV3:
         depth: int,
         depth_limit: int,
         visited: set[str],
+        mode: str = "auto",
+        global_recall_top_n: int | None = None,
+        global_recall_top_m: int | None = None,
+        global_recall_depth_limit: int | None = None,
+        global_recall_time_budget_ms: int | None = None,
+        global_record_boost: dict[str, float] | None = None,
+        global_bucket_boost: dict[str, float] | None = None,
     ) -> tuple[list[QueryMatch], str]:
         return await self._query_service.resolve_bucket_matches(
             query_text=query_text,
@@ -3448,6 +3468,27 @@ class ContextMemoryEngineV3:
             depth=depth,
             depth_limit=depth_limit,
             visited=visited,
+            mode=mode,
+            global_recall_top_n=max(10, int(global_recall_top_n if global_recall_top_n is not None else self._global_recall_top_n)),
+            global_recall_top_m=max(1, int(global_recall_top_m if global_recall_top_m is not None else self._global_recall_top_m)),
+            global_recall_depth_limit=max(
+                1,
+                int(
+                    global_recall_depth_limit
+                    if global_recall_depth_limit is not None
+                    else self._global_recall_depth_limit
+                ),
+            ),
+            global_recall_time_budget_ms=max(
+                10,
+                int(
+                    global_recall_time_budget_ms
+                    if global_recall_time_budget_ms is not None
+                    else self._global_recall_time_budget_ms
+                ),
+            ),
+            global_record_boost=global_record_boost or {},
+            global_bucket_boost=global_bucket_boost or {},
         )
 
     async def force_compress(self, *, reason: str = "manual", bucket_id: str | None = None) -> CompressResult:

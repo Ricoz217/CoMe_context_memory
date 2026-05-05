@@ -35,3 +35,8 @@ python tests\query_concurrency_smoke.py --engine-module come_context_memory.memo
 ## Notes
 - Tool-call components are preserved in `LLM_connect.py`.
 - Lightweight logger and YAML config are used instead of TIYA config/logger.
+
+## API Notes
+- `add_memory_from_file(...)` and `add_memory_from_dir(...)` now use `image_extract_hint` for image OCR/extraction guidance.
+- `query_hint` is still accepted as a backward-compatible alias, but new code should use `image_extract_hint`.
+- For text files, this hint is ignored; it only affects image ingestion (`detect_file_kind == "image"`).

@@ -17,7 +17,8 @@ class IngestService:
         *,
         topic: str = "",
         bucket_id: str | None = None,
-        query_hint: str = "",
+        image_extract_hint: str = "",
+        query_hint: str | None = None,
         force_split: bool = True,
         create_new_bucket: bool = False,
         chunk_max_chars: int | None = None,
@@ -25,6 +26,7 @@ class IngestService:
         dedup_in_bucket: bool = True,
     ) -> AddResult:
         eng = self.runtime.engine
+        effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
         path = Path(file_path)
         if not path.exists() or not path.is_file():
             return AddResult(success=False, message=f"file not found: {file_path}")
@@ -45,7 +47,7 @@ class IngestService:
                 dedup_in_bucket=dedup_in_bucket,
             )
         if kind == "image":
-            extracted = await eng.image_extractor.extract(path, query=query_hint)
+            extracted = await eng.image_extractor.extract(path, query=effective_image_hint)
             if not extracted.strip():
                 eng.storage.record_file_import_reject()
                 return AddResult(success=False, message="image extraction returned empty text")

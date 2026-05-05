@@ -45,6 +45,10 @@ async def main():
     async def delete(hash_id: str):
         print(await memory.delete_memory(hash_id))
 
+    async def add_dir(_dir: str):
+        _dir = Path(_dir.strip('"'))
+        print(await memory.add_memory_from_dir(_dir))
+
     async def _run():
         if cmd in exec_mapping:
             if params:
