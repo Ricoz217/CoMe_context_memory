@@ -32,5 +32,9 @@ Thumbs.db
 cache/
 logs/
 data/
-/scripts/
+/scripts/*
+/scripts/__pycache__/
 /tests_data/
+!/scripts/
+!/scripts/cli_smoke.py
+!/scripts/rpc_smoke.py

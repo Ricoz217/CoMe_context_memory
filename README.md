@@ -32,6 +32,54 @@ $env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
 python tests\query_concurrency_smoke.py --engine-module come_context_memory.memory.engine --concurrency 20 --out docs\query_concurrency_report.json
 ```
 
+### Release Smoke (API + CLI + JSON-RPC)
+```powershell
+$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
+python -m pytest tests\test_release_smoke_three_interfaces.py -q
+```
+
+Real-LLM mode:
+```powershell
+$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
+$env:COME_RELEASE_SMOKE_REAL_LLM='1'
+python -m pytest tests\test_release_smoke_three_interfaces.py -q
+```
+
+Standalone script smoke:
+```powershell
+$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
+python scripts\cli_smoke.py
+python scripts\rpc_smoke.py
+```
+
+Standalone script smoke (real LLM):
+```powershell
+$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
+python scripts\cli_smoke.py --real-llm
+python scripts\rpc_smoke.py --real-llm --port 19013
+```
+
+## Interfaces
+
+### CLI
+```powershell
+$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
+python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\cli_runtime
+```
+
+### JSON-RPC 2.0 Server
+```powershell
+$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
+python -m come_context_memory.rpc_server --host 127.0.0.1 --port 9010 --base-dir D:\Python\CoMe_ContextMemory\data\rpc_runtime
+```
+
+Endpoints:
+- `POST /jsonrpc`
+- `GET /healthz`
+
+Method list:
+- [JSON-RPC Methods](D:/Python/CoMe_ContextMemory/docs/jsonrpc_methods.md)
+
 ## Notes
 - Tool-call components are preserved in `LLM_connect.py`.
 - Lightweight logger and YAML config are used instead of TIYA config/logger.
