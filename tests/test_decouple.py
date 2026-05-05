@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import traceback
-from come_context_memory import get_context_memory, ContextMemoryConfig
+from come_context_memory import get_context_memory_engine, ContextMemoryConfig
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -70,7 +70,7 @@ async def main():
         "add_dir": add_dir
     }
 
-    memory = get_context_memory(config=memory_config)
+    memory = get_context_memory_engine(config=memory_config)
     memory = await memory.set_bucket("TEST")
     while True:
         try:

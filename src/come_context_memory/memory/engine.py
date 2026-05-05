@@ -1130,7 +1130,7 @@ class ContextMemoryEngineV3:
     async def _run_cpu_task(self, fn: Callable[..., TCPU], /, *args: Any, **kwargs: Any) -> TCPU:
         loop = asyncio.get_running_loop()
         call = partial(fn, *args, **kwargs)
-        return await loop.run_in_executor(self._cpu_executor, call)
+        return await loop.run_in_executor(self._cpu_executor, call)  # type: ignore
 
     def shutdown(self, *, wait: bool = False) -> None:
         executor = getattr(self, "_cpu_executor", None)
@@ -4856,7 +4856,7 @@ class ContextMemorySystem:
         return cls._instance
 
 
-def get_context_memory(
+def get_context_memory_engine(
         config: ContextMemoryConfig | dict[str, Any] | None = None,
         base_dir: str | Path | None = None,
         llm_preset: str = "",

@@ -1,5 +1,5 @@
 from .memory import BucketHandle, ContextMemoryConfig, ContextMemoryEngineV3, ContextMemorySystem, LLMPresetConfigError
-from .memory.engine import get_context_memory
+from .memory.engine import get_context_memory_engine
 
 __all__ = [
     "ContextMemoryEngineV3",
@@ -7,5 +7,5 @@ __all__ = [
     "ContextMemoryConfig",
     "BucketHandle",
     "LLMPresetConfigError",
-    "get_context_memory"
+    "get_context_memory_engine"
 ]
