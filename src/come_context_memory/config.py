@@ -105,13 +105,39 @@ DATA_DIR: Path = ROOT_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-_CONFIG_PATH: Path = Path(
-    os.getenv("COME_CONTEXT_MEMORY_CONFIG", str(ROOT_DIR / "config" / "memory.yaml"))
-).expanduser()
+def _resolve_config_path() -> Path:
+    env_cfg = os.getenv("COME_CONTEXT_MEMORY_CONFIG", "").strip()
+    if env_cfg:
+        return Path(env_cfg).expanduser()
+
+    cwd = Path.cwd()
+    preferred = cwd / "config" / "context_memory.yaml"
+    return preferred
+
+
+_CONFIG_PATH: Path = _resolve_config_path()
+
+
+def _ensure_config_file(path: Path) -> None:
+    if path.exists():
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        legacy = path.parent / "memory.yaml"
+        if legacy.exists():
+            path.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
+            return
+        # Auto-generate a user-editable config file.
+        text = yaml.safe_dump(DEFAULTS, allow_unicode=True, sort_keys=False)
+        path.write_text(text, encoding="utf-8")
+    except Exception:
+        # Keep runtime tolerant: fallback to in-memory defaults when write fails.
+        return
 
 
 
 def _load_user_config() -> dict[str, Any]:
+    _ensure_config_file(_CONFIG_PATH)
     if not _CONFIG_PATH.exists():
         return {}
     try:
