@@ -2,7 +2,6 @@ Return JSON only.
 
 Schema:
 {
-  "keep_keys": ["string"],
   "drop_keys": ["string"],
   "merged_summary": "string",
   "reweighted": [{"key":"string","weight":0.0}],

@@ -225,6 +225,9 @@ class AddResult:
     key: str = ""
     revision_id: str = ""
     message: str = ""
+    added_keys: list[str] = field(default_factory=list)
+    split_performed: bool = False
+    split_rebuild_detected: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

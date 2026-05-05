@@ -16,5 +16,6 @@ Hard constraints:
    - has clearly `GRAY_SET` event
    - has new version or update
    - other `memory_key` contains this key content (has superset)
-4. Prefer key-level keep/drop/reweight operations.
-5. Output JSON only.
+4. Prefer key-level drop/reweight operations.
+5. `drop_keys` can be empty. Omitted keys are treated as "keep by default".
+6. Output JSON only.

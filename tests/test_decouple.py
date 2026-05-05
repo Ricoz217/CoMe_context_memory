@@ -66,7 +66,8 @@ async def main():
         "optimize": optimize,
         "export": export,
         "compress": compress,
-        "delete": delete
+        "delete": delete,
+        "add_dir": add_dir
     }
 
     memory = get_context_memory(config=memory_config)

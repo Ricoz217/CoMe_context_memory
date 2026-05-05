@@ -51,7 +51,8 @@ from .multimodal import ImageTextExtractor
 from .rerank import BM25IndexCache, louvain_split_groups
 from .storage import MemoryStorageV3
 
-from come_context_memory.utils import atomic_save_json
+from come_context_memory.LLM_usage import LLMUsage
+from come_context_memory.utils import AutoMapping, atomic_save_json
 
 
 def _clamp_score(value: float) -> float:
@@ -211,6 +212,15 @@ class BucketHandle:
         """Return latest canonical bucket id after following redirect chain."""
         return await self._refresh_bucket_id()
 
+    async def set_active_bucket(self, bucket_id: str | None = None) -> dict[str, Any]:
+        target = str(bucket_id or "").strip()
+        if not target:
+            target = await self._refresh_bucket_id()
+        return await self._engine.set_active_bucket(target)
+
+    async def switch_active_bucket(self, bucket_id: str | None = None) -> dict[str, Any]:
+        return await self.set_active_bucket(bucket_id)
+
     def get_bucket(self, bucket_id: str) -> BucketHandle:
         return self._engine.get_bucket(bucket_id)
 
@@ -336,6 +346,7 @@ class BucketHandle:
         chunk_max_chars: int | None = None,
         chunk_overlap_chars: int | None = None,
         dedup_in_bucket: bool = True,
+        auto_optimize_after_split: bool = True,
     ) -> AddResult:
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
@@ -351,6 +362,7 @@ class BucketHandle:
             chunk_max_chars=chunk_max_chars,
             chunk_overlap_chars=chunk_overlap_chars,
             dedup_in_bucket=dedup_in_bucket,
+            auto_optimize_after_split=auto_optimize_after_split,
         )
 
     async def add_memory_from_dir(
@@ -640,6 +652,8 @@ class ContextMemoryEngineV3:
         self.base_dir: Path | None = None
         self.bucket_mapping: dict[str, str] = {}  # 瀛樺偍浜哄伐鍒涘缓鐨勬《鍚嶅拰瀹為檯id鏄犲皠
         self.storage: MemoryStorageV3 | _UnconfiguredStorageProxy = _UnconfiguredStorageProxy()
+        self._llm_usage_store: LLMUsage | None = None
+        self._image_name_mapping_store: AutoMapping[list[str]] | None = None
         self.alias_codec = AliasCodec(self.storage)
         self._alias_request_seq = 0
         if base_dir is not None:
@@ -653,6 +667,8 @@ class ContextMemoryEngineV3:
             use_mock_llm=use_mock_llm,
             enable_cleaning=enable_cleaning,
             init_config=init_config,
+            usage_store=self._llm_usage_store,
+            image_name_mapping=self._image_name_mapping_store,
         )
         self.auto_manage = auto_manage
         self.max_context_window = max(100_000, int(max_context_window))
@@ -719,6 +735,18 @@ class ContextMemoryEngineV3:
         self.storage = MemoryStorageV3(self.base_dir, evidence_versions=self._evidence_versions)
         self.alias_codec = AliasCodec(self.storage)
         self._last_sealed_link_repair_version = -1
+        runtime_dir = self.base_dir / "runtime"
+        usage_file = runtime_dir / "token_usage" / "usage.json"
+        usage_file.parent.mkdir(parents=True, exist_ok=True)
+        usage_store = LLMUsage(Path())
+        usage_store.data_file = usage_file
+        self._llm_usage_store = usage_store
+        mapping_file = runtime_dir / "llm_connect" / "image_name_mapping.json"
+        mapping_file.parent.mkdir(parents=True, exist_ok=True)
+        self._image_name_mapping_store = AutoMapping(mapping_file, expire_day=14)
+        if hasattr(self, "pipeline"):
+            self.pipeline.usage_store = self._llm_usage_store
+            self.pipeline.image_name_mapping = self._image_name_mapping_store
 
     def apply_config(self, config: ContextMemoryConfig | dict[str, Any]) -> None:
         cfg_obj = config if isinstance(config, ContextMemoryConfig) else ContextMemoryConfig.from_dict(config)
@@ -792,6 +820,21 @@ class ContextMemoryEngineV3:
     @property
     def bucket_id(self):
         return self.active_bucket_id()
+
+    async def set_active_bucket(self, bucket_id: str) -> dict[str, Any]:
+        target = str(bucket_id or "").strip()
+        if not target:
+            return {"success": False, "bucket_id": "", "message": "bucket_id is required"}
+        async with self._global_meta_lock:
+            resolved = self._resolve_bucket_id_soft(target) or target
+            info = self.storage.get_bucket_info(resolved)
+            if info is None:
+                return {"success": False, "bucket_id": resolved, "message": f"bucket not found: {resolved}"}
+            self.storage.set_active_bucket_id(resolved)
+            return {"success": True, "bucket_id": resolved, "message": "active bucket updated"}
+
+    async def switch_active_bucket(self, bucket_id: str) -> dict[str, Any]:
+        return await self.set_active_bucket(bucket_id)
 
     def _sync_bucket_mapping_redirect(self, *, old_ids: set[str], new_id: str) -> None:
         if not old_ids or not new_id:
@@ -1104,6 +1147,8 @@ class ContextMemoryEngineV3:
             max_retries=self.pipeline.max_retries,
             use_mock_llm=self.pipeline.use_mock_llm,
             enable_cleaning=self.pipeline.enable_cleaning,
+            usage_store=self.pipeline.usage_store,
+            image_name_mapping=self.pipeline.image_name_mapping,
             # Config already initialized in main pipeline path.
             init_config=False,
         )
@@ -2123,7 +2168,14 @@ class ContextMemoryEngineV3:
                         )
                 await self._auto_manage_bucket(bucket)
                 await self._run_memory_gc()
-                return AddResult(success=True, key=record.key, revision_id=record.revision_id, message="memory added")
+                return AddResult(
+                    success=True,
+                    key=record.key,
+                    revision_id=record.revision_id,
+                    message="memory added",
+                    added_keys=[record.key],
+                    split_performed=False,
+                )
         finally:
             self._end_alias_session(flush=True)
 
@@ -2559,6 +2611,8 @@ class ContextMemoryEngineV3:
                     f"{fatal_recoverable_error}; committed={len(committed_indices)}/{chunk_total}; "
                     f"current_bucket={current_bucket_id}"
                 ),
+                added_keys=[k for k in chunk_keys if k in committed_keys],
+                split_performed=True,
             )
 
         await self._auto_manage_bucket(current_bucket_id)
@@ -2580,6 +2634,8 @@ class ContextMemoryEngineV3:
                 f"target_bucket={current_bucket_id}, parallel={parallelism}, errors={len(errors)}, "
                 f"pending={len(pending_after)}"
             ),
+            added_keys=[k for k in chunk_keys if k in committed_keys],
+            split_performed=True,
         )
 
     async def _resume_split_job_unlocked(self, job: dict[str, Any]) -> dict[str, Any]:
@@ -2817,6 +2873,7 @@ class ContextMemoryEngineV3:
         chunk_max_chars: int | None = None,
         chunk_overlap_chars: int | None = None,
         dedup_in_bucket: bool = True,
+        auto_optimize_after_split: bool = True,
     ) -> AddResult:
         effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
         return await self._ingest_service.add_memory_from_file(
@@ -2830,6 +2887,7 @@ class ContextMemoryEngineV3:
             chunk_max_chars=chunk_max_chars,
             chunk_overlap_chars=chunk_overlap_chars,
             dedup_in_bucket=dedup_in_bucket,
+            auto_optimize_after_split=auto_optimize_after_split,
         )
 
     async def add_memory_from_dir(
@@ -2857,6 +2915,8 @@ class ContextMemoryEngineV3:
                 "success_count": 0,
                 "fail_count": 0,
                 "skip_duplicate_count": 0,
+                "added_keys": [],
+                "per_file_added_keys": {},
             }
 
         target_bucket_id = self._resolve_bucket_id(bucket_id)
@@ -2868,6 +2928,8 @@ class ContextMemoryEngineV3:
                 "success_count": 0,
                 "fail_count": 0,
                 "skip_duplicate_count": 0,
+                "added_keys": [],
+                "per_file_added_keys": {},
             }
 
         files = sorted([p for p in root_dir.rglob("*") if p.is_file()])
@@ -2880,6 +2942,8 @@ class ContextMemoryEngineV3:
                 "skip_duplicate_count": 0,
                 "bucket_id": target_bucket_id,
                 "processed_files": 0,
+                "added_keys": [],
+                "per_file_added_keys": {},
             }
 
         if auto_create_sub_buckets:
@@ -2899,6 +2963,8 @@ class ContextMemoryEngineV3:
                     "success_count": 0,
                     "fail_count": 0,
                     "skip_duplicate_count": 0,
+                    "added_keys": [],
+                    "per_file_added_keys": {},
                 }
 
         llm_before = self.storage.load_meta() if collect_token_usage else {}
@@ -2913,6 +2979,8 @@ class ContextMemoryEngineV3:
         fail_count = 0
         skip_duplicate_count = 0
         details: list[dict[str, str]] = []
+        added_keys: list[str] = []
+        per_file_added_keys: dict[str, list[str]] = {}
         dir_bucket_cache: dict[tuple[str, ...], str] = {(): target_bucket_id}
 
         total = len(files)
@@ -2950,7 +3018,13 @@ class ContextMemoryEngineV3:
                 chunk_max_chars=chunk_max_chars,
                 chunk_overlap_chars=chunk_overlap_chars,
                 dedup_in_bucket=dedup_in_bucket,
+                auto_optimize_after_split=False,
             )
+
+            file_added = [str(k).strip() for k in result.added_keys if str(k).strip()]
+            if file_added:
+                per_file_added_keys[str(file_path)] = file_added
+                added_keys.extend(file_added)
 
             if result.success:
                 success_count += 1
@@ -2980,6 +3054,8 @@ class ContextMemoryEngineV3:
             "skip_duplicate_count": skip_duplicate_count,
             "details": details,
             "optimize_result": optimize_result,
+            "added_keys": added_keys,
+            "per_file_added_keys": per_file_added_keys,
         }
         if collect_token_usage:
             llm_after = self.storage.load_meta()
@@ -3542,16 +3618,11 @@ class ContextMemoryEngineV3:
         if self._is_context_overflow_diag(self.pipeline.last_diagnostics):
             self._record_overflow(stage="compress")
 
-        keep_keys = [str(k) for k in plan.get("keep_keys", []) if str(k).strip()]
         drop_keys = [str(k) for k in plan.get("drop_keys", []) if str(k).strip()]
-        keep_set = set(keep_keys)
         drop_set = set(drop_keys)
         key_to_record = {r.key: r for r in latest}
         all_keys = set(key_to_record.keys())
-        if keep_set:
-            keep_set = {k for k in keep_set if k in all_keys}
-        else:
-            keep_set = set(all_keys)
+        keep_set = set(all_keys)
         keep_set -= drop_set
 
         survivors: dict[str, MemoryRecord] = {}

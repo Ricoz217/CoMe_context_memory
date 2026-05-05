@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from come_context_memory.LLM_connect import Chat, Context, ImagePrompt, Prompts, SystemPrompt, TextPrompt, parse_llm_setting
+
+if TYPE_CHECKING:
+    from come_context_memory.LLM_usage import LLMUsage
+    from come_context_memory.utils import AutoMapping
 
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff", ".ico"}
@@ -40,6 +45,8 @@ class ImageTextExtractor:
         max_extract_chars: int = 20_000,
         init_config: bool = True,
         prompt_dir: str | Path | None = None,
+        usage_store: "LLMUsage | None" = None,
+        image_name_mapping: "AutoMapping[list[str]] | None" = None,
     ) -> None:
         self.llm_preset = llm_preset
         self.max_extract_chars = max(500, min(int(max_extract_chars), 100_000))
@@ -49,6 +56,8 @@ class ImageTextExtractor:
             if prompt_dir is not None
             else Path(__file__).resolve().parent / "prompts"
         )
+        self.usage_store = usage_store
+        self.image_name_mapping = image_name_mapping
         self._prompt_cache: dict[str, str] = {}
 
     def _load_prompt(self, filename: str, fallback: str) -> str:
@@ -117,7 +126,11 @@ class ImageTextExtractor:
         chat = None
         result = None
         try:
-            chat = Chat(keep_alive=False)
+            chat = Chat(
+                keep_alive=False,
+                usage_store=self.usage_store,
+                image_name_mapping=self.image_name_mapping,
+            )
             chat.setting(setting)
             ctx = Context(SystemPrompt(system_text))
             chat.replace_context(ctx)

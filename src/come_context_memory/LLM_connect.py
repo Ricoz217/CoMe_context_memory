@@ -514,16 +514,21 @@ class ImagePrompt(BasePrompt):
         new_prompt.image = data["data"]["image"]
         return new_prompt
 
-    async def load_image(self, cache: dict):
-        if self.name and self.name in _IMAGE_NAME_MAPPING:
-            hash_name_list = _IMAGE_NAME_MAPPING[self.name]
+    async def load_image(
+            self,
+            cache: dict,
+            image_name_mapping: AutoMapping[list[str]] | None = None,
+    ):
+        mapping = image_name_mapping if isinstance(image_name_mapping, AutoMapping) else _IMAGE_NAME_MAPPING
+        if self.name and self.name in mapping:
+            hash_name_list = mapping[self.name]
 
         else:
             hash_name = add_file(self.image_input)
             hash_name_list = await handle_unload_image(self.image_input, cache)
             self.image_input = get_file_path(hash_name)
             if hash_name_list and self.name:
-                _IMAGE_NAME_MAPPING[self.name] = hash_name_list
+                mapping[self.name] = hash_name_list
 
         self.image = hash_name_list
 
@@ -1304,7 +1309,9 @@ class Chat:
             context: Context = None,
             keep_alive: bool = False,
             logger: Logger | BlockHandle = None,
-            usage_record: list[LLMUsage] = None
+            usage_record: list[LLMUsage] = None,
+            usage_store: LLMUsage | None = None,
+            image_name_mapping: AutoMapping[list[str]] | None = None,
     ):
         if context is None:
             context = Context()
@@ -1355,6 +1362,10 @@ class Chat:
         self._tools_mapping: dict[str, Callable | Awaitable] = {}
         self._last_usage: TokenUsage = TokenUsage()
         self._usage_record: list[LLMUsage] = usage_record
+        self._usage_store: LLMUsage = usage_store if isinstance(usage_store, LLMUsage) else _GLOBAL_USAGE
+        self._image_name_mapping: AutoMapping[list[str]] = (
+            image_name_mapping if isinstance(image_name_mapping, AutoMapping) else _IMAGE_NAME_MAPPING
+        )
         self._context_use: int = 0
 
         # 状态位和工具
@@ -1419,7 +1430,7 @@ class Chat:
         if new_config.logger is not None:
             self._logger = new_config.logger
 
-        self._logger.info(f"已更新配置。当前模型: [{self._model}]")
+        # self._logger.info(f"已更新配置。当前模型: [{self._model}]")
 
     def _update_client(self):
         proxies = self._client_params.pop("proxies", {})
@@ -1552,7 +1563,7 @@ class Chat:
                             prompt.image.clear()
 
                 if not prompt.image:
-                    await prompt.load_image(self._image_cache)
+                    await prompt.load_image(self._image_cache, self._image_name_mapping)
 
                 if not prompt.image:
                     continue
@@ -1775,7 +1786,7 @@ class Chat:
 
             elif isinstance(prompt, ImagePrompt):
                 if not prompt.image:
-                    await prompt.load_image(self._image_cache)
+                    await prompt.load_image(self._image_cache, self._image_name_mapping)
 
                 estimate_token += len(prompt.image) * 1440  # 经验预估值
 
@@ -1877,7 +1888,7 @@ class Chat:
         async def _update_usage(_output: Prompts):
             if round_usage:
                 self._context_use = round_usage.input_t + round_usage.output_t
-                _GLOBAL_USAGE.update(
+                self._usage_store.update(
                     model=self._model,
                     update_data={
                         "input": round_usage.input_t,
@@ -1902,7 +1913,7 @@ class Chat:
                 input_t = await self._tiktoken_prompts(context.to_prompts())
                 output = await self._tiktoken_prompts(_output)
                 self._context_use = input_t + output
-                _GLOBAL_USAGE.update(
+                self._usage_store.update(
                     model=self._model,
                     update_data={
                         "input": input_t,
@@ -2523,7 +2534,9 @@ class Chat:
             context=None if new_context else self._context,
             keep_alive=self._keep_alive,
             logger=self._logger,
-            usage_record=self._usage_record.copy()
+            usage_record=self._usage_record.copy(),
+            usage_store=self._usage_store,
+            image_name_mapping=self._image_name_mapping,
         )
 
     async def clear(self, system: bool = False, tools: bool = False):

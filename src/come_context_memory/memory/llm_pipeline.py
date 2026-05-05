@@ -4,10 +4,15 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from typing import TYPE_CHECKING
 
 from come_context_memory.LLM_connect import Chat, ChatConfig, SystemPrompt, TextPrompt, parse_llm_setting
 
 from .models import normalize_relations
+
+if TYPE_CHECKING:
+    from come_context_memory.LLM_usage import LLMUsage
+    from come_context_memory.utils import AutoMapping
 
 
 class LLMPresetConfigError(RuntimeError):
@@ -37,6 +42,8 @@ class LLMPipelineV3:
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
         init_config: bool = True,
+        usage_store: "LLMUsage | None" = None,
+        image_name_mapping: "AutoMapping[list[str]] | None" = None,
     ) -> None:
         self.prompt_dir = Path(prompt_dir)
         self.llm_preset = llm_preset
@@ -47,6 +54,8 @@ class LLMPipelineV3:
         self.use_mock_llm = use_mock_llm
         self.enable_cleaning = enable_cleaning
         self.init_config = init_config
+        self.usage_store = usage_store
+        self.image_name_mapping = image_name_mapping
         self._prompt_cache: dict[str, str] = {}
         self._last_usage: dict[str, int] = {
             "calls": 0,
@@ -480,7 +489,11 @@ class LLMPipelineV3:
         usage_acc = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cached_input_tokens": 0}
 
         for _ in range(self.max_retries):
-            chat = Chat(keep_alive=False)
+            chat = Chat(
+                keep_alive=False,
+                usage_store=self.usage_store,
+                image_name_mapping=self.image_name_mapping,
+            )
             chat.setting(config)
             try:
                 forced_params = dict(getattr(config, "model_params", {}) or {})
@@ -802,24 +815,23 @@ class LLMPipelineV3:
         records = payload.get("records", [])
         if not isinstance(records, list):
             records = []
-        keep_keys: list[str] = []
         drop_keys: list[str] = []
+        total_keys = 0
         for rec in records:
             if not isinstance(rec, dict):
                 continue
             key = str(rec.get("key", "")).strip()
             if not key:
                 continue
+            total_keys += 1
             if bool(rec.get("gray", False)):
                 drop_keys.append(key)
-            else:
-                keep_keys.append(key)
+        keep_count = max(0, total_keys - len(drop_keys))
         merged_summary = (
-            f"fallback compress keep={len(keep_keys)} drop={len(drop_keys)} "
+            f"fallback compress keep={keep_count} drop={len(drop_keys)} "
             f"reason={payload.get('reason', '')}"
         )
         return {
-            "keep_keys": keep_keys,
             "drop_keys": drop_keys,
             "merged_summary": merged_summary,
             "reweighted": [],
@@ -1119,13 +1131,9 @@ class LLMPipelineV3:
         return {"answer": answer, "matches": matches}
 
     def _normalize_compress_result(self, result: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-        keep_keys = result.get("keep_keys", [])
         drop_keys = result.get("drop_keys", [])
-        if not isinstance(keep_keys, list):
-            keep_keys = []
         if not isinstance(drop_keys, list):
             drop_keys = []
-        keep = [str(k) for k in keep_keys if str(k).strip()]
         drop = [str(k) for k in drop_keys if str(k).strip()]
         merged_summary = str(result.get("merged_summary", "")).strip()
         if not merged_summary:
@@ -1160,7 +1168,6 @@ class LLMPipelineV3:
                 updates.append({"key": key, "content": content, "reason": reason})
 
         return {
-            "keep_keys": keep,
             "drop_keys": drop,
             "merged_summary": merged_summary,
             "reweighted": reweighted,
