@@ -63,7 +63,7 @@ DEFAULTS: dict[str, Any] = {
             "api_type": "openai",
             "max_context": 1_000_000,
             "auto_compress_gate": 0.7,
-            "extra_parameter": {"thinking": {"type": "disabled"}},
+            "extra_parameter": {"thinking": {"type": "disabled"}, "temperature": 0.7, "max_token": 1000000},
             "proxy_mode": "",
             "price": {},
         },
@@ -89,6 +89,9 @@ DEFAULTS: dict[str, Any] = {
         "stdout_enabled": True,
         "write_error_file": True,
         "error_log_file": "logs/error.log",
+    },
+    "Memory": {
+        "enable_forgetting": True,
     },
 }
 

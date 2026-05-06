@@ -25,7 +25,9 @@
 
 2. LLM 与代理配置（YAML）
    - 由 `config/context_memory.yaml` 提供
-   - 主要用于 `llm_presets` 和 `proxies`
+   - 主要用于 `llm_presets` 和 `proxies`  
+
+运行时配置非空项会覆盖 `config` 文件的配置
 
 ## 3. YAML 结构示例
 
@@ -44,7 +46,7 @@ llm_presets:
     api_type: "openai"   # openai | anthropic
     max_context: 1000000
     auto_compress_gate: 0.7
-    extra_parameter: {"thinking": {"type": "disabled"}}
+    extra_parameter: {"thinking": {"type": "disabled"}, "temperature": 0.7, "max_token": 1000000}
     proxy_mode: ""
     price: {}
 
@@ -84,10 +86,14 @@ Logging:
 9. `price`
 
 说明：
-1. `api_type` 当前支持 `openai` 与 `anthropic` 风格接口。
+1. `api_type` 当前支持 `openai` 与 `anthropic` 风格接口，即 OpenAI Completion API 和 Anthropic API。
 2. 不支持 OpenAI Response API。
 3. `proxy_mode` 可填代理名称（来自 `proxies`）或直接填 URL。
-4. `auto_compress_gate` 是推荐命名；旧字段 `auto_compress_rate` 仍兼容读取。
+4. `extra_parameter` 为输入模型的额外参数。其中 `thinking` 是DS官方的关闭思维模型参数，其他模型不一定通用。  
+`temperature` 不建议高于0.7，`max_token` 保持与 `max_context` 一致即可。
+5. `auto_compress_gate` 会影响自动压缩/自动拆桶，若不清楚具体作用就不要改，保持0.7。
+6. `price` 字段为历史遗留问题，不要删除也不需要填写值，保持空字典即可。
+7. LLM模板可以复制以创建你自己的模板。
 
 ## 5. ContextMemoryConfig 关键字段
 

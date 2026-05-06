@@ -11,6 +11,20 @@ from typing import Any
 from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
 
 
+def _default_enable_forgetting_from_config() -> bool:
+    try:
+        from come_context_memory.config import SETTING_CFG
+    except Exception:
+        return True
+    memory_cfg = getattr(SETTING_CFG, "Memory", None)
+    if memory_cfg is None:
+        return True
+    try:
+        return bool(getattr(memory_cfg, "enable_forgetting", True))
+    except Exception:
+        return True
+
+
 HELP_TEXT = """
 Commands:
   help
@@ -109,6 +123,7 @@ def _parse_common_split_flags(parts: list[str]) -> tuple[bool, bool, int | None,
 
 
 def _make_config(args: argparse.Namespace) -> ContextMemoryConfig:
+    enable_forgetting = False if bool(args.no_forgetting) else _default_enable_forgetting_from_config()
     return ContextMemoryConfig(
         base_dir=args.base_dir,
         llm_preset=args.preset,
@@ -116,7 +131,7 @@ def _make_config(args: argparse.Namespace) -> ContextMemoryConfig:
         ask_timeout=args.timeout,
         use_mock_llm=args.mock,
         enable_cleaning=not args.no_clean,
-        enable_forgetting=not args.no_forgetting,
+        enable_forgetting=enable_forgetting,
         init_config=not args.no_debug_mode,
         auto_manage=not args.no_auto_manage,
         max_bucket_depth=args.max_bucket_depth,

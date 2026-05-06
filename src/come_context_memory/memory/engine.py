@@ -64,6 +64,20 @@ def _clamp_score(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _default_enable_forgetting() -> bool:
+    try:
+        from come_context_memory.config import SETTING_CFG
+    except Exception:
+        return True
+    memory_cfg = getattr(SETTING_CFG, "Memory", None)
+    if memory_cfg is None:
+        return True
+    try:
+        return bool(getattr(memory_cfg, "enable_forgetting", True))
+    except Exception:
+        return True
+
+
 class _UnconfiguredStorageProxy:
     def __getattr__(self, name: str) -> Any:
         raise RuntimeError(
@@ -139,7 +153,7 @@ class ContextMemoryConfig:
     init_config: bool = True
     evidence_versions: int = 5
     auto_manage: bool = True
-    enable_forgetting: bool = True
+    enable_forgetting: bool = field(default_factory=_default_enable_forgetting)
     max_bucket_depth: int = 3
     max_context_window: int = 200_000
     max_memory_bytes: int = 1_000_000_000
@@ -180,7 +194,7 @@ class ContextMemoryConfig:
             init_config=bool(data.get("init_config", True)),
             evidence_versions=int(data.get("evidence_versions", 5)),
             auto_manage=bool(data.get("auto_manage", True)),
-            enable_forgetting=bool(data.get("enable_forgetting", True)),
+            enable_forgetting=bool(data.get("enable_forgetting", _default_enable_forgetting())),
             max_bucket_depth=int(data.get("max_bucket_depth", 3)),
             max_context_window=int(data.get("max_context_window", 200_000)),
             max_memory_bytes=int(data.get("max_memory_bytes", 1_000_000_000)),
@@ -586,7 +600,7 @@ class ContextMemoryEngineV3:
         init_config: bool = True,
         evidence_versions: int = 5,
         auto_manage: bool = True,
-        enable_forgetting: bool = True,
+        enable_forgetting: bool | None = None,
         max_bucket_depth: int = 3,
         max_context_window: int = 256_000,
         max_memory_bytes: int = 1_000_000_000,
@@ -706,6 +720,8 @@ class ContextMemoryEngineV3:
         )
 
         self._negative_delete_threshold = 0.10
+        if enable_forgetting is None:
+            enable_forgetting = _default_enable_forgetting()
         self._enable_forgetting = bool(enable_forgetting)
         self._max_depth = max(1, int(max_bucket_depth))
         self._max_memory_chars = 100_000
@@ -4890,7 +4906,7 @@ class ContextMemorySystem:
         auto_resume_pending_jobs: bool = True,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
-        enable_forgetting: bool = True,
+        enable_forgetting: bool | None = None,
         init_config: bool = True,
     ) -> ContextMemoryEngineV3:
         if cls._instance is None:
@@ -4900,6 +4916,11 @@ class ContextMemorySystem:
             elif isinstance(config, dict):
                 cfg_obj = ContextMemoryConfig.from_dict(config)
             else:
+                effective_forgetting = (
+                    _default_enable_forgetting()
+                    if enable_forgetting is None
+                    else bool(enable_forgetting)
+                )
                 cfg_obj = ContextMemoryConfig(
                     base_dir=base_dir,
                     llm_preset=llm_preset,
@@ -4909,7 +4930,7 @@ class ContextMemorySystem:
                     auto_resume_pending_jobs=auto_resume_pending_jobs,
                     use_mock_llm=use_mock_llm,
                     enable_cleaning=enable_cleaning,
-                    enable_forgetting=enable_forgetting,
+                    enable_forgetting=effective_forgetting,
                     init_config=init_config,
                 )
             if cfg_obj is None:
@@ -4939,7 +4960,7 @@ def get_context_memory_engine(
         auto_resume_pending_jobs: bool = True,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
-        enable_forgetting: bool = True,
+        enable_forgetting: bool | None = None,
         init_config: bool = True
 ):
     return ContextMemorySystem.get_instance(
