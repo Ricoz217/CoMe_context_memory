@@ -39,6 +39,10 @@ Common startup flags:
 8. `--max-memory-bytes`: memory budget
 9. `--max-bucket-depth`: max bucket depth
 
+Single-writer rule:
+1. One memory store (`same BASE_DIR`) should have only one writer process.
+2. If CLI/Python/RPC are all needed, use one RPC process as the write entry instead of writing from multiple processes directly.
+
 ## 3. JSON-RPC Protocol Rules
 
 ### 3.1 Request Shape

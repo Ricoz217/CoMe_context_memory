@@ -367,3 +367,9 @@ res = rpc_call("query", {
 })
 print(res["answer"])
 ```
+
+## 多接口并用约束
+
+1. 同一个记忆库（同一 `BASE_DIR`）只能有一个写入进程。
+2. 若 CLI/Python/RPC 需要并行使用，建议统一通过一个 RPC 进程作为写入入口。
+3. 避免多个进程直接写同一 `BASE_DIR`，以免出现多写者风险。

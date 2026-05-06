@@ -92,3 +92,9 @@ list --with-content
 1. 不传 `--bucket` 时，使用当前 active bucket。
 2. `gc` 默认 dry-run，仅 `gc --apply` 执行实际清理。
 3. `add_file` 当前不支持 `pdf/docx`。
+
+## 多接口并用约束
+
+1. 同一个记忆库（同一 `BASE_DIR`）采用单写者模型。
+2. 不要让 CLI 与其他写入接口同时写同一 `BASE_DIR`。
+3. 如需多入口并用，建议统一通过一个服务进程进行写入（推荐 JSON-RPC）。

@@ -130,3 +130,9 @@ engine.shutdown(wait=False)
 ```
 
 This releases internal resources such as query CPU thread pools.
+
+## 9. Multi-Interface Concurrency Constraint
+
+1. One memory store (`same BASE_DIR`) must follow a single-writer model.
+2. Running Python API, CLI, and JSON-RPC as separate processes on the same `BASE_DIR` can cause multi-writer risk.
+3. If you need multiple interfaces at the same time, use one service process as the write gateway (recommended: JSON-RPC).

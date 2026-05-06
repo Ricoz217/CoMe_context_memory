@@ -130,3 +130,9 @@ engine.shutdown(wait=False)
 ```
 
 这样会释放 query CPU 线程池等内部资源。
+
+## 多接口并用约束
+
+1. 同一个记忆库（同一 `BASE_DIR`）只能有一个写入进程。
+2. 若 Python/CLI/JSON-RPC 作为不同进程同时写入同一 `BASE_DIR`，会有多写者风险。
+3. 若需要多种接口同时使用，建议统一通过一个服务进程作为写入入口（推荐 JSON-RPC）。

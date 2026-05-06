@@ -92,3 +92,5 @@ list --with-content
 1. If `--bucket` is omitted, current active bucket is used.
 2. `gc` is dry-run by default; use `gc --apply` for actual cleanup.
 3. `add_file` currently does not support `pdf/docx`.
+4. Single-writer rule: do not run CLI and other writer interfaces against the same `BASE_DIR` at the same time.
+5. If multiple interfaces are required, route writes through one service process (recommended: JSON-RPC).

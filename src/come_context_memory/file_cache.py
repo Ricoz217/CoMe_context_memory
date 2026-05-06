@@ -18,6 +18,14 @@ _METADATA_FILE = _CACHE_PATH / "metadata.json"
 _LOCK = threading.Lock()
 
 
+def configure_global_file_cache_dir(cache_dir: str | Path) -> None:
+    global _CACHE_PATH, _METADATA_FILE
+    new_cache = Path(cache_dir)
+    with _LOCK:
+        _CACHE_PATH = new_cache
+        _METADATA_FILE = _CACHE_PATH / "metadata.json"
+
+
 @dataclass(slots=True)
 class FileInfo:
     create_time: str = field(default_factory=lambda : str(time.time()))

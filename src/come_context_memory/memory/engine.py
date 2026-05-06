@@ -53,6 +53,7 @@ from .multimodal import ImageTextExtractor
 from .rerank import BM25IndexCache, louvain_split_groups
 from .storage import MemoryStorageV3
 
+from come_context_memory.file_cache import configure_global_file_cache_dir
 from come_context_memory.LLM_usage import LLMUsage
 from come_context_memory.time_id import configure_global_time_id_state_file
 from come_context_memory.utils import AutoMapping, atomic_save_json
@@ -823,6 +824,7 @@ class ContextMemoryEngineV3:
         mapping_file.parent.mkdir(parents=True, exist_ok=True)
         self._image_name_mapping_store = AutoMapping(mapping_file, expire_day=14)
         configure_global_time_id_state_file(runtime_dir / "time_id_state.json")
+        configure_global_file_cache_dir(runtime_dir / "file_cache")
         self._trigger_auto_resume_pending_jobs()
         if hasattr(self, "pipeline"):
             self.pipeline.usage_store = self._llm_usage_store
