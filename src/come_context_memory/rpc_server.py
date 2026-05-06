@@ -70,6 +70,15 @@ def _err(code: int, msg: str, req_id: Any) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": msg}}
 
 
+def _parse_query_mode(mode_raw: Any) -> str:
+    mode = str(mode_raw if mode_raw is not None else "auto").strip().lower() or "auto"
+    if mode == "literal":
+        raise RpcError(-32602, "invalid params: mode 'literal' is not supported; use auto|semantic|hybrid")
+    if mode not in {"auto", "semantic", "hybrid"}:
+        raise RpcError(-32602, "invalid params: mode must be one of auto|semantic|hybrid")
+    return mode
+
+
 def _handlers(engine: ContextMemoryEngineV3) -> dict[str, Callable[[dict[str, Any]], Any]]:
     return {
         "ping": lambda _p: {"pong": True},
@@ -151,7 +160,7 @@ def _handlers(engine: ContextMemoryEngineV3) -> dict[str, Callable[[dict[str, An
             use_cache=bool(p.get("use_cache", True)),
             bucket_id=p.get("bucket_id"),
             max_depth=p.get("max_depth"),
-            mode=str(p.get("mode", "auto")),
+            mode=_parse_query_mode(p.get("mode", "auto")),
             global_recall_top_n=p.get("global_recall_top_n"),
             global_recall_top_m=p.get("global_recall_top_m"),
             global_recall_depth_limit=p.get("global_recall_depth_limit"),

@@ -96,3 +96,7 @@ Method list:
   - `ContextMemoryConfig(enable_forgetting=False)` disables negative-weight forgetting and auto-forget graying.
   - CLI supports `--no-forgetting`.
   - JSON-RPC server supports `--no-forgetting`.
+- Query mode:
+  - Supported: `auto`, `semantic`, `hybrid`.
+  - `auto`: literal-like query routes to `hybrid`; normal natural-language query routes to `semantic`.
+  - `literal` has been removed from public mode options and now returns an invalid-parameter error.

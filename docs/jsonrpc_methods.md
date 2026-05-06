@@ -44,10 +44,13 @@ Server runtime options include `--no-forgetting` to disable negative-weight forg
   "method": "query",
   "params": {
     "query_text": "how to write cache",
-    "top_k": 5
+    "top_k": 5,
+    "mode": "auto"
   }
 }
 ```
+
+`query.mode` supports `auto | semantic | hybrid`.
 
 ## Optional Per-call Timeout
 

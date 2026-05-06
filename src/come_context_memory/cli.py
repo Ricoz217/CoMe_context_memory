@@ -23,7 +23,7 @@ Commands:
   update <key> <patch_text>
   gray <key> <set|clear> [reason]
   delete <key> [reason]
-  query <text> [--top-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|literal|hybrid]
+  query <text> [--top-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]
   list [--gray] [--bucket <bucket_id>] [--with-content]
   buckets
   create_bucket <parent_bucket_id> <title> [summary] [--lock-summary]
@@ -263,7 +263,7 @@ async def run_cli(args: argparse.Namespace) -> None:
 
             elif cmd == "query":
                 if len(parts) < 2:
-                    print("usage: query <text> [--top-k N] [--gray] [--bucket <bucket_id>] [--mode ...]")
+                    print("usage: query <text> [--top-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]")
                     continue
                 include_gray = "--gray" in parts
                 top_k = 5

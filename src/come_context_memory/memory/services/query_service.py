@@ -22,6 +22,11 @@ def _clamp_score(value: float) -> float:
 
 
 _LITERAL_HINT_PATTERN = re.compile(r"[`/\\._:#()\[\]{}<>]|[A-Za-z0-9_]+\.[A-Za-z0-9_]+")
+_NGRAM_SIZE = 3
+_SEMANTIC_BM25_WEIGHT = 0.85
+_SEMANTIC_NGRAM_WEIGHT = 0.15
+_HYBRID_BM25_WEIGHT = 0.70
+_HYBRID_NGRAM_WEIGHT = 0.30
 
 
 class QueryService:
@@ -79,6 +84,7 @@ class QueryService:
             root_bucket_id=root,
             query_text=query_text,
             include_gray=include_gray,
+            mode=mode_effective,
             top_n=recall_top_n,
             top_m=recall_top_m,
             depth_limit=recall_depth_limit,
@@ -202,11 +208,12 @@ class QueryService:
         rank_top_k = max(top_k * 6, top_k)
         records_snapshot = tuple(records)
         bm25_ranked, bm25_norm_scores = await eng._run_cpu_task(
-            self._rank_records_and_normalize_scores,
+            self._rank_records_with_local_scores,
             query_text,
             records_snapshot,
             rank_top_k,
             bm25_index,
+            mode,
         )
         bm25_norm_map = {rec.key: bm25_norm_scores[idx] for idx, (rec, _) in enumerate(bm25_ranked)}
         boosted_norm_map: dict[str, float] = {}
@@ -259,58 +266,51 @@ class QueryService:
                 alias_miss_build += 1
         if alias_miss_build > 0:
             eng._enqueue_query_side_effect("record_alias_miss_build", {"count": alias_miss_build})
-        if mode == "literal":
-            llm_result = {"answer": "", "matches": []}
-            llm_accepted_count = 0
-            degraded = False
-            degraded_reason = ""
-            failure_stage = ""
-        else:
-            map_ver = eng.alias_map_version(bucket_id)
-            query_alias_payload = {
-                "query_text": query_text,
-                "top_k": top_k,
-                "include_gray": include_gray,
-                "key_hints": alias_key_hints,
-                "hint_count": len(alias_key_hints),
-            }
-            eng.assert_alias_only_payload(bucket_id, query_alias_payload)
-            llm_result_alias = await eng.pipeline.query(
-                bucket_context=eng._bucket_context(bucket_id),
-                query_text=query_text,
-                top_k=top_k,
-                include_gray=include_gray,
-                key_hints=alias_key_hints,
-                fallback_candidates=alias_fallback_candidates,
-            )
-            eng._audit_alias_llm_call(
-                tool="query",
-                bucket_id=bucket_id,
-                map_version=map_ver,
-                alias_input=query_alias_payload,
-                alias_output=llm_result_alias,
-            )
-            llm_result, alias_miss_resolve = self._resolve_query_llm_output(
-                eng=eng,
-                bucket_id=bucket_id,
-                llm_result_alias=llm_result_alias,
-                node_key_to_record_key=node_key_to_record_key,
-                record_keys=set(r.key for r in records),
-            )
-            if alias_miss_resolve > 0:
-                eng._enqueue_query_side_effect("record_alias_miss_resolve", {"count": alias_miss_resolve})
+        map_ver = eng.alias_map_version(bucket_id)
+        query_alias_payload = {
+            "query_text": query_text,
+            "top_k": top_k,
+            "include_gray": include_gray,
+            "key_hints": alias_key_hints,
+            "hint_count": len(alias_key_hints),
+        }
+        eng.assert_alias_only_payload(bucket_id, query_alias_payload)
+        llm_result_alias = await eng.pipeline.query(
+            bucket_context=eng._bucket_context(bucket_id),
+            query_text=query_text,
+            top_k=top_k,
+            include_gray=include_gray,
+            key_hints=alias_key_hints,
+            fallback_candidates=alias_fallback_candidates,
+        )
+        eng._audit_alias_llm_call(
+            tool="query",
+            bucket_id=bucket_id,
+            map_version=map_ver,
+            alias_input=query_alias_payload,
+            alias_output=llm_result_alias,
+        )
+        llm_result, alias_miss_resolve = self._resolve_query_llm_output(
+            eng=eng,
+            bucket_id=bucket_id,
+            llm_result_alias=llm_result_alias,
+            node_key_to_record_key=node_key_to_record_key,
+            record_keys=set(r.key for r in records),
+        )
+        if alias_miss_resolve > 0:
+            eng._enqueue_query_side_effect("record_alias_miss_resolve", {"count": alias_miss_resolve})
 
-            eng._enqueue_query_side_effect("record_llm_usage", {"usage": dict(eng.pipeline.last_usage)})
-            eng._enqueue_query_side_effect("record_llm_diag", {"diag": dict(eng.pipeline.last_diagnostics)})
-            diag = eng.pipeline.last_diagnostics
-            degraded = bool(diag.get("degraded", False))
-            degraded_reason = str(diag.get("degraded_reason", ""))
-            failure_stage = eng._diag_failure_stage(diag)
-            if degraded:
-                eng._enqueue_query_side_effect("record_query_degraded", {})
-            if eng._is_context_overflow_diag(diag):
-                eng._enqueue_query_side_effect("record_overflow_query", {})
-            llm_accepted_count = 0
+        eng._enqueue_query_side_effect("record_llm_usage", {"usage": dict(eng.pipeline.last_usage)})
+        eng._enqueue_query_side_effect("record_llm_diag", {"diag": dict(eng.pipeline.last_diagnostics)})
+        diag = eng.pipeline.last_diagnostics
+        degraded = bool(diag.get("degraded", False))
+        degraded_reason = str(diag.get("degraded_reason", ""))
+        failure_stage = eng._diag_failure_stage(diag)
+        if degraded:
+            eng._enqueue_query_side_effect("record_query_degraded", {})
+        if eng._is_context_overflow_diag(diag):
+            eng._enqueue_query_side_effect("record_overflow_query", {})
+        llm_accepted_count = 0
         query_matches, llm_accepted_count = self.merge_llm_bm25_matches(
             records=records,
             llm_matches=llm_result.get("matches", []),
@@ -343,9 +343,7 @@ class QueryService:
 
         top_matches = final_matches[:top_k]
         has_local_supplement = any(str(m.source).lower() == "bm25" for m in top_matches)
-        if mode == "literal":
-            result_source = "LOCAL"
-        elif degraded:
+        if degraded:
             result_source = "LOCAL"
         elif llm_accepted_count >= top_k and not has_local_supplement:
             result_source = "LLM"
@@ -601,17 +599,17 @@ class QueryService:
     @staticmethod
     def _resolve_query_mode(mode: str, query_text: str, default_mode: str) -> str:
         wanted = str(mode or "").strip().lower()
-        if wanted in {"semantic", "literal", "hybrid"}:
+        if wanted in {"semantic", "hybrid"}:
             return wanted
         fallback = str(default_mode or "auto").strip().lower()
-        if wanted != "auto" and fallback in {"semantic", "literal", "hybrid"}:
+        if wanted != "auto" and fallback in {"semantic", "hybrid"}:
             return fallback
         text = str(query_text or "")
         if len(text) >= 24 and _LITERAL_HINT_PATTERN.search(text):
-            return "literal"
+            return "hybrid"
         if _LITERAL_HINT_PATTERN.search(text):
-            return "literal"
-        return "hybrid"
+            return "hybrid"
+        return "semantic"
 
     async def _build_global_recall_boosts(
         self,
@@ -619,6 +617,7 @@ class QueryService:
         root_bucket_id: str,
         query_text: str,
         include_gray: bool,
+        mode: str,
         top_n: int,
         top_m: int,
         depth_limit: int,
@@ -670,11 +669,12 @@ class QueryService:
             )
             records_snapshot = tuple(records)
             ranked, norms = await eng._run_cpu_task(
-                self._rank_records_and_normalize_scores,
+                self._rank_records_with_local_scores,
                 query_text,
                 records_snapshot,
                 max(1, int(top_m)),
                 bm25_index,
+                mode,
             )
             if not ranked:
                 continue
@@ -693,11 +693,12 @@ class QueryService:
         return record_boost, bucket_boost
 
     @staticmethod
-    def _rank_records_and_normalize_scores(
+    def _rank_records_with_local_scores(
         query_text: str,
         records: tuple[MemoryRecord, ...],
         top_k: int,
         bm25_index: Any,
+        mode: str,
     ) -> tuple[list[tuple[MemoryRecord, float]], list[float]]:
         ranked = rank_records_with_index(
             query_text,
@@ -707,8 +708,51 @@ class QueryService:
         )
         if not ranked:
             return [], []
-        norms = normalize_scores([score for _, score in ranked])
-        return ranked, norms
+        bm25_norm = normalize_scores([score for _, score in ranked])
+        query_grams = QueryService._char_ngrams(query_text, n=_NGRAM_SIZE)
+        key_to_pos = {k: i for i, k in enumerate(getattr(bm25_index, "keys", []))}
+        docs_text = list(getattr(bm25_index, "docs_text", []))
+        ngram_raw: list[float] = []
+        for rec, _ in ranked:
+            pos = key_to_pos.get(rec.key)
+            if pos is None or pos < 0 or pos >= len(docs_text):
+                doc_text = f"{rec.title}\n{rec.summary}\n{rec.content}"
+            else:
+                doc_text = str(docs_text[pos] or "")
+            doc_grams = QueryService._char_ngrams(doc_text, n=_NGRAM_SIZE)
+            ngram_raw.append(QueryService._dice_score(query_grams, doc_grams))
+        ngram_norm = normalize_scores(ngram_raw)
+        bm25_weight, ngram_weight = QueryService._mode_local_weights(mode)
+        fused = [
+            _clamp_score(bm25_weight * bm25_norm[i] + ngram_weight * ngram_norm[i])
+            for i in range(len(bm25_norm))
+        ]
+        return ranked, fused
+
+    @staticmethod
+    def _mode_local_weights(mode: str) -> tuple[float, float]:
+        token = str(mode or "").strip().lower()
+        if token == "hybrid":
+            return _HYBRID_BM25_WEIGHT, _HYBRID_NGRAM_WEIGHT
+        return _SEMANTIC_BM25_WEIGHT, _SEMANTIC_NGRAM_WEIGHT
+
+    @staticmethod
+    def _char_ngrams(text: str, *, n: int) -> set[str]:
+        normalized = " ".join(str(text or "").lower().split())
+        if not normalized:
+            return set()
+        if len(normalized) <= n:
+            return {normalized}
+        return {normalized[i: i + n] for i in range(0, len(normalized) - n + 1)}
+
+    @staticmethod
+    def _dice_score(left: set[str], right: set[str]) -> float:
+        if not left or not right:
+            return 0.0
+        overlap = len(left.intersection(right))
+        if overlap <= 0:
+            return 0.0
+        return _clamp_score((2.0 * float(overlap)) / float(len(left) + len(right)))
 
     @staticmethod
     def _apply_global_boost(

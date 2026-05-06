@@ -727,7 +727,10 @@ class ContextMemoryEngineV3:
         self._gc_revision_retention_days = max(1, int(gc_revision_retention_days))
         self._gc_gray_key_retention_days = max(1, int(gc_gray_key_retention_days))
         self._gc_archived_bucket_retention_days = max(1, int(gc_archived_bucket_retention_days))
-        self._query_mode_default = str(query_mode_default or "auto").strip().lower() or "auto"
+        self._query_mode_default = self._normalize_query_mode_value(
+            query_mode_default,
+            field_name="query_mode_default",
+        )
         self._global_recall_top_n = max(10, int(global_recall_top_n))
         self._global_recall_top_m = max(1, int(global_recall_top_m))
         self._global_recall_depth_limit = max(1, int(global_recall_depth_limit))
@@ -825,12 +828,28 @@ class ContextMemoryEngineV3:
         self._gc_revision_retention_days = max(1, int(cfg_obj.gc_revision_retention_days))
         self._gc_gray_key_retention_days = max(1, int(cfg_obj.gc_gray_key_retention_days))
         self._gc_archived_bucket_retention_days = max(1, int(cfg_obj.gc_archived_bucket_retention_days))
-        self._query_mode_default = str(cfg_obj.query_mode_default or "auto").strip().lower() or "auto"
+        self._query_mode_default = self._normalize_query_mode_value(
+            cfg_obj.query_mode_default,
+            field_name="query_mode_default",
+        )
         self._global_recall_top_n = max(10, int(cfg_obj.global_recall_top_n))
         self._global_recall_top_m = max(1, int(cfg_obj.global_recall_top_m))
         self._global_recall_depth_limit = max(1, int(cfg_obj.global_recall_depth_limit))
         self._global_recall_time_budget_ms = max(10, int(cfg_obj.global_recall_time_budget_ms))
         self._global_recall_boost_weight = max(0.0, min(1.0, float(cfg_obj.global_recall_boost_weight)))
+
+    @staticmethod
+    def _normalize_query_mode_value(mode: str, *, field_name: str) -> str:
+        token = str(mode or "auto").strip().lower() or "auto"
+        if token == "literal":
+            raise ValueError(
+                f"{field_name}='literal' is not supported; use one of: auto, semantic, hybrid"
+            )
+        if token not in {"auto", "semantic", "hybrid"}:
+            raise ValueError(
+                f"invalid {field_name}: {mode!r}; expected one of: auto, semantic, hybrid"
+            )
+        return token
 
     def root_bucket_id(self) -> str:
         return self.storage.get_root_bucket_id()
@@ -3468,6 +3487,7 @@ class ContextMemoryEngineV3:
         global_recall_time_budget_ms: int | None = None,
     ) -> QueryResult:
         self._ensure_query_side_effect_worker()
+        mode = self._normalize_query_mode_value(mode, field_name="mode")
         return await self._query_service.run_query(
             query_text,
             top_k=top_k,
