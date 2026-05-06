@@ -267,6 +267,7 @@ class QueryResult:
     degraded_reason: str = ""
     failure_stage: str = ""
     sub_answer: str = ""
+    sub_answer_from: str = ""
     message: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -281,6 +282,7 @@ class QueryResult:
             "degraded_reason": self.degraded_reason,
             "failure_stage": self.failure_stage,
             "sub_answer": self.sub_answer,
+            "sub_answer_from": self.sub_answer_from,
             "message": self.message,
         }
 
@@ -303,6 +305,7 @@ class QueryResult:
             degraded_reason=str(data.get("degraded_reason", "")),
             failure_stage=str(data.get("failure_stage", "")),
             sub_answer=str(data.get("sub_answer", "")),
+            sub_answer_from=str(data.get("sub_answer_from", "")),
             message=str(data.get("message", "")),
         )
 

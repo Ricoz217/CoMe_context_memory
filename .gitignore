@@ -38,3 +38,4 @@ data/
 !/scripts/
 !/scripts/cli_smoke.py
 !/scripts/rpc_smoke.py
+/version/

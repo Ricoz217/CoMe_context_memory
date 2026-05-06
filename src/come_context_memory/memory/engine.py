@@ -133,6 +133,7 @@ class ContextMemoryConfig:
     image_llm_preset: str = ""
     tool_presets: dict[str, str] = field(default_factory=dict)
     ask_timeout: float = 180.0
+    auto_resume_pending_jobs: bool = True
     use_mock_llm: bool = False
     enable_cleaning: bool = True
     init_config: bool = True
@@ -173,6 +174,7 @@ class ContextMemoryConfig:
             image_llm_preset=str(data.get("image_llm_preset", "KIMI2.6")),
             tool_presets=_normalize_tool_presets(data.get("tool_presets")),
             ask_timeout=float(data.get("ask_timeout", 180.0)),
+            auto_resume_pending_jobs=bool(data.get("auto_resume_pending_jobs", True)),
             use_mock_llm=bool(data.get("use_mock_llm", False)),
             enable_cleaning=bool(data.get("enable_cleaning", True)),
             init_config=bool(data.get("init_config", True)),
@@ -578,6 +580,7 @@ class ContextMemoryEngineV3:
         image_llm_preset: str = "",
         tool_presets: dict[str, str] | None = None,
         ask_timeout: float = 180.0,
+        auto_resume_pending_jobs: bool = True,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
         init_config: bool = True,
@@ -619,6 +622,7 @@ class ContextMemoryEngineV3:
             llm_preset = cfg_obj.llm_preset
             image_llm_preset = cfg_obj.image_llm_preset
             ask_timeout = cfg_obj.ask_timeout
+            auto_resume_pending_jobs = cfg_obj.auto_resume_pending_jobs
             use_mock_llm = cfg_obj.use_mock_llm
             enable_cleaning = cfg_obj.enable_cleaning
             init_config = cfg_obj.init_config
@@ -746,6 +750,10 @@ class ContextMemoryEngineV3:
         self._bucket_summary_service = BucketSummaryService(self._runtime)
         self._maintenance_service = MaintenanceService(self._runtime)
         self._optimize_service = OptimizeService(self._runtime)
+        self._auto_resume_pending_jobs = bool(auto_resume_pending_jobs)
+        self._auto_resume_task: asyncio.Task | None = None
+        self._auto_resume_last_result: dict[str, Any] | None = None
+        self._trigger_auto_resume_pending_jobs()
 
     def _bind_storage(self, base_dir: str | Path, *, evidence_versions: int) -> None:
         self._evidence_versions = max(1, int(evidence_versions))
@@ -764,6 +772,7 @@ class ContextMemoryEngineV3:
         mapping_file.parent.mkdir(parents=True, exist_ok=True)
         self._image_name_mapping_store = AutoMapping(mapping_file, expire_day=14)
         configure_global_time_id_state_file(runtime_dir / "time_id_state.json")
+        self._trigger_auto_resume_pending_jobs()
         if hasattr(self, "pipeline"):
             self.pipeline.usage_store = self._llm_usage_store
             self.pipeline.image_name_mapping = self._image_name_mapping_store
@@ -805,6 +814,7 @@ class ContextMemoryEngineV3:
         self.image_extractor.init_config = bool(cfg_obj.init_config)
 
         self.auto_manage = bool(cfg_obj.auto_manage)
+        self._auto_resume_pending_jobs = bool(cfg_obj.auto_resume_pending_jobs)
         self._enable_forgetting = bool(cfg_obj.enable_forgetting)
         self._max_depth = max(1, int(cfg_obj.max_bucket_depth))
         self.max_context_window = max(100_000, int(cfg_obj.max_context_window))
@@ -837,6 +847,47 @@ class ContextMemoryEngineV3:
         self._global_recall_depth_limit = max(1, int(cfg_obj.global_recall_depth_limit))
         self._global_recall_time_budget_ms = max(10, int(cfg_obj.global_recall_time_budget_ms))
         self._global_recall_boost_weight = max(0.0, min(1.0, float(cfg_obj.global_recall_boost_weight)))
+        self._trigger_auto_resume_pending_jobs()
+
+    async def _auto_resume_pending_jobs_runner(self) -> None:
+        try:
+            self._auto_resume_last_result = await self.resume_pending_jobs()
+        except Exception as exc:
+            self._auto_resume_last_result = {
+                "success": False,
+                "total_jobs": 0,
+                "completed_jobs": 0,
+                "failed_jobs": 0,
+                "jobs": [],
+                "message": f"auto_resume_exception: {exc}",
+            }
+        finally:
+            self._auto_resume_task = None
+
+    def _trigger_auto_resume_pending_jobs(self) -> None:
+        if not getattr(self, "_auto_resume_pending_jobs", False):
+            return
+        if not isinstance(self.storage, MemoryStorageV3):
+            return
+        task = getattr(self, "_auto_resume_task", None)
+        if task is not None and not task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            try:
+                self._auto_resume_last_result = asyncio.run(self.resume_pending_jobs())
+            except Exception as exc:
+                self._auto_resume_last_result = {
+                    "success": False,
+                    "total_jobs": 0,
+                    "completed_jobs": 0,
+                    "failed_jobs": 0,
+                    "jobs": [],
+                    "message": f"auto_resume_exception: {exc}",
+                }
+            return
+        self._auto_resume_task = loop.create_task(self._auto_resume_pending_jobs_runner())
 
     @staticmethod
     def _normalize_query_mode_value(mode: str, *, field_name: str) -> str:
@@ -4836,6 +4887,7 @@ class ContextMemorySystem:
         image_llm_preset: str = "",
         tool_presets: dict[str, str] | None = None,
         ask_timeout: float = 90.0,
+        auto_resume_pending_jobs: bool = True,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
         enable_forgetting: bool = True,
@@ -4854,6 +4906,7 @@ class ContextMemorySystem:
                     image_llm_preset=image_llm_preset,
                     tool_presets=_normalize_tool_presets(tool_presets),
                     ask_timeout=ask_timeout,
+                    auto_resume_pending_jobs=auto_resume_pending_jobs,
                     use_mock_llm=use_mock_llm,
                     enable_cleaning=enable_cleaning,
                     enable_forgetting=enable_forgetting,
@@ -4883,6 +4936,7 @@ def get_context_memory_engine(
         image_llm_preset: str = "",
         tool_presets: dict[str, str] | None = None,
         ask_timeout: float = 180.0,
+        auto_resume_pending_jobs: bool = True,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
         enable_forgetting: bool = True,
@@ -4895,6 +4949,7 @@ def get_context_memory_engine(
         image_llm_preset=image_llm_preset,
         tool_presets=tool_presets,
         ask_timeout=ask_timeout,
+        auto_resume_pending_jobs=auto_resume_pending_jobs,
         use_mock_llm=use_mock_llm,
         enable_cleaning=enable_cleaning,
         enable_forgetting=enable_forgetting,

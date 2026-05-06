@@ -15,7 +15,7 @@ Output goals:
 2. Preserve source order.
 3. Prefer chapter/section/paragraph boundaries.
 4. Keep edits minimal. Non-essential edits are forbidden.
-5. Prefer small and more chunks over large merged chunks.
+5. Prefer balanced chunk sizes; avoid over-fragmentation.
 6. For code, split by logical units first (module/class/function/struct/interface/method/test block).
 7. For code, avoid cutting through a single function/class body unless required by size limits.
 8. For code, prioritize semantic units by feature/functionality when possible.
@@ -41,9 +41,17 @@ Ambiguity prevention:
 2. Chunk local line assembly order follows listed ranges order.
 3. If multiple ranges exist in one chunk, they are concatenated in listed order.
 
+Soft sizing guidance (important):
+1. Use `chunk_max_chars` as the upper bound target.
+2. Prefer each chunk to be roughly 30%~70% of `chunk_max_chars` when feasible.
+3. Avoid tiny chunks (<10% of `chunk_max_chars`) unless required by strong semantic boundaries
+   (e.g., import/header block, very short standalone function/class, isolated test case).
+4. If content is continuous and coherent, merge adjacent small pieces rather than splitting too finely.
+5. It is valid to return one single chunk when the whole text is already coherent and within size constraints.
+
 Code-aware split preferences:
 1. Prefer one chunk per logical unit when feasible.
 2. Keep related helper functions together only if tightly coupled.
 3. Keep import/config/header blocks in small dedicated chunks.
 4. Keep tests in separate chunks by test case/group.
-5. If uncertain, choose smaller chunks and preserve order.
+5. If uncertain, preserve order and choose fewer, larger coherent chunks over many tiny chunks.

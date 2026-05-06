@@ -5,27 +5,27 @@
 ## 1. 配置加载规则
 
 1. 根路径（`ROOT_DIR`）：
-- 若设置 `COME_CONTEXT_MEMORY_ROOT`，使用该路径
-- 否则使用项目目录上级推导路径
+   - 若设置 `COME_CONTEXT_MEMORY_ROOT`，使用该路径
+   - 否则使用项目目录上级推导路径
 
 2. 配置文件路径：
-- 若设置 `COME_CONTEXT_MEMORY_CONFIG`，使用该文件
-- 否则默认读取/生成 `./config/context_memory.yaml`（当前工作目录）
+   - 若设置 `COME_CONTEXT_MEMORY_CONFIG`，使用该文件
+   - 否则默认读取/生成 `./config/context_memory.yaml`（当前工作目录）
 
 3. 自动生成：
-- 配置不存在时会自动生成初始 YAML
+   - 配置不存在时会自动生成初始 YAML
 
 ## 2. 两层配置体系
 
 项目有两类配置：
 
 1. 运行时引擎配置（`ContextMemoryConfig`）
-- 控制桶深度、上下文窗口、自动维护、query 策略等
-- 在 Python/CLI/RPC 启动时传入
+   - 控制桶深度、上下文窗口、自动维护、query 策略等
+   - 在 Python/CLI/RPC 启动时传入
 
 2. LLM 与代理配置（YAML）
-- 由 `config/context_memory.yaml` 提供
-- 主要用于 `llm_presets` 和 `proxies`
+   - 由 `config/context_memory.yaml` 提供
+   - 主要用于 `llm_presets` 和 `proxies`
 
 ## 3. YAML 结构示例
 
@@ -38,22 +38,22 @@ LLM:
 
 llm_presets:
   CONTEXT_MEMORY:
-    endpoint: "https://api.openai.com/v1/chat/completions"
+    endpoint: "https://api.deepseek.com/chat/completions"
     token: "YOUR_API_KEY"
-    model: "gpt-4.1-mini"
+    model: "deepseek-v4-flash"
     api_type: "openai"   # openai | anthropic
-    max_context: 200000
+    max_context: 1000000
     auto_compress_gate: 0.7
-    extra_parameter: {}
+    extra_parameter: {"thinking": {"type": "disabled"}}
     proxy_mode: ""
     price: {}
 
   KIMI2.6:
-    endpoint: "https://api.openai.com/v1/chat/completions"
+    endpoint: "https://api.siliconflow.cn/v1/chat/completions"
     token: "YOUR_API_KEY"
-    model: "gpt-4.1-mini"
+    model: "Pro/moonshotai/Kimi-K2.6"
     api_type: "openai"
-    max_context: 200000
+    max_context: 256000
     auto_compress_gate: 0.7
     extra_parameter: {}
     proxy_mode: ""

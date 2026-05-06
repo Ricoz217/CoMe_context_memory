@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from collections import deque
@@ -27,6 +28,7 @@ _SEMANTIC_BM25_WEIGHT = 0.85
 _SEMANTIC_NGRAM_WEIGHT = 0.15
 _HYBRID_BM25_WEIGHT = 0.70
 _HYBRID_NGRAM_WEIGHT = 0.30
+_TOP_LEVEL_BUCKET_BRANCH_PARALLELISM = 8
 
 
 class QueryService:
@@ -319,7 +321,7 @@ class QueryService:
             top_k=top_k,
         )
 
-        final_matches, sub_answer = await self.resolve_bucket_matches(
+        final_matches, sub_answer, sub_answer_from = await self.resolve_bucket_matches(
             query_text=query_text,
             query_matches=query_matches,
             parent_top_k=top_k,
@@ -361,6 +363,7 @@ class QueryService:
             degraded_reason=degraded_reason,
             failure_stage=failure_stage,
             sub_answer=sub_answer,
+            sub_answer_from=sub_answer_from,
             message="ok",
         )
 
@@ -505,13 +508,15 @@ class QueryService:
         global_recall_time_budget_ms: int,
         global_record_boost: dict[str, float],
         global_bucket_boost: dict[str, float],
-    ) -> tuple[list[QueryMatch], str]:
+    ) -> tuple[list[QueryMatch], str, str]:
         eng = self.runtime.engine
         out: list[QueryMatch] = []
         seen: set[str] = set()
         sub_answer = ""
+        sub_answer_from = ""
         best_sub_answer_score = -1.0
         max_parent_candidates = max(1, int(parent_top_k))
+        bucket_candidates: list[tuple[QueryMatch, str]] = []
         for match in query_matches[:max_parent_candidates]:
             rec = eng.storage.get_record(match.key)
             if rec is None:
@@ -530,45 +535,7 @@ class QueryService:
                 child_info_final = eng.storage.get_bucket_info(child_bucket_id)
                 if child_info_final is not None and child_info_final.sealed:
                     continue
-                child = await self.query_bucket_recursive(
-                    bucket_id=child_bucket_id,
-                    query_text=query_text,
-                    top_k=1,
-                    include_gray=include_gray,
-                    use_cache=use_cache,
-                    with_evidence=with_evidence,
-                    depth=depth + 1,
-                    depth_limit=depth_limit,
-                    visited=visited,
-                    mode=mode,
-                    global_recall_top_n=global_recall_top_n,
-                    global_recall_top_m=global_recall_top_m,
-                    global_recall_depth_limit=global_recall_depth_limit,
-                    global_recall_time_budget_ms=global_recall_time_budget_ms,
-                    global_record_boost=global_record_boost,
-                    global_bucket_boost=global_bucket_boost,
-                )
-                if child.matches:
-                    child_top = child.matches[0]
-                    merged_score = _clamp_score(0.70 * match.score + 0.30 * child_top.score)
-                    candidate_sub_answer = str(child.sub_answer or child.answer or "").strip()
-                    if candidate_sub_answer and merged_score > best_sub_answer_score:
-                        sub_answer = candidate_sub_answer
-                        best_sub_answer_score = merged_score
-                    if child_top.key not in seen:
-                        out.append(
-                            QueryMatch(
-                                key=child_top.key,
-                                score=merged_score,
-                                reason=f"via_bucket:{match.key}",
-                                summary=child_top.summary,
-                                source="recursive",
-                                llm_score=child_top.llm_score,
-                                bm25_score=child_top.bm25_score,
-                                final_score=merged_score,
-                            )
-                        )
-                        seen.add(child_top.key)
+                bucket_candidates.append((match, child_bucket_id))
                 continue
 
             if rec.kind != BUCKET_KIND_MEMORY:
@@ -593,8 +560,84 @@ class QueryService:
             )
             seen.add(rec.key)
 
+        async def _query_bucket_branch(
+            parent_match: QueryMatch,
+            child_bucket_id: str,
+        ) -> tuple[QueryMatch, float, str, str] | None:
+            try:
+                child = await self.query_bucket_recursive(
+                    bucket_id=child_bucket_id,
+                    query_text=query_text,
+                    top_k=1,
+                    include_gray=include_gray,
+                    use_cache=use_cache,
+                    with_evidence=with_evidence,
+                    depth=depth + 1,
+                    depth_limit=depth_limit,
+                    visited=visited,
+                    mode=mode,
+                    global_recall_top_n=global_recall_top_n,
+                    global_recall_top_m=global_recall_top_m,
+                    global_recall_depth_limit=global_recall_depth_limit,
+                    global_recall_time_budget_ms=global_recall_time_budget_ms,
+                    global_record_boost=global_record_boost,
+                    global_bucket_boost=global_bucket_boost,
+                )
+            except Exception:
+                return None
+
+            if not child.matches:
+                return None
+            child_top = child.matches[0]
+            merged_score = _clamp_score(0.70 * parent_match.score + 0.30 * child_top.score)
+            candidate_sub_answer = str(child.sub_answer or child.answer or "").strip()
+            candidate_sub_answer_from = str(getattr(child, "sub_answer_from", "") or "").strip() or str(child_top.key)
+            merged_match = QueryMatch(
+                key=child_top.key,
+                score=merged_score,
+                reason=f"via_bucket:{parent_match.key}",
+                summary=child_top.summary,
+                source="recursive",
+                llm_score=child_top.llm_score,
+                bm25_score=child_top.bm25_score,
+                final_score=merged_score,
+            )
+            return merged_match, merged_score, candidate_sub_answer, candidate_sub_answer_from
+
+        branch_results: list[tuple[QueryMatch, float, str, str] | None] = []
+        if bucket_candidates:
+            if depth == 1:
+                semaphore = asyncio.Semaphore(_TOP_LEVEL_BUCKET_BRANCH_PARALLELISM)
+
+                async def _guarded(
+                    parent_match: QueryMatch,
+                    child_bucket_id: str,
+                ) -> tuple[QueryMatch, float, str, str] | None:
+                    async with semaphore:
+                        return await _query_bucket_branch(parent_match, child_bucket_id)
+
+                branch_results = await asyncio.gather(
+                    *[_guarded(match, child_bucket_id) for match, child_bucket_id in bucket_candidates]
+                )
+            else:
+                for match, child_bucket_id in bucket_candidates:
+                    branch_results.append(await _query_bucket_branch(match, child_bucket_id))
+
+        for result in branch_results:
+            if result is None:
+                continue
+            merged_match, merged_score, candidate_sub_answer, candidate_sub_answer_from = result
+            if candidate_sub_answer and merged_score > best_sub_answer_score:
+                sub_answer = candidate_sub_answer
+                sub_answer_from = candidate_sub_answer_from
+                best_sub_answer_score = merged_score
+            if merged_match.key in seen:
+                continue
+            out.append(merged_match)
+            seen.add(merged_match.key)
+
         out.sort(key=lambda m: m.score, reverse=True)
-        return out, sub_answer
+        return out, sub_answer, sub_answer_from
 
     @staticmethod
     def _resolve_query_mode(mode: str, query_text: str, default_mode: str) -> str:
