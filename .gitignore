@@ -36,8 +36,6 @@ data/
 /scripts/__pycache__/
 /tests_data/
 /scripts/
-/scripts/cli_smoke.py
-/scripts/rpc_smoke.py
 /version/
 /config/
 /.build_check/

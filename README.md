@@ -62,17 +62,3 @@ python -m come_context_memory.rpc_server --host 127.0.0.1 --port 9010 --base-dir
    - `auto`: 字面特征强时走 `hybrid`，普通自然语言走 `semantic`
    - `literal` 已从公开模式移除，传入会报参数错误
 5. 忘却机制可关闭：`ContextMemoryConfig(enable_forgetting=False)`，CLI/RPC 也提供 `--no-forgetting`。
-
-## 烟测命令
-```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-python -m pytest tests\test_release_smoke_three_interfaces.py -q
-python tests\query_concurrency_smoke.py --engine-module come_context_memory.memory.engine --concurrency 20 --use-mock-llm
-```
-
-真实 LLM 烟测：
-```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-$env:COME_RELEASE_SMOKE_REAL_LLM='1'
-python -m pytest tests\test_release_smoke_three_interfaces.py -q
-```
