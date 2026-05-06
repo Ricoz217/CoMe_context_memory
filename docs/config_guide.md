@@ -123,9 +123,6 @@ Logging:
    - `semantic`
    - `hybrid`
 
-2. `literal` 已不支持：
-   - 若配置为 `literal`，引擎初始化会报错
-
 ## 7. 优先级建议
 
 1. 业务项目建议：

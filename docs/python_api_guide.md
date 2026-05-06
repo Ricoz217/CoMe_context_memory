@@ -80,7 +80,6 @@ asyncio.run(main())
 
 规则：
 1. `auto` 会自动分流：字面特征强走 `hybrid`，普通自然语言走 `semantic`。
-2. `literal` 已移除，传入会报参数错误。
 
 ## 5. 批量入库返回值
 
@@ -99,6 +98,8 @@ asyncio.run(main())
 2. 去重跳过和失败项不会进入 `added_keys`。
 
 ## 6. 桶路由与 active bucket
+
+**强烈建议使用对象操作，对象操作会自动传递 `bucket_id` ，可以无视下述说明**  
 
 1. 不传 `bucket_id` 时，默认使用当前 `active_bucket_id`。
 2. 建议在会话开始时显式调用 `set_active_bucket(...)`。
