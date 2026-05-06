@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from come_context_memory.LLM_connect import Context, TextPrompt
+from context_memory.LLM_connect import Context, TextPrompt
 
 from .models import BucketInfo, MemoryRecord, normalize_relations, utc_now_iso
 

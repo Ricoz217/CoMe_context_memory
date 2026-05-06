@@ -14,8 +14,8 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
-from come_context_memory.config import get_llm
+from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+from context_memory.config import get_llm
 
 
 def _repo_root() -> Path:
@@ -141,7 +141,7 @@ def test_release_smoke_cli(smoke_runtime_dir: Path) -> None:
     cmd = [
         _python_bin(),
         "-m",
-        "come_context_memory.cli",
+        "context_memory.cli",
         "--base-dir",
         str(cli_store),
         "--no-debug-mode",
@@ -182,7 +182,7 @@ def test_release_smoke_jsonrpc(smoke_runtime_dir: Path) -> None:
     cmd = [
         _python_bin(),
         "-m",
-        "come_context_memory.rpc_server",
+        "context_memory.rpc_server",
         "--host",
         "127.0.0.1",
         "--port",

@@ -57,7 +57,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="ContextMemory query concurrency smoke")
-    p.add_argument("--engine-module", default="come_context_memory.memory.engine")
+    p.add_argument("--engine-module", default="context_memory.memory.engine")
     p.add_argument("--concurrency", type=int, default=20)
     p.add_argument("--use-mock-llm", action="store_true", default=True)
     p.add_argument("--out", default="")

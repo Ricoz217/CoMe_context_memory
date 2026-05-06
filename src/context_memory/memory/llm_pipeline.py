@@ -6,13 +6,13 @@ from pathlib import Path
 from typing import Any
 from typing import TYPE_CHECKING
 
-from come_context_memory.LLM_connect import Chat, ChatConfig, SystemPrompt, TextPrompt, parse_llm_setting
+from context_memory.LLM_connect import Chat, ChatConfig, SystemPrompt, TextPrompt, parse_llm_setting
 
 from .models import normalize_relations
 
 if TYPE_CHECKING:
-    from come_context_memory.LLM_usage import LLMUsage
-    from come_context_memory.utils import AutoMapping
+    from context_memory.LLM_usage import LLMUsage
+    from context_memory.utils import AutoMapping
 
 
 class LLMPresetConfigError(RuntimeError):

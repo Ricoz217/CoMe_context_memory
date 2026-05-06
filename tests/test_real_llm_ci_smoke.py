@@ -10,8 +10,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
-from come_context_memory.config import get_llm
+from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+from context_memory.config import get_llm
 
 
 def _repo_root() -> Path:

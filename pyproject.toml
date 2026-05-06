@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "context_memory"
 version = "0.3.0"
-description = "Decoupled ContextMemory V3 runtime"
+description = "A Memory System Base on Context"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -43,8 +43,8 @@ dev = [
 ]
 
 [project.scripts]
-context-memory-cli = "come_context_memory.cli:main"
-context-memory-rpc = "come_context_memory.rpc_server:main"
+context-memory-cli = "context_memory.cli:main"
+context-memory-rpc = "context_memory.rpc_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -54,7 +54,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-come_context_memory = [
+context_memory = [
   "memory/prompts/*.md",
   "memory/*.md",
 ]

@@ -6,7 +6,7 @@
 
 ```python
 import asyncio
-from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
 
 
 async def main():

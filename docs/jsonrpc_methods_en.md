@@ -20,7 +20,7 @@ Examples:
 Example:
 
 ```bash
-python -m come_context_memory.rpc_server \
+python -m context_memory.rpc_server \
   --host 127.0.0.1 \
   --port 9010 \
   --base-dir ./data/rpc_runtime \

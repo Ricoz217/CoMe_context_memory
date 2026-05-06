@@ -8,8 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from hashlib import blake2b
 from copy import deepcopy
-from come_context_memory.utils import atomic_save_json
-from come_context_memory.logger import get_logger
+from context_memory.utils import atomic_save_json
+from context_memory.logger import get_logger
 
 
 _status = get_logger().status()

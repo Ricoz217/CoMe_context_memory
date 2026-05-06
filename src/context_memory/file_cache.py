@@ -10,8 +10,8 @@ import threading
 from pathlib import Path
 from io import BytesIO
 from dataclasses import dataclass, field
-from come_context_memory.config import ROOT_DIR, SETTING_CFG
-from come_context_memory.utils import atomic_save_json
+from context_memory.config import ROOT_DIR, SETTING_CFG
+from context_memory.utils import atomic_save_json
 
 _CACHE_PATH = ROOT_DIR / "data" / "file_cache"
 _METADATA_FILE = _CACHE_PATH / "metadata.json"

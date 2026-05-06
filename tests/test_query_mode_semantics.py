@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
-from come_context_memory.memory.services.query_service import QueryService
-from come_context_memory.rpc_server import RpcError, _call
+from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+from context_memory.memory.services.query_service import QueryService
+from context_memory.rpc_server import RpcError, _call
 
 
 @pytest.mark.asyncio

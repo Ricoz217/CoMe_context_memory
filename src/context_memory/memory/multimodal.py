@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from come_context_memory.LLM_connect import Chat, Context, ImagePrompt, Prompts, SystemPrompt, TextPrompt, parse_llm_setting
+from context_memory.LLM_connect import Chat, Context, ImagePrompt, Prompts, SystemPrompt, TextPrompt, parse_llm_setting
 
 if TYPE_CHECKING:
-    from come_context_memory.LLM_usage import LLMUsage
-    from come_context_memory.utils import AutoMapping
+    from context_memory.LLM_usage import LLMUsage
+    from context_memory.utils import AutoMapping
 
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff", ".ico"}

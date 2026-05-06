@@ -24,15 +24,15 @@ from typing import Callable, Awaitable, Any, Annotated, Literal, Union, get_args
     TYPE_CHECKING
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
-from come_context_memory.time_id import next_time_id
-from come_context_memory.logger import get_logger
-from come_context_memory.utils import resize_image_to_base64, parse_proxies_to_httpx, AutoMapping
-from come_context_memory.file_cache import add_file, get_file_path
-from come_context_memory.LLM_usage import ApiPrice, LLMUsage, _GLOBAL_USAGE
-from come_context_memory.config import SETTING_CFG, get_llm, get_proxy
+from context_memory.time_id import next_time_id
+from context_memory.logger import get_logger
+from context_memory.utils import resize_image_to_base64, parse_proxies_to_httpx, AutoMapping
+from context_memory.file_cache import add_file, get_file_path
+from context_memory.LLM_usage import ApiPrice, LLMUsage, _GLOBAL_USAGE
+from context_memory.config import SETTING_CFG, get_llm, get_proxy
 
 if TYPE_CHECKING:
-    from come_context_memory.logger import BlockHandle, Logger
+    from context_memory.logger import BlockHandle, Logger
 
 
 _log = get_logger()

@@ -709,7 +709,7 @@ def resize_image(
     """
     from PIL import Image, UnidentifiedImageError
 
-    from come_context_memory.config import SETTING_CFG
+    from context_memory.config import SETTING_CFG
     size_limit = max_size * 1024 * 1024
     if isinstance(image, (Path, str)):
         if not os.path.isfile(image):
@@ -795,7 +795,7 @@ def resize_image_to_base64(
     """
     import base64
     from PIL import Image
-    from come_context_memory.config import SETTING_CFG
+    from context_memory.config import SETTING_CFG
     if min_quality is None:
         min_quality: int = SETTING_CFG.Common.MinImageQuality  # 默认20
 
@@ -958,7 +958,7 @@ def debug(*args):
     :param args:
     :return:
     """
-    from come_context_memory.config import ROOT_DIR
+    from context_memory.config import ROOT_DIR
     output_file = ROOT_DIR / f"DEBUG_{datetime.now():%Y-%m-%d %H-%M-%S}.json"
     save_str = ""
     for o in [args]:

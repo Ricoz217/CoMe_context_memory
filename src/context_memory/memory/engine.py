@@ -53,10 +53,10 @@ from .multimodal import ImageTextExtractor
 from .rerank import BM25IndexCache, louvain_split_groups
 from .storage import MemoryStorageV3
 
-from come_context_memory.file_cache import configure_global_file_cache_dir
-from come_context_memory.LLM_usage import LLMUsage
-from come_context_memory.time_id import configure_global_time_id_state_file
-from come_context_memory.utils import AutoMapping, atomic_save_json
+from context_memory.file_cache import configure_global_file_cache_dir
+from context_memory.LLM_usage import LLMUsage
+from context_memory.time_id import configure_global_time_id_state_file
+from context_memory.utils import AutoMapping, atomic_save_json
 
 TCPU = TypeVar("TCPU")
 
@@ -67,7 +67,7 @@ def _clamp_score(value: float) -> float:
 
 def _default_enable_forgetting() -> bool:
     try:
-        from come_context_memory.config import SETTING_CFG
+        from context_memory.config import SETTING_CFG
     except Exception:
         return True
     memory_cfg = getattr(SETTING_CFG, "Memory", None)
@@ -81,7 +81,7 @@ def _default_enable_forgetting() -> bool:
 
 def _resolve_effective_max_context_window(llm_preset: str) -> int:
     try:
-        from come_context_memory import config as _cfg_mod
+        from context_memory import config as _cfg_mod
     except Exception as exc:
         raise RuntimeError("failed to load config module while resolving llm max_context") from exc
 

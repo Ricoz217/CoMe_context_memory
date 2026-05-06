@@ -37,7 +37,7 @@ class BlockHandle:
 
 
 class Logger:
-    def __init__(self, name: str = "come_context_memory") -> None:
+    def __init__(self, name: str = "context_memory") -> None:
         self.name = name
         self._stdout_enabled = True
         self._write_error_file = True
@@ -75,7 +75,7 @@ class Logger:
 
     def _refresh_from_config(self) -> None:
         try:
-            from come_context_memory.config import ROOT_DIR, SETTING_CFG
+            from context_memory.config import ROOT_DIR, SETTING_CFG
         except Exception:
             return
         cfg = getattr(SETTING_CFG, "Logging", None)

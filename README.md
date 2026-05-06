@@ -21,8 +21,9 @@ pip install -r requirements.txt
   - `COME_CONTEXT_MEMORY_CONFIG`
 
 3. Python 调用
+
 ```python
-from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
 
 cfg = ContextMemoryConfig(
     base_dir="data/my_memory",

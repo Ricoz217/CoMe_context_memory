@@ -6,7 +6,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
 
 try:
     from fastapi import FastAPI, HTTPException, Request
@@ -23,7 +23,7 @@ ENGINE: ContextMemoryEngineV3 | None = None
 
 def _default_enable_forgetting_from_config() -> bool:
     try:
-        from come_context_memory.config import SETTING_CFG
+        from context_memory.config import SETTING_CFG
     except Exception:
         return True
     memory_cfg = getattr(SETTING_CFG, "Memory", None)

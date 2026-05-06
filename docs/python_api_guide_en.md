@@ -6,7 +6,7 @@ This guide is for using `CoMe_ContextMemory` directly as a Python library.
 
 ```python
 import asyncio
-from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
 
 
 async def main():

@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import traceback
-from come_context_memory import get_context_memory_engine, ContextMemoryConfig
+from context_memory import get_context_memory_engine, ContextMemoryConfig
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))

@@ -103,7 +103,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="ContextMemory decouple smoke baseline runner")
-    p.add_argument("--engine-module", default="come_context_memory.memory.engine", help="import path of engine module")
+    p.add_argument("--engine-module", default="context_memory.memory.engine", help="import path of engine module")
     p.add_argument("--optimize-rounds", type=int, default=3)
     p.add_argument("--use-mock-llm", action="store_true", default=True)
     p.add_argument("--sample-text", default="ContextMemory smoke sample text.")

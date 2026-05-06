@@ -8,12 +8,12 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
 
 
 def _default_enable_forgetting_from_config() -> bool:
     try:
-        from come_context_memory.config import SETTING_CFG
+        from context_memory.config import SETTING_CFG
     except Exception:
         return True
     memory_cfg = getattr(SETTING_CFG, "Memory", None)
