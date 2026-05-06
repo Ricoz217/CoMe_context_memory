@@ -20,7 +20,7 @@ This document explains configuration sources, precedence, and key fields for `Co
 The project has two config layers:
 
 1. Runtime engine config (`ContextMemoryConfig`)
-   - Controls bucket depth, context window, auto-maintenance, query strategy, etc.
+   - Controls bucket depth, auto-maintenance, query strategy, etc.
    - Passed at Python/CLI/RPC startup.
 
 2. LLM and proxy config (YAML)
@@ -28,6 +28,11 @@ The project has two config layers:
    - Mainly for `llm_presets` and `proxies`.
 
 Non-empty runtime config values override YAML config values.
+
+Context window rule (important):
+1. The engine no longer accepts manual `max_context_window`.
+2. The effective window limit is always read from `llm_presets.<preset>.max_context`.
+3. If the target preset misses `max_context`, the program raises an exception and aborts startup.
 
 ## 3. YAML Example
 
@@ -104,9 +109,8 @@ Common fields:
 5. `enable_forgetting`
 6. `auto_manage`
 7. `max_bucket_depth`
-8. `max_context_window`
-9. `max_memory_bytes`
-10. `query_mode_default` (only `auto|semantic|hybrid`)
+8. `max_memory_bytes`
+9. `query_mode_default` (only `auto|semantic|hybrid`)
 
 Global recall fields:
 1. `global_recall_top_n`

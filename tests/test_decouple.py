@@ -12,8 +12,7 @@ _MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 memory_config = ContextMemoryConfig(
     base_dir=_MEMORY_DIR,
     llm_preset="CONTEXT_MEMORY",
-    image_llm_preset="KIMI2.6",
-    max_context_window=1_000_000
+    image_llm_preset="KIMI2.6"
 )
 
 async def main():

@@ -71,7 +71,6 @@ def _make_config(args: argparse.Namespace) -> ContextMemoryConfig:
         init_config=not args.no_debug_mode,
         auto_manage=not args.no_auto_manage,
         max_bucket_depth=args.max_bucket_depth,
-        max_context_window=args.max_context_window,
         max_memory_bytes=args.max_memory_bytes,
         evidence_versions=args.evidence_versions,
     )
@@ -326,7 +325,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-forgetting", action="store_true")
     parser.add_argument("--no-debug-mode", action="store_true")
     parser.add_argument("--no-auto-manage", action="store_true")
-    parser.add_argument("--max-context-window", type=int, default=1_000_000)
     parser.add_argument("--max-memory-bytes", type=int, default=1_000_000_000)
     parser.add_argument("--evidence-versions", type=int, default=5)
     parser.add_argument("--max-bucket-depth", type=int, default=3)

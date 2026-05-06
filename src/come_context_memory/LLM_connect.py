@@ -29,16 +29,24 @@ from come_context_memory.logger import get_logger
 from come_context_memory.utils import resize_image_to_base64, parse_proxies_to_httpx, AutoMapping
 from come_context_memory.file_cache import add_file, get_file_path
 from come_context_memory.LLM_usage import ApiPrice, LLMUsage, _GLOBAL_USAGE
-from come_context_memory.config import SETTING_CFG, get_llm, get_proxy, DATA_DIR
+from come_context_memory.config import SETTING_CFG, get_llm, get_proxy
 
 if TYPE_CHECKING:
     from come_context_memory.logger import BlockHandle, Logger
 
 
 _log = get_logger()
-_MAPPING_FILE = DATA_DIR / "llm_connect" / "image_name_mapping.json"
-_IMAGE_NAME_MAPPING: AutoMapping[list[str]] = AutoMapping(_MAPPING_FILE, expire_day=14)
+_IMAGE_NAME_MAPPING: AutoMapping[list[str]] | None = None
 _UNION_TYPE = getattr(types, "UnionType", None)
+
+
+def _get_global_image_name_mapping() -> AutoMapping[list[str]]:
+    global _IMAGE_NAME_MAPPING
+    if _IMAGE_NAME_MAPPING is None:
+        # Keep global fallback in-memory only; engine-bound runtime mapping
+        # should be injected via Chat/ImagePrompt from memory engine.
+        _IMAGE_NAME_MAPPING = AutoMapping(expire_day=14)
+    return _IMAGE_NAME_MAPPING
 
 
 async def handle_unload_image(image: str | Path | bytes, cache: dict) -> list[str]:
@@ -519,7 +527,7 @@ class ImagePrompt(BasePrompt):
             cache: dict,
             image_name_mapping: AutoMapping[list[str]] | None = None,
     ):
-        mapping = image_name_mapping if isinstance(image_name_mapping, AutoMapping) else _IMAGE_NAME_MAPPING
+        mapping = image_name_mapping if isinstance(image_name_mapping, AutoMapping) else _get_global_image_name_mapping()
         if self.name and self.name in mapping:
             hash_name_list = mapping[self.name]
 
@@ -1364,7 +1372,7 @@ class Chat:
         self._usage_record: list[LLMUsage] = usage_record
         self._usage_store: LLMUsage = usage_store if isinstance(usage_store, LLMUsage) else _GLOBAL_USAGE
         self._image_name_mapping: AutoMapping[list[str]] = (
-            image_name_mapping if isinstance(image_name_mapping, AutoMapping) else _IMAGE_NAME_MAPPING
+            image_name_mapping if isinstance(image_name_mapping, AutoMapping) else _get_global_image_name_mapping()
         )
         self._context_use: int = 0
 

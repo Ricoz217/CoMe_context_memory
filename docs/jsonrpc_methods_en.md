@@ -36,9 +36,8 @@ Common startup flags:
 5. `--no-clean`: disable cleaning stage
 6. `--no-forgetting`: disable forgetting logic
 7. `--no-auto-manage`: disable automatic maintenance
-8. `--max-context-window`: context window limit
-9. `--max-memory-bytes`: memory budget
-10. `--max-bucket-depth`: max bucket depth
+8. `--max-memory-bytes`: memory budget
+9. `--max-bucket-depth`: max bucket depth
 
 ## 3. JSON-RPC Protocol Rules
 

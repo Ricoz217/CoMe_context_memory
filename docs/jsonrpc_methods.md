@@ -36,9 +36,8 @@ python -m come_context_memory.rpc_server \
 5. `--no-clean`: 关闭清洗链路
 6. `--no-forgetting`: 关闭遗忘逻辑
 7. `--no-auto-manage`: 关闭自动维护
-8. `--max-context-window`: 上下文窗口上限
-9. `--max-memory-bytes`: 内存预算
-10. `--max-bucket-depth`: 桶层级上限
+8. `--max-memory-bytes`: 内存预算
+9. `--max-bucket-depth`: 桶层级上限
 
 ## 3. JSON-RPC 协议规则
 

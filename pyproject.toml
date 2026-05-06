@@ -3,15 +3,24 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "come-context-memory"
-version = "0.1.0"
+name = "context_memory"
+version = "0.3.0"
 description = "Decoupled ContextMemory V3 runtime"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-  { name = "CoMe" }
+  { name = "RicoZ", email = "fiwrst217@gmail.com" }
 ]
 license = { text = "Proprietary" }
+keywords = ["llm", "memory", "context", "rag", "knowledge-base"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+]
 dependencies = [
   "httpx==0.28.1",
   "tiktoken==0.12.0",
@@ -23,6 +32,8 @@ dependencies = [
   "Brotli==1.2.0",
   "zstandard==0.23.0",
   "typing_extensions==4.15.0",
+  "fastapi==0.136.1",
+  "uvicorn==0.46.0",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +41,10 @@ dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
 ]
+
+[project.scripts]
+context-memory-cli = "come_context_memory.cli:main"
+context-memory-rpc = "come_context_memory.rpc_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

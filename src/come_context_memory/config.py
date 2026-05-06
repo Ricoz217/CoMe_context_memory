@@ -105,7 +105,6 @@ def _resolve_root_dir() -> Path:
 
 ROOT_DIR: Path = _resolve_root_dir()
 DATA_DIR: Path = ROOT_DIR / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _resolve_config_path() -> Path:

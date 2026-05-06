@@ -20,7 +20,7 @@
 项目有两类配置：
 
 1. 运行时引擎配置（`ContextMemoryConfig`）
-   - 控制桶深度、上下文窗口、自动维护、query 策略等
+   - 控制桶深度、自动维护、query 策略等
    - 在 Python/CLI/RPC 启动时传入
 
 2. LLM 与代理配置（YAML）
@@ -28,6 +28,11 @@
    - 主要用于 `llm_presets` 和 `proxies`  
 
 运行时配置非空项会覆盖 `config` 文件的配置
+
+上下文窗口规则（重要）：
+1. 引擎不再接受手动 `max_context_window` 配置。
+2. 窗口上限统一由 `llm_presets.<preset>.max_context` 决定。
+3. 若目标 preset 缺少 `max_context`，程序会直接抛异常并中止启动。
 
 ## 3. YAML 结构示例
 
@@ -105,9 +110,8 @@ Logging:
 5. `enable_forgetting`
 6. `auto_manage`
 7. `max_bucket_depth`
-8. `max_context_window`
-9. `max_memory_bytes`
-10. `query_mode_default`（仅支持 `auto|semantic|hybrid`）
+8. `max_memory_bytes`
+9. `query_mode_default`（仅支持 `auto|semantic|hybrid`）
 
 全局召回相关：
 1. `global_recall_top_n`

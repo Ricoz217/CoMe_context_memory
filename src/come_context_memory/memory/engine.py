@@ -78,6 +78,45 @@ def _default_enable_forgetting() -> bool:
         return True
 
 
+def _resolve_effective_max_context_window(llm_preset: str) -> int:
+    try:
+        from come_context_memory import config as _cfg_mod
+    except Exception as exc:
+        raise RuntimeError("failed to load config module while resolving llm max_context") from exc
+
+    preset_name = str(llm_preset or "").strip() or "CONTEXT_MEMORY"
+    user_cfg: dict[str, Any] = {}
+    load_user_cfg = getattr(_cfg_mod, "_load_user_config", None)
+    if callable(load_user_cfg):
+        try:
+            loaded = load_user_cfg()
+            if isinstance(loaded, dict):
+                user_cfg = loaded
+        except Exception:
+            user_cfg = {}
+
+    raw_presets = user_cfg.get("llm_presets", {}) if isinstance(user_cfg, dict) else {}
+    raw_target = raw_presets.get(preset_name) if isinstance(raw_presets, dict) else None
+    if raw_target is None and preset_name != "CONTEXT_MEMORY" and isinstance(raw_presets, dict):
+        raw_target = raw_presets.get("CONTEXT_MEMORY")
+    if isinstance(raw_target, dict) and "max_context" not in raw_target:
+        raise RuntimeError(
+            f"llm preset <{preset_name}> missing key <max_context> in config file; program aborted"
+        )
+
+    try:
+        llm_cfg = _cfg_mod.get_llm(preset_name)
+    except Exception as exc:
+        raise RuntimeError(f"llm preset not found or invalid: {preset_name}") from exc
+
+    llm_max = getattr(llm_cfg, "max_context", None)
+    if isinstance(llm_max, (int, float)) and llm_max > 0:
+        return int(llm_max)
+    raise RuntimeError(
+        f"llm preset <{preset_name}> missing valid max_context; please set llm_presets.{preset_name}.max_context"
+    )
+
+
 class _UnconfiguredStorageProxy:
     def __getattr__(self, name: str) -> Any:
         raise RuntimeError(
@@ -146,7 +185,7 @@ class ContextMemoryConfig:
     llm_preset: str = ""
     image_llm_preset: str = ""
     tool_presets: dict[str, str] = field(default_factory=dict)
-    ask_timeout: float = 180.0
+    ask_timeout: float = 300.0
     auto_resume_pending_jobs: bool = True
     use_mock_llm: bool = False
     enable_cleaning: bool = True
@@ -154,8 +193,7 @@ class ContextMemoryConfig:
     evidence_versions: int = 5
     auto_manage: bool = True
     enable_forgetting: bool = field(default_factory=_default_enable_forgetting)
-    max_bucket_depth: int = 3
-    max_context_window: int = 200_000
+    max_bucket_depth: int = 4
     max_memory_bytes: int = 1_000_000_000
     auto_compress_trigger_ratio: float = 0.70
     auto_split_trigger_ratio: float = 0.50
@@ -196,7 +234,6 @@ class ContextMemoryConfig:
             auto_manage=bool(data.get("auto_manage", True)),
             enable_forgetting=bool(data.get("enable_forgetting", _default_enable_forgetting())),
             max_bucket_depth=int(data.get("max_bucket_depth", 3)),
-            max_context_window=int(data.get("max_context_window", 200_000)),
             max_memory_bytes=int(data.get("max_memory_bytes", 1_000_000_000)),
             auto_compress_trigger_ratio=float(data.get("auto_compress_trigger_ratio", 0.70)),
             auto_split_trigger_ratio=float(data.get("auto_split_trigger_ratio", 0.50)),
@@ -593,7 +630,7 @@ class ContextMemoryEngineV3:
         llm_preset: str = "",
         image_llm_preset: str = "",
         tool_presets: dict[str, str] | None = None,
-        ask_timeout: float = 180.0,
+        ask_timeout: float = 300.0,
         auto_resume_pending_jobs: bool = True,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
@@ -601,8 +638,7 @@ class ContextMemoryEngineV3:
         evidence_versions: int = 5,
         auto_manage: bool = True,
         enable_forgetting: bool | None = None,
-        max_bucket_depth: int = 3,
-        max_context_window: int = 256_000,
+        max_bucket_depth: int = 4,
         max_memory_bytes: int = 1_000_000_000,
         auto_compress_trigger_ratio: float = 0.70,
         auto_split_trigger_ratio: float = 0.50,
@@ -644,7 +680,6 @@ class ContextMemoryEngineV3:
             auto_manage = cfg_obj.auto_manage
             enable_forgetting = cfg_obj.enable_forgetting
             max_bucket_depth = cfg_obj.max_bucket_depth
-            max_context_window = cfg_obj.max_context_window
             max_memory_bytes = cfg_obj.max_memory_bytes
             auto_compress_trigger_ratio = cfg_obj.auto_compress_trigger_ratio
             auto_split_trigger_ratio = cfg_obj.auto_split_trigger_ratio
@@ -698,7 +733,7 @@ class ContextMemoryEngineV3:
             image_name_mapping=self._image_name_mapping_store,
         )
         self.auto_manage = auto_manage
-        self.max_context_window = max(100_000, int(max_context_window))
+        self.max_context_window = _resolve_effective_max_context_window(self.llm_preset)
         self.bm25_cache = BM25IndexCache(max_buckets=64)
         self.memory_manager = MemoryManager(max_bytes=max_memory_bytes)
         self.image_extractor = ImageTextExtractor(
@@ -833,7 +868,7 @@ class ContextMemoryEngineV3:
         self._auto_resume_pending_jobs = bool(cfg_obj.auto_resume_pending_jobs)
         self._enable_forgetting = bool(cfg_obj.enable_forgetting)
         self._max_depth = max(1, int(cfg_obj.max_bucket_depth))
-        self.max_context_window = max(100_000, int(cfg_obj.max_context_window))
+        self.max_context_window = _resolve_effective_max_context_window(self.llm_preset)
         self.memory_manager.max_bytes = max(128 * 1024 * 1024, int(cfg_obj.max_memory_bytes))
         self._auto_compress_trigger_ratio = max(0.0, min(float(cfg_obj.auto_compress_trigger_ratio), 0.70))
         self._auto_split_trigger_ratio = max(0.0, min(float(cfg_obj.auto_split_trigger_ratio), 0.50))
@@ -3659,7 +3694,7 @@ class ContextMemoryEngineV3:
         global_recall_time_budget_ms: int | None = None,
         global_record_boost: dict[str, float] | None = None,
         global_bucket_boost: dict[str, float] | None = None,
-    ) -> tuple[list[QueryMatch], str]:
+    ) -> tuple[list[QueryMatch], str, str]:
         return await self._query_service.resolve_bucket_matches(
             query_text=query_text,
             query_matches=query_matches,
@@ -4902,7 +4937,7 @@ class ContextMemorySystem:
         llm_preset: str = "",
         image_llm_preset: str = "",
         tool_presets: dict[str, str] | None = None,
-        ask_timeout: float = 90.0,
+        ask_timeout: float = 300.0,
         auto_resume_pending_jobs: bool = True,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,
@@ -4956,7 +4991,7 @@ def get_context_memory_engine(
         llm_preset: str = "",
         image_llm_preset: str = "",
         tool_presets: dict[str, str] | None = None,
-        ask_timeout: float = 180.0,
+        ask_timeout: float = 300.0,
         auto_resume_pending_jobs: bool = True,
         use_mock_llm: bool = False,
         enable_cleaning: bool = True,

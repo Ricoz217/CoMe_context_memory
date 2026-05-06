@@ -25,7 +25,6 @@ python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\c
    - `--no-debug-mode`: 跳过调试初始化流程
 
 3. 资源与限制
-   - `--max-context-window <int>`
    - `--max-memory-bytes <int>`
    - `--evidence-versions <int>`
     - `--max-bucket-depth <int>`

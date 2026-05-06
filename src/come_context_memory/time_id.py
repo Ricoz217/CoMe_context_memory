@@ -9,15 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from come_context_memory.config import DATA_DIR
-
-
 _EPOCH_MS = 1_704_067_200_000  # 2024-01-01T00:00:00Z
 _SEQUENCE_BITS = 12
 _SEQUENCE_MASK = (1 << _SEQUENCE_BITS) - 1
 _SAVE_RETRY_COUNT = 3
 _SAVE_RETRY_DELAY_SEC = 0.01
-_DEFAULT_STATE_FILE = DATA_DIR / "runtime" / "time_id_state.json"
+_DEFAULT_STATE_FILE: Path | None = None
 
 _log = logging.getLogger(__name__)
 
@@ -36,7 +33,7 @@ class TimeBasedIdGenerator:
         state_file: str | Path | None = None,
         time_ms_fn: Callable[[], int] | None = None,
     ) -> None:
-        self._state_file = Path(state_file) if state_file else _DEFAULT_STATE_FILE
+        self._state_file: Path | None = Path(state_file) if state_file else _DEFAULT_STATE_FILE
         self._time_ms_fn = time_ms_fn or (lambda: time.time_ns() // 1_000_000)
         self._lock = threading.Lock()
         self._state = self._load_state()
@@ -62,6 +59,8 @@ class TimeBasedIdGenerator:
             return new_id
 
     def _load_state(self) -> _State:
+        if self._state_file is None:
+            return _State()
         if not self._state_file.exists():
             return _State()
         try:
@@ -74,6 +73,8 @@ class TimeBasedIdGenerator:
         )
 
     def _save_state(self) -> None:
+        if self._state_file is None:
+            return
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
         payload = {"last_ms": self._state.last_ms, "sequence": self._state.sequence}
         payload_text = json.dumps(payload, ensure_ascii=True)
@@ -111,7 +112,7 @@ class TimeBasedIdGenerator:
 
 _GLOBAL_GENERATOR: TimeBasedIdGenerator | None = None
 _GLOBAL_LOCK = threading.Lock()
-_GLOBAL_STATE_FILE: Path = _DEFAULT_STATE_FILE
+_GLOBAL_STATE_FILE: Path | None = _DEFAULT_STATE_FILE
 
 
 def configure_global_time_id_state_file(state_file: str | Path) -> None:
@@ -128,7 +129,7 @@ def get_global_time_id_generator(
     state_file: str | Path | None = None,
 ) -> TimeBasedIdGenerator:
     global _GLOBAL_GENERATOR, _GLOBAL_STATE_FILE
-    target_file = Path(state_file) if state_file else _GLOBAL_STATE_FILE
+    target_file: Path | None = Path(state_file) if state_file else _GLOBAL_STATE_FILE
     if _GLOBAL_GENERATOR is not None and _GLOBAL_GENERATOR._state_file == target_file:
         return _GLOBAL_GENERATOR
 

@@ -25,7 +25,6 @@ python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\c
    - `--no-debug-mode`: skip debug initialization flow
 
 3. Resource and limits
-   - `--max-context-window <int>`
    - `--max-memory-bytes <int>`
    - `--evidence-versions <int>`
    - `--max-bucket-depth <int>`

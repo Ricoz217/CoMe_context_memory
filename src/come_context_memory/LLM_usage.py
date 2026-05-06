@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from hashlib import blake2b
 from copy import deepcopy
-from come_context_memory.config import DATA_DIR
 from come_context_memory.utils import atomic_save_json
 from come_context_memory.logger import get_logger
 
@@ -251,11 +250,11 @@ class UsageStorage:
 
 
 class LLMUsage:
-    def __init__(self, data_file: Path, update_callback: Callable = None):
-        if data_file == _GLOBAL_FILE:
+    def __init__(self, data_file: Path | None, update_callback: Callable = None):
+        if _GLOBAL_FILE is not None and data_file == _GLOBAL_FILE:
             raise PermissionError("Can not use global file in sub instance")
 
-        self.data_file = data_file
+        self.data_file = Path(data_file) if data_file else None
         self.callback = update_callback
         self._storage: dict[str, dict[str, dict[str, dict[str, UsageStorage]]]] = {}
         self._last_record: dict[str, UsageStorage] = {}
@@ -277,6 +276,8 @@ class LLMUsage:
         }
 
     def save(self):
+        if self.data_file is None:
+            return
         atomic_save_json(self.to_dict(), self.data_file, indent=4)
 
     def load_dict(self, data: dict):
@@ -308,6 +309,8 @@ class LLMUsage:
         self._storage.update(storage)
 
     def load(self):
+        if self.data_file is None:
+            return
         if not self._storage:
             if self.data_file.is_file():
                 try:
@@ -491,9 +494,8 @@ class LLMUsage:
         return output
 
 
-_GLOBAL_FILE = DATA_DIR / "token_usage" / "usage.json"
-_GLOBAL_USAGE = LLMUsage(Path())
-_GLOBAL_USAGE.data_file = _GLOBAL_FILE
+_GLOBAL_FILE: Path | None = None
+_GLOBAL_USAGE = LLMUsage(None)
 def _auto_flush():
     usage = _GLOBAL_USAGE.overview()
     input_t = sum(usage.get("input", {}).values())
