@@ -9,7 +9,7 @@ description = "A Memory System Base on Context"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-  { name = "RicoZ", email = "fiwrst217@gmail.com" }
+  { name = "RicoZ", email = "fiwrst@163.com" }
 ]
 license = { text = "Proprietary" }
 keywords = ["llm", "memory", "context", "rag", "knowledge-base"]
