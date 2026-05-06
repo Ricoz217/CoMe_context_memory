@@ -1,102 +1,77 @@
-# CoMe ContextMemory (V3 decoupled)
+# CoMe ContextMemory
 
-## Quick Start
+`CoMe_ContextMemory` 是一个面向 LLM 上下文的本地记忆引擎。  
+它不依赖向量数据库，直接把记忆组织为可递归的桶结构，通过 `query`、`optimize`、`compress`、`split` 等流程在本地维护可检索上下文。
 
-1. Install deps
+## 文档入口
+- 项目介绍: [docs/project_introduction.md](docs/project_introduction.md)
+- 文档总览: [docs/README.md](docs/README.md)
+- JSON-RPC 方法: [docs/jsonrpc_methods.md](docs/jsonrpc_methods.md)
+
+## 快速开始
+1. 安装依赖
 ```powershell
 pip install -r requirements.txt
 ```
 
-2. Configure
-- Edit `config/memory.yaml`.
-- Or set env:
+2. 准备配置（自动生成）
+- 默认会在当前工作目录读取或生成 `config/context_memory.yaml`
+- 也可通过环境变量指定：
   - `COME_CONTEXT_MEMORY_ROOT`
   - `COME_CONTEXT_MEMORY_CONFIG`
 
-3. Import engine
+3. Python 调用
 ```python
-from come_context_memory.memory import ContextMemoryConfig, ContextMemoryEngineV3
+from come_context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+
+cfg = ContextMemoryConfig(
+    base_dir="data/my_memory",
+    llm_preset="CONTEXT_MEMORY",
+    use_mock_llm=False,
+)
+engine = ContextMemoryEngineV3(config=cfg)
 ```
 
-## Smoke Commands
+## 三种接口
+1. Python API（主接口）
+2. CLI
+3. JSON-RPC 2.0（FastAPI）
 
-### Baseline smoke
-```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-python tests\smoke_baseline.py --engine-module come_context_memory.memory.engine --optimize-rounds 2 --out docs\smoke_baseline_report.json
-```
-
-### Query concurrency smoke
-```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-python tests\query_concurrency_smoke.py --engine-module come_context_memory.memory.engine --concurrency 20 --out docs\query_concurrency_report.json
-```
-
-### Release Smoke (API + CLI + JSON-RPC)
-```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-python -m pytest tests\test_release_smoke_three_interfaces.py -q
-```
-
-Real-LLM mode:
-```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-$env:COME_RELEASE_SMOKE_REAL_LLM='1'
-python -m pytest tests\test_release_smoke_three_interfaces.py -q
-```
-
-Standalone script smoke:
-```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-python scripts\cli_smoke.py
-python scripts\rpc_smoke.py
-```
-
-Standalone script smoke (real LLM):
-```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-python scripts\cli_smoke.py --real-llm
-python scripts\rpc_smoke.py --real-llm --port 19013
-```
-
-## Interfaces
-
-### CLI
+### CLI 启动
 ```powershell
 $env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
 python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\cli_runtime
 ```
 
-### JSON-RPC 2.0 Server
+### JSON-RPC 启动
 ```powershell
 $env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
 python -m come_context_memory.rpc_server --host 127.0.0.1 --port 9010 --base-dir D:\Python\CoMe_ContextMemory\data\rpc_runtime
 ```
 
-Endpoints:
+服务端点：
 - `POST /jsonrpc`
 - `GET /healthz`
 
-Method list:
-- [JSON-RPC Methods](D:/Python/CoMe_ContextMemory/docs/jsonrpc_methods.md)
+## 核心行为说明
+1. `add_memory_from_file` 支持文本与图片（图片可用 `image_extract_hint` 指导解析），暂不支持 `pdf/docx`。
+2. `add_memory_from_dir` 为自动化批处理入口，返回聚合 `added_keys` 便于手动回滚。
+3. 未显式传 `bucket_id` 时，默认路由到当前 `active_bucket_id`。
+4. `query` 模式仅支持 `auto | semantic | hybrid`：
+   - `auto`: 字面特征强时走 `hybrid`，普通自然语言走 `semantic`
+   - `literal` 已从公开模式移除，传入会报参数错误
+5. 忘却机制可关闭：`ContextMemoryConfig(enable_forgetting=False)`，CLI/RPC 也提供 `--no-forgetting`。
 
-## Notes
-- Tool-call components are preserved in `LLM_connect.py`.
-- Lightweight logger and YAML config are used instead of TIYA config/logger.
+## 烟测命令
+```powershell
+$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
+python -m pytest tests\test_release_smoke_three_interfaces.py -q
+python tests\query_concurrency_smoke.py --engine-module come_context_memory.memory.engine --concurrency 20 --use-mock-llm
+```
 
-## API Notes
-- `add_memory_from_file(...)` and `add_memory_from_dir(...)` now use `image_extract_hint` for image OCR/extraction guidance.
-- `query_hint` is still accepted as a backward-compatible alias, but new code should use `image_extract_hint`.
-- For text files, this hint is ignored; it only affects image ingestion (`detect_file_kind == "image"`).
-- `add_memory_from_file(...)` returns `AddResult.added_keys`; split/shard ingest returns all newly created keys in this call.
-- `add_memory_from_dir(...)` returns aggregated `added_keys` and `per_file_added_keys`.
-- Use `set_active_bucket(bucket_id)` (alias: `switch_active_bucket`) to switch the active bucket explicitly.
-- When an API call does not provide `bucket_id`, routing defaults to the current `active_bucket_id`.
-- Forgetting switch:
-  - `ContextMemoryConfig(enable_forgetting=False)` disables negative-weight forgetting and auto-forget graying.
-  - CLI supports `--no-forgetting`.
-  - JSON-RPC server supports `--no-forgetting`.
-- Query mode:
-  - Supported: `auto`, `semantic`, `hybrid`.
-  - `auto`: literal-like query routes to `hybrid`; normal natural-language query routes to `semantic`.
-  - `literal` has been removed from public mode options and now returns an invalid-parameter error.
+真实 LLM 烟测：
+```powershell
+$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
+$env:COME_RELEASE_SMOKE_REAL_LLM='1'
+python -m pytest tests\test_release_smoke_three_interfaces.py -q
+```
