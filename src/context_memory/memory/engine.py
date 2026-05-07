@@ -210,6 +210,7 @@ class ContextMemoryConfig:
     gc_revision_retention_days: int = 14
     gc_gray_key_retention_days: int = 45
     gc_archived_bucket_retention_days: int = 45
+    query_top_k_default: int = 5
     query_mode_default: str = "auto"
     global_recall_top_n: int = 120
     global_recall_top_m: int = 8
@@ -250,6 +251,7 @@ class ContextMemoryConfig:
             gc_revision_retention_days=int(data.get("gc_revision_retention_days", 14)),
             gc_gray_key_retention_days=int(data.get("gc_gray_key_retention_days", 45)),
             gc_archived_bucket_retention_days=int(data.get("gc_archived_bucket_retention_days", 45)),
+            query_top_k_default=int(data.get("query_top_k_default", 5)),
             query_mode_default=str(data.get("query_mode_default", "auto")),
             global_recall_top_n=int(data.get("global_recall_top_n", 120)),
             global_recall_top_m=int(data.get("global_recall_top_m", 8)),
@@ -317,7 +319,7 @@ class BucketHandle:
         self,
         query_text: str,
         *,
-        top_k: int = 5,
+        top_k: int | None = None,
         use_cache: bool = True,
         mode: str = "auto",
         global_recall_top_n: int | None = None,
@@ -655,6 +657,7 @@ class ContextMemoryEngineV3:
         gc_revision_retention_days: int = 14,
         gc_gray_key_retention_days: int = 45,
         gc_archived_bucket_retention_days: int = 45,
+        query_top_k_default: int = 5,
         query_mode_default: str = "auto",
         global_recall_top_n: int = 120,
         global_recall_top_m: int = 8,
@@ -696,6 +699,7 @@ class ContextMemoryEngineV3:
             gc_revision_retention_days = cfg_obj.gc_revision_retention_days
             gc_gray_key_retention_days = cfg_obj.gc_gray_key_retention_days
             gc_archived_bucket_retention_days = cfg_obj.gc_archived_bucket_retention_days
+            query_top_k_default = cfg_obj.query_top_k_default
             query_mode_default = cfg_obj.query_mode_default
             global_recall_top_n = cfg_obj.global_recall_top_n
             global_recall_top_m = cfg_obj.global_recall_top_m
@@ -783,6 +787,7 @@ class ContextMemoryEngineV3:
         self._gc_revision_retention_days = max(1, int(gc_revision_retention_days))
         self._gc_gray_key_retention_days = max(1, int(gc_gray_key_retention_days))
         self._gc_archived_bucket_retention_days = max(1, int(gc_archived_bucket_retention_days))
+        self._query_top_k_default = max(1, int(query_top_k_default))
         self._query_mode_default = self._normalize_query_mode_value(
             query_mode_default,
             field_name="query_mode_default",
@@ -891,6 +896,7 @@ class ContextMemoryEngineV3:
         self._gc_revision_retention_days = max(1, int(cfg_obj.gc_revision_retention_days))
         self._gc_gray_key_retention_days = max(1, int(cfg_obj.gc_gray_key_retention_days))
         self._gc_archived_bucket_retention_days = max(1, int(cfg_obj.gc_archived_bucket_retention_days))
+        self._query_top_k_default = max(1, int(cfg_obj.query_top_k_default))
         self._query_mode_default = self._normalize_query_mode_value(
             cfg_obj.query_mode_default,
             field_name="query_mode_default",
@@ -3583,7 +3589,7 @@ class ContextMemoryEngineV3:
         self,
         query_text: str,
         *,
-        top_k: int = 5,
+        top_k: int | None = None,
         include_gray: bool = False,
         with_evidence: bool = False,
         use_cache: bool = True,
@@ -3597,9 +3603,10 @@ class ContextMemoryEngineV3:
     ) -> QueryResult:
         self._ensure_query_side_effect_worker()
         mode = self._normalize_query_mode_value(mode, field_name="mode")
+        effective_top_k = max(1, int(top_k if top_k is not None else self._query_top_k_default))
         return await self._query_service.run_query(
             query_text,
-            top_k=top_k,
+            top_k=effective_top_k,
             include_gray=include_gray,
             with_evidence=with_evidence,
             use_cache=use_cache,

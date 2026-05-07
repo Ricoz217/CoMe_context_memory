@@ -153,6 +153,7 @@ def _make_config(args: argparse.Namespace) -> "ContextMemoryConfig":
         max_bucket_depth=args.max_bucket_depth,
         max_memory_bytes=args.max_memory_bytes,
         evidence_versions=args.evidence_versions,
+        query_top_k_default=args.query_top_k_default,
     )
 
 
@@ -307,7 +308,7 @@ async def run_cli(args: argparse.Namespace) -> None:
                     print("usage: query <text> [--top-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]")
                     continue
                 include_gray = "--gray" in parts
-                top_k = 5
+                top_k: int | None = None
                 bucket_id = None
                 mode = "auto"
                 if "--top-k" in parts:
@@ -316,7 +317,7 @@ async def run_cli(args: argparse.Namespace) -> None:
                         try:
                             top_k = int(parts[idx + 1])
                         except ValueError:
-                            top_k = 5
+                            top_k = None
                 if "--bucket" in parts:
                     idx = parts.index("--bucket")
                     if idx + 1 < len(parts):
@@ -457,6 +458,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-memory-bytes", type=int, default=1_000_000_000, help="In-memory cache budget")
     parser.add_argument("--evidence-versions", type=int, default=5, help="Keep latest N evidence versions per key")
     parser.add_argument("--max-bucket-depth", type=int, default=3, help="Max bucket depth")
+    parser.add_argument("--query-top-k-default", type=int, default=5, help="Global default top-k when query call omits --top-k")
     return parser
 
 

@@ -109,3 +109,8 @@ CLI 现在支持：
 
 1. `create_bucket` 需要父桶 id，且支持传入 `ROOT` 表示根桶。
 2. `create_child_bucket` 默认以当前 active bucket 作为父桶。
+
+## Query 默认 top_k（CLI补充）
+
+1. 启动参数新增：`--query-top-k-default <int>`。
+2. `query` 命令若省略 `--top-k`，则使用该全局默认值（默认 `5`）。

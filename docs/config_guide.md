@@ -144,3 +144,10 @@ Logging:
 3. 若启用代理，`proxy_mode` 对应项存在
 4. `query_mode_default` 不是 `literal`
 5. `base_dir` 路径可写
+
+## 9. query_top_k_default（补充）
+
+1. 新增全局配置项：`query_top_k_default`。
+2. 默认值为 `5`。
+3. 当 `query` 调用未传 `top_k` 时，使用该全局默认值。
+4. 当调用显式传入 `top_k` 时，调用参数优先，覆盖全局默认值。

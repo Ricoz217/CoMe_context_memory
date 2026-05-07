@@ -1,45 +1,40 @@
-# JSON-RPC 2.0 接口指南
+# JSON-RPC 2.0 接口规范
 
-本文档面向通过 HTTP 调用 `CoMe_ContextMemory` 的场景，详细说明服务启动方式、协议约定、方法参数与返回结构。
+本文档按标准 API 规格给出 CoMe 的 JSON-RPC 接口：
+1. 方法完整清单
+2. 每个方法的参数表
+3. 必填/可选、类型、默认值、行为说明
 
-## 1. 服务地址与健康检查
+## 1. 服务端点
 
-1. JSON-RPC 端点：`POST /jsonrpc`
+1. JSON-RPC：`POST /jsonrpc`
 2. 健康检查：`GET /healthz`
 
-默认监听地址：
+默认监听：
 1. `host=127.0.0.1`
 2. `port=9010`
 
-示例：
-1. `http://127.0.0.1:9010/jsonrpc`
-2. `http://127.0.0.1:9010/healthz`
+## 2. 服务启动参数
 
-## 2. 启动服务
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `--host` | 否 | `str` | `127.0.0.1` | 监听地址 |
+| `--port` | 否 | `int` | `9010` | 监听端口 |
+| `--base-dir` | 否 | `str` | `./data/rpc_runtime` | 存储目录 |
+| `--preset` | 否 | `str` | `CONTEXT_MEMORY` | 主 LLM 预设 |
+| `--image-preset` | 否 | `str` | `KIMI2.6` | 图像提取预设 |
+| `--timeout` | 否 | `float` | `300.0` | LLM 请求超时（秒） |
+| `--mock` | 否 | `flag` | `false` | 是否使用 mock LLM |
+| `--no-clean` | 否 | `flag` | `false` | 关闭 clean 阶段 |
+| `--no-forgetting` | 否 | `flag` | `false` | 关闭遗忘逻辑 |
+| `--no-debug-mode` | 否 | `flag` | `false` | 跳过 debug 初始化 |
+| `--no-auto-manage` | 否 | `flag` | `false` | 关闭自动维护 |
+| `--max-memory-bytes` | 否 | `int` | `1000000000` | 内存预算 |
+| `--evidence-versions` | 否 | `int` | `5` | 证据版本保留数 |
+| `--max-bucket-depth` | 否 | `int` | `4` | 最大桶层级 |
+| `--query-top-k-default` | 否 | `int` | `5` | query 未传 `top_k` 时的全局默认值 |
 
-示例命令：
-
-```bash
-python -m context_memory.rpc_server \
-  --host 127.0.0.1 \
-  --port 9010 \
-  --base-dir ./data/rpc_runtime \
-  --preset CONTEXT_MEMORY \
-  --image-preset KIMI2.6
-```
-
-常用启动参数：
-1. `--base-dir`: 运行时记忆库目录
-2. `--preset`: 主 LLM preset
-3. `--image-preset`: 图片抽取 preset
-4. `--timeout`: LLM 请求超时秒数
-5. `--no-clean`: 关闭清洗链路
-6. `--no-forgetting`: 关闭遗忘逻辑
-7. `--no-auto-manage`: 关闭自动维护
-8. `--max-memory-bytes`: 内存预算
-9. `--max-bucket-depth`: 桶层级上限
-
-## 3. JSON-RPC 协议规则
+## 3. 协议规则
 
 ### 3.1 请求结构
 
@@ -55,12 +50,6 @@ python -m context_memory.rpc_server \
   }
 }
 ```
-
-字段说明：
-1. `jsonrpc`: 固定 `"2.0"`
-2. `id`: 任意可追踪请求标识（数字/字符串均可）
-3. `method`: 方法名
-4. `params`: 对象
 
 ### 3.2 响应结构
 
@@ -89,31 +78,29 @@ python -m context_memory.rpc_server \
 
 ### 3.3 批量请求
 
-`POST /jsonrpc` 支持数组请求（batch），返回数组响应，顺序与处理结果对应。
+`POST /jsonrpc` 支持数组批量请求。
 
-### 3.4 单次调用超时
+### 3.4 全方法通用参数
 
-所有方法都支持在 `params` 中附带：
-1. `timeout_ms: number`
+所有方法都支持：
 
-超时会返回：
-1. `code = -32001`
-2. `message = "method timeout: <method>"`
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `timeout_ms` | 否 | `number` | `null` | 本次调用超时毫秒数。超时返回 `-32001` |
 
-## 4. Query 模式约束
+## 4. Query 模式规则
 
-`query.mode` 仅支持：
+`mode` 仅支持：
 1. `auto`
 2. `semantic`
 3. `hybrid`
 
-约束：
-1. 传入 `literal` 会返回 `-32602` 参数错误。
-2. `auto` 会自动分流到 `semantic` 或 `hybrid`。
+规则：
+1. `literal` 会被拒绝（`-32602`）。
+2. `query` 未传 `top_k` 时，使用全局 `query_top_k_default`（默认 `5`）。
+3. `query` 显式传入 `top_k` 时，以请求参数为准。
 
 ## 5. 方法总览
-
-### 5.1 基础与状态
 
 1. `ping`
 2. `stats`
@@ -121,260 +108,253 @@ python -m context_memory.rpc_server \
 4. `list_memories`
 5. `set_active_bucket`
 6. `latest_bucket_id`
-7. `get_bucket_context_usage`
+7. `add_memory`
+8. `add_memory_from_file`
+9. `add_memory_from_dir`
+10. `get_memory`
+11. `get_evidence_content`
+12. `export_memory_to_markdown`
+13. `update_memory`
+14. `set_gray`
+15. `delete_memory`
+16. `query`
+17. `force_compress`
+18. `cleanup_expired`
+19. `create_bucket`
+20. `create_child_bucket`
+21. `refresh_bucket_summary`
+22. `split_bucket`
+23. `optimize`
+24. `move_item`
+25. `gc_storage`
+26. `get_bucket_context_usage`
+27. `migrate_storage_paths_to_relative`
 
-### 5.2 记忆写入与修改
+## 6. 各方法参数表
 
-1. `add_memory`
-2. `add_memory_from_file`
-3. `add_memory_from_dir`
-4. `update_memory`
-5. `set_gray`
-6. `delete_memory`
+### 6.1 `ping`
 
-### 5.3 查询与读取
+无业务参数。
 
-1. `query`
-2. `get_memory`
-3. `get_evidence_content`
-4. `export_memory_to_markdown`
+### 6.2 `stats`
 
-### 5.4 桶操作与维护
+无业务参数。
 
-1. `create_bucket`
-2. `create_child_bucket`
-3. `refresh_bucket_summary`
-4. `split_bucket`
-5. `optimize`
-6. `force_compress`
-7. `move_item`
-8. `cleanup_expired`
-9. `gc_storage`
-10. `migrate_storage_paths_to_relative`
+### 6.3 `list_buckets`
 
-## 6. 关键方法参数与返回
+无业务参数。
 
-### 6.1 list_memories
+### 6.4 `list_memories`
 
-参数：
-1. `bucket_id?: str`
-2. `include_gray?: bool`（默认 `true`）
-3. `include_content?: bool`（默认 `false`）
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `bucket_id` | 否 | `str` | `null` | 目标桶，不传走 active bucket |
+| `include_gray` | 否 | `bool` | `true` | 是否包含灰记录 |
+| `include_content` | 否 | `bool` | `false` | 是否返回 content 正文 |
 
-返回：
-1. `memories`: 直属记忆列表
-2. `buckets`: 直属子桶列表
-3. `memory_count` / `bucket_count` / `total_memory_count` 等统计字段
+### 6.5 `set_active_bucket`
 
-### 6.2 add_memory
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `bucket_id` | 是 | `str` | - | 要切换的桶 id |
 
-参数：
-1. `raw_text: str`
-2. `bucket_id?: str`
-3. `topic?: str`
-4. `key?: str`
-5. `evidence_path?: str`
-6. `force_split?: bool`
-7. `create_new_bucket?: bool`
-8. `chunk_max_chars?: int`
-9. `chunk_overlap_chars?: int`
-10. `dedup_in_bucket?: bool`（默认 `false`）
+### 6.6 `latest_bucket_id`
 
-返回（`AddResult`）：
-1. `success: bool`
-2. `bucket_id: str`
-3. `memory_count: int`
-4. `added_keys: list[str]`
-5. `split_performed: bool`
-6. `split_rebuild_detected: bool`
-7. `message: str`
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `bucket_id` | 否 | `str` | `null` | 要追溯的桶 id，不传走 active bucket |
 
-### 6.3 add_memory_from_file
+### 6.7 `add_memory`
 
-参数：
-1. `file_path: str`
-2. `bucket_id?: str`
-3. `topic?: str`
-4. `image_extract_hint?: str`
-5. `query_hint?: str`（兼容字段，建议改用 `image_extract_hint`）
-6. `force_split?: bool`
-7. `create_new_bucket?: bool`
-8. `chunk_max_chars?: int`
-9. `chunk_overlap_chars?: int`
-10. `dedup_in_bucket?: bool`（默认 `true`）
-11. `auto_optimize_after_split?: bool`（默认 `true`）
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `raw_text` | 是 | `str` | - | 原始文本 |
+| `evidence_path` | 否 | `str` | `null` | 证据文件路径 |
+| `key` | 否 | `str` | `null` | 指定 key（高级/内部用） |
+| `topic` | 否 | `str` | `""` | 主题提示 |
+| `bucket_id` | 否 | `str` | `null` | 目标桶 |
+| `force_split` | 否 | `bool` | `false` | 强制切分 |
+| `create_new_bucket` | 否 | `bool` | `false` | 允许流程中创建新桶 |
+| `chunk_max_chars` | 否 | `int` | `null` | 切分最大长度 |
+| `chunk_overlap_chars` | 否 | `int` | `null` | 切分重叠长度 |
+| `dedup_in_bucket` | 否 | `bool` | `false` | 桶内直属分片去重 |
 
-返回：`AddResult`（结构同上）。
+### 6.8 `add_memory_from_file`
 
-### 6.4 add_memory_from_dir
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `file_path` | 是 | `str` | - | 文件路径 |
+| `topic` | 否 | `str` | `""` | 主题提示 |
+| `bucket_id` | 否 | `str` | `null` | 目标桶 |
+| `image_extract_hint` | 否 | `str` | `""` | 图像提取提示词 |
+| `query_hint` | 否 | `str` | `""` | 兼容字段 |
+| `force_split` | 否 | `bool` | `false` | 强制切分 |
+| `create_new_bucket` | 否 | `bool` | `false` | 允许流程中创建新桶 |
+| `chunk_max_chars` | 否 | `int` | `null` | 切分最大长度 |
+| `chunk_overlap_chars` | 否 | `int` | `null` | 切分重叠长度 |
+| `dedup_in_bucket` | 否 | `bool` | `true` | 桶内直属分片去重 |
+| `auto_optimize_after_split` | 否 | `bool` | `true` | 触发 split/rebuild 后自动 optimize 一次 |
 
-参数：
-1. `dir_path: str`
-2. `bucket_id?: str`
-3. `auto_create_sub_buckets?: bool`（默认 `false`）
-4. `image_extract_hint?: str`
-5. `force_split?: bool`（默认 `true`）
-6. `create_new_bucket?: bool`
-7. `chunk_max_chars?: int`
-8. `chunk_overlap_chars?: int`
-9. `dedup_in_bucket?: bool`（默认 `true`）
-10. `collect_token_usage?: bool`（默认 `false`）
+### 6.9 `add_memory_from_dir`
 
-返回（批处理统计）：
-1. `success_count: int`
-2. `fail_count: int`
-3. `skip_duplicate_count: int`
-4. `added_keys: list[str]`
-5. `per_file_added_keys: dict[str, list[str]]`
-6. `failures: list[dict]`
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `dir_path` | 是 | `str` | - | 目录路径 |
+| `bucket_id` | 否 | `str` | `null` | 目标桶 |
+| `auto_create_sub_buckets` | 否 | `bool` | `false` | 是否按子目录自动建桶 |
+| `image_extract_hint` | 否 | `str` | `""` | 图像提取提示词 |
+| `force_split` | 否 | `bool` | `true` | 强制切分 |
+| `create_new_bucket` | 否 | `bool` | `false` | 允许流程中创建新桶 |
+| `chunk_max_chars` | 否 | `int` | `null` | 切分最大长度 |
+| `chunk_overlap_chars` | 否 | `int` | `null` | 切分重叠长度 |
+| `dedup_in_bucket` | 否 | `bool` | `true` | 桶内直属分片去重 |
+| `collect_token_usage` | 否 | `bool` | `false` | 是否统计本批 token 消耗 |
 
-### 6.5 query
+### 6.10 `get_memory`
 
-参数：
-1. `query_text: str`
-2. `bucket_id?: str`
-3. `top_k?: int`（默认 `5`）
-4. `include_gray?: bool`（默认 `false`）
-5. `with_evidence?: bool`（默认 `false`）
-6. `use_cache?: bool`（默认 `true`）
-7. `max_depth?: int`
-8. `mode?: str`（`auto|semantic|hybrid`）
-9. `global_recall_top_n?: int`
-10. `global_recall_top_m?: int`
-11. `global_recall_depth_limit?: int`
-12. `global_recall_time_budget_ms?: int`
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `key` | 是 | `str` | - | 记忆 key |
+| `with_evidence` | 否 | `bool` | `false` | 是否包含证据信息 |
+| `revision` | 否 | `str` | `null` | 指定 revision 查询 |
 
-返回（`QueryResult`）：
-1. `success: bool`
-2. `answer: str`
-3. `matches: list[QueryMatch]`
-4. `sub_answer: str`
-5. `sub_answer_from: str`（递归替换来源 key）
-6. `result_source: str`
-7. `degraded: bool`
-8. `degraded_reason: str`
-9. `failure_stage: str`
-10. `message: str`
+### 6.11 `get_evidence_content`
 
-### 6.6 delete_memory
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `key` | 是 | `str` | - | 记忆 key |
+| `revision` | 否 | `str` | `null` | 指定 revision |
 
-参数：
-1. `key: str`
-2. `reason?: str`
+### 6.12 `export_memory_to_markdown`
 
-说明：
-1. JSON-RPC 只接收字符串 key，不接收 Python 对象。
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `memory_id` | 是 | `str` | - | 要导出的记忆 id |
 
-### 6.7 optimize
+### 6.13 `update_memory`
 
-参数：
-1. `bucket_id?: str`
-2. `reason?: str`（默认 `manual_optimize`）
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `key` | 是 | `str` | - | 记忆 key |
+| `patch_text` | 是 | `str` | - | 修改文本 |
+| `evidence_path` | 否 | `str` | `null` | 证据文件路径 |
 
-返回：
-1. `OptimizeResult`（含 `success`、`reason_code`、`created_buckets`、`moved_items`、`coverage_ratio` 等字段）
+### 6.14 `set_gray`
 
-### 6.8 force_compress
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `key` | 是 | `str` | - | 记忆 key |
+| `gray` | 否 | `bool` | `true` | 目标灰状态 |
+| `reason` | 否 | `str` | `"manual"` | 原因 |
 
-参数：
-1. `bucket_id?: str`
-2. `reason?: str`（默认 `manual`）
+### 6.15 `delete_memory`
 
-返回：
-1. `CompressResult`（含 `success`、`message`、`dropped_count`、`kept_count` 等字段）
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `key` | 是 | `str` | - | 记忆 key |
+| `reason` | 否 | `str` | `""` | 原因 |
+
+### 6.16 `query`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `query_text` | 是 | `str` | - | 查询文本 |
+| `top_k` | 否 | `int` | `null` | 不传时走 `query_top_k_default` |
+| `include_gray` | 否 | `bool` | `false` | 是否包含灰记录 |
+| `with_evidence` | 否 | `bool` | `false` | 是否返回证据信息 |
+| `use_cache` | 否 | `bool` | `true` | 是否启用缓存 |
+| `bucket_id` | 否 | `str` | `null` | 起始查询桶 |
+| `max_depth` | 否 | `int` | `null` | 递归深度上限 |
+| `mode` | 否 | `str` | `"auto"` | `auto|semantic|hybrid` |
+| `global_recall_top_n` | 否 | `int` | `null` | 覆盖全局召回 top_n |
+| `global_recall_top_m` | 否 | `int` | `null` | 覆盖全局召回 top_m |
+| `global_recall_depth_limit` | 否 | `int` | `null` | 覆盖召回深度限制 |
+| `global_recall_time_budget_ms` | 否 | `int` | `null` | 覆盖召回时间预算 |
+
+### 6.17 `force_compress`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `reason` | 否 | `str` | `"manual"` | 压缩原因 |
+| `bucket_id` | 否 | `str` | `null` | 目标桶 |
+
+### 6.18 `cleanup_expired`
+
+无业务参数。
+
+### 6.19 `create_bucket`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `parent_bucket_id` | 是 | `str` | - | 父桶 id（支持 `ROOT`） |
+| `title` | 是 | `str` | - | 桶标题 |
+| `summary` | 否 | `str` | `""` | 桶摘要 |
+| `content` | 否 | `str` | `""` | 桶内容 |
+| `summary_locked` | 否 | `bool` | `false` | 是否锁定摘要 |
+
+### 6.20 `create_child_bucket`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `title` | 是 | `str` | - | 桶标题 |
+| `parent_bucket_id` | 否 | `str` | `null` | 父桶 id，不传走 active bucket |
+| `summary` | 否 | `str` | `""` | 桶摘要 |
+| `content` | 否 | `str` | `""` | 桶内容 |
+| `summary_locked` | 否 | `bool` | `false` | 是否锁定摘要 |
+
+### 6.21 `refresh_bucket_summary`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `bucket_id` | 是 | `str` | - | 目标桶 |
+| `force` | 否 | `bool` | `false` | 是否强制刷新 |
+
+### 6.22 `split_bucket`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `bucket_id` | 是 | `str` | - | 目标桶 |
+| `reason` | 否 | `str` | `"manual"` | 原因 |
+| `target_groups_min` | 否 | `int` | `2` | 最小分组数 |
+| `target_groups_max` | 否 | `int` | `10` | 最大分组数 |
+
+### 6.23 `optimize`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `bucket_id` | 否 | `str` | `null` | 目标桶，不传走 active bucket |
+| `reason` | 否 | `str` | `"manual_optimize"` | 原因 |
+
+### 6.24 `move_item`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `key` | 是 | `str` | - | 要移动的 key |
+| `target_bucket_id` | 是 | `str` | - | 目标桶 id |
+| `reason` | 否 | `str` | `"manual_move"` | 原因 |
+
+### 6.25 `gc_storage`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `dry_run` | 否 | `bool` | `true` | 是否仅预演 |
+| `reason` | 否 | `str` | `"manual_gc"` | 原因 |
+
+### 6.26 `get_bucket_context_usage`
+
+| 参数 | 必填 | 类型 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `bucket_id` | 否 | `str` | `null` | 目标桶，不传走 active bucket |
+
+### 6.27 `migrate_storage_paths_to_relative`
+
+无业务参数。
 
 ## 7. 错误码
 
-1. `-32600`: invalid request
-2. `-32601`: method not found
-3. `-32602`: invalid params
-4. `-32001`: method timeout
-5. `-32010`: context overflow 相关运行时错误
-6. `-32000`: 通用内部错误
-
-## 8. Python 调用示例
-
-### 8.1 最小请求封装
-
-```python
-import requests
-
-RPC_URL = "http://127.0.0.1:9010/jsonrpc"
-
-
-def rpc_call(method: str, params: dict, req_id: int = 1):
-    payload = {
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "method": method,
-        "params": params,
-    }
-    resp = requests.post(RPC_URL, json=payload, timeout=30)
-    resp.raise_for_status()
-    body = resp.json()
-    if "error" in body:
-        raise RuntimeError(f"RPC error {body['error']['code']}: {body['error']['message']}")
-    return body["result"]
-```
-
-### 8.2 创建桶、入库、查询
-
-```python
-root = rpc_call("set_active_bucket", {"bucket_id": "bucket_20260501_xxx"})
-print("active:", root)
-
-add_res = rpc_call("add_memory_from_file", {
-    "file_path": "D:/work/file_cache.py",
-    "dedup_in_bucket": True,
-    "auto_optimize_after_split": True,
-})
-print("added_keys:", add_res.get("added_keys", []))
-
-query_res = rpc_call("query", {
-    "query_text": "如何写入缓存",
-    "top_k": 5,
-    "mode": "hybrid",
-    "global_recall_top_n": 120,
-    "global_recall_top_m": 8,
-})
-print("answer:", query_res["answer"])
-for m in query_res.get("matches", []):
-    print(m["key"], m.get("score"), m.get("summary"))
-```
-
-### 8.3 批量请求（batch）
-
-```python
-import requests
-
-payload = [
-    {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}},
-    {"jsonrpc": "2.0", "id": 2, "method": "stats", "params": {}},
-]
-resp = requests.post("http://127.0.0.1:9010/jsonrpc", json=payload, timeout=30)
-resp.raise_for_status()
-print(resp.json())
-```
-
-### 8.4 带 timeout_ms 的单次调用
-
-```python
-res = rpc_call("query", {
-    "query_text": "输入缓存逻辑在哪",
-    "top_k": 5,
-    "mode": "auto",
-    "timeout_ms": 2500
-})
-print(res["answer"])
-```
-
-## 多接口并用约束
-
-1. 同一个记忆库（同一 `BASE_DIR`）只能有一个写入进程。
-2. 若 CLI/Python/RPC 需要并行使用，建议统一通过一个 RPC 进程作为写入入口。
-3. 避免多个进程直接写同一 `BASE_DIR`，以免出现多写者风险。
-
-## create_bucket / create_child_bucket 语义补充
-
-1. `create_bucket` 需要 `parent_bucket_id`，支持传入 `ROOT` 显式指向根桶。
-2. `create_child_bucket` 默认使用当前 active bucket 作为父桶，`parent_bucket_id` 可选。
+1. `-32600`：invalid request
+2. `-32601`：method not found
+3. `-32602`：invalid params
+4. `-32001`：method timeout
+5. `-32010`：上下文超窗类错误
+6. `-32000`：通用内部错误

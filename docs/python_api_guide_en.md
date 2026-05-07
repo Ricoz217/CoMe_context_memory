@@ -49,7 +49,7 @@ asyncio.run(main())
    - `delete_memory(key_or_obj, ...)`
 
 2. Query and read
-   - `query(query_text, top_k=5, mode="auto", ...)`
+   - `query(query_text, top_k=None, mode="auto", ...)`
    - `list_memories(include_gray=False, include_content=False, ...)`
    - `get_memory(key, with_evidence=False, revision=None)`
    - `get_evidence_content(key, revision=None)`
@@ -80,6 +80,10 @@ Public modes:
 
 Rule:
 1. `auto` routes literal-heavy queries to `hybrid`, and regular natural-language queries to `semantic`.
+
+Top-k default behavior:
+1. If `top_k` is omitted (`None`), engine uses global config `query_top_k_default` (default `5`).
+2. If `top_k` is explicitly provided, call value takes precedence.
 
 ## 5. Batch Ingest Return Values
 

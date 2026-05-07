@@ -141,3 +141,9 @@ engine.shutdown(wait=False)
 
 1. `create_bucket(parent_bucket_id=...)` 支持传入 `ROOT` 作为根桶快捷写法。
 2. `create_child_bucket(...)` 在未传 `parent_bucket_id` 时，默认使用当前 active bucket。
+
+## Query 默认 top_k（补充）
+
+1. `query(...)` 的 `top_k` 现在支持不传（即 `None`）。
+2. 不传时使用全局配置 `query_top_k_default`（默认 `5`）。
+3. 显式传入 `top_k` 时，调用参数优先。

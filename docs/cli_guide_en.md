@@ -28,6 +28,7 @@ python -m context_memory.cli --base-dir <Your Memory Base Dir> --config <Your 'c
    - `--max-memory-bytes <int>`
    - `--evidence-versions <int>`
    - `--max-bucket-depth <int>`
+   - `--query-top-k-default <int>` (global default query top-k when command omits `--top-k`)
 
 ## 3. Command Overview
 
@@ -77,6 +78,7 @@ CLI supports only:
 Notes:
 1. `literal` has been removed and will raise a parameter error.
 2. `auto` routes query text to `semantic` or `hybrid` automatically.
+3. If `query` command omits `--top-k`, engine uses global `query_top_k_default` (default `5`).
 
 ## 5. Example Flow
 

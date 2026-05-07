@@ -39,3 +39,4 @@ scripts/
 version/
 config/
 .build_check/
+/MANIFEST.in

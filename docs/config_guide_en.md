@@ -110,7 +110,8 @@ Common fields:
 6. `auto_manage`
 7. `max_bucket_depth`
 8. `max_memory_bytes`
-9. `query_mode_default` (only `auto|semantic|hybrid`)
+9. `query_top_k_default` (default top-k for query when caller does not pass `top_k`)
+10. `query_mode_default` (only `auto|semantic|hybrid`)
 
 Global recall fields:
 1. `global_recall_top_n`
@@ -125,6 +126,11 @@ Global recall fields:
    - `auto`
    - `semantic`
    - `hybrid`
+
+2. `query_top_k_default`:
+   - default is `5`
+   - applies when Python API / CLI / JSON-RPC query call does not provide `top_k`
+   - explicit `top_k` in a call always overrides this global default
 
 ## 7. Recommended Usage
 
