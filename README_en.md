@@ -17,7 +17,7 @@ It does not rely on vector databases. Instead, it organizes memory in a bucket-t
 
 ### 1. Install via pip (recommended)
 ```powershell
-pip install -i https://test.pypi.org/simple/ come-context-memory
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple come-context-memory
 ```
 
 After installation, you can directly use:
