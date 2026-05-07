@@ -53,7 +53,7 @@ DEFAULTS: dict[str, Any] = {
         "CompressImageSizeFactor": 0.7,
     },
     "LLM": {
-        "ChatRequestTimeout": 300,
+        "ChatRequestTimeout": 900,
     },
     "llm_presets": {
         "CONTEXT_MEMORY": {

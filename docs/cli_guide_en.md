@@ -5,7 +5,7 @@ This document describes common startup parameters and commands for `come_context
 ## 1. Startup
 
 ```powershell
-python -m context_memory.cli --base-dir <Your Memory Base Dir> --config <Your 'context_memory.yaml' path>
+python -m context_memory.cli --base-dir <Your Memory Base Dir>
 ```
 
 ## 2. Startup Arguments
@@ -17,6 +17,7 @@ python -m context_memory.cli --base-dir <Your Memory Base Dir> --config <Your 'c
    - `--image-preset <name>`: image extraction preset (default `KIMI2.6`)
    - `--timeout <sec>`: LLM timeout
    - `--mock`: use mock LLM
+   - `--query-top-k-default <int>`: set global `query` top-k, default 5.
 
 2. Feature switches
    - `--no-clean`: disable clean stage

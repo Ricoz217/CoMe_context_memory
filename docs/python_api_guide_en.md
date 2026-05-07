@@ -142,3 +142,8 @@ This releases internal resources such as query CPU thread pools.
 1. One memory store (`same BASE_DIR`) must follow a single-writer model.
 2. Running Python API, CLI, and JSON-RPC as separate processes on the same `BASE_DIR` can cause multi-writer risk.
 3. If you need multiple interfaces at the same time, use one service process as the write gateway (recommended: JSON-RPC).
+
+## 10. create_bucket / create_child_bucket
+
+1. `create_bucket(parent_bucket_id=...)` support parse "ROOT" for root_bucket.
+2. `create_child_bucket(...)` when not parse in `parent_bucket_id`, use active bucket by default.

@@ -5,18 +5,19 @@
 ## 1. 启动方式
 
 ```powershell
-python -m context_memory.cli --base-dir <Your Memory Base Dir> --config <Your 'context_memory.yaml' path>
+python -m context_memory.cli --base-dir <Your Memory Base Dir>
 ```
 
 ## 2. 启动参数
 
 1. 运行与模型
    - `--base-dir <path>`: 记忆库存储目录
-   - - `--config <path>`: 配置文件路径 (等同于设置 `COME_CONTEXT_MEMORY_CONFIG`)
+   - - `--config <path>`: 配置文件路径 (等同于设置 `COME_CONTEXT_MEMORY_CONFIG`)，不填会用默认路径
    - `--preset <name>`: 主 LLM preset（默认 `CONTEXT_MEMORY`）
    - `--image-preset <name>`: 图片抽取 preset（默认 `KIMI2.6`）
    - `--timeout <sec>`: LLM 超时
    - `--mock`: 使用 mock LLM
+   - `--query-top-k-default <int>` : 设置默认的 `query` top-k，默认为5
 
 2. 功能开关
    - `--no-clean`: 关闭 clean 阶段
@@ -109,8 +110,3 @@ CLI 现在支持：
 
 1. `create_bucket` 需要父桶 id，且支持传入 `ROOT` 表示根桶。
 2. `create_child_bucket` 默认以当前 active bucket 作为父桶。
-
-## Query 默认 top_k（CLI补充）
-
-1. 启动参数新增：`--query-top-k-default <int>`。
-2. `query` 命令若省略 `--top-k`，则使用该全局默认值（默认 `5`）。
