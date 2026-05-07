@@ -22,6 +22,7 @@
 1. 运行时引擎配置（`ContextMemoryConfig`）
    - 控制桶深度、自动维护、query 策略等
    - 在 Python/CLI/RPC 启动时传入
+   - 运行时配置采用非空值覆盖更新方式，即: 单例模式无需每个入口都传递配置，最后一个传递配置的入口，会将非空值全局自动更新。
 
 2. LLM 与代理配置（YAML）
    - 由 `config/context_memory.yaml` 提供

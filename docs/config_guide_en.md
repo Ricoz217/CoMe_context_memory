@@ -22,6 +22,9 @@ The project has two config layers:
 1. Runtime engine config (`ContextMemoryConfig`)
    - Controls bucket depth, auto-maintenance, query strategy, etc.
    - Passed at Python/CLI/RPC startup.
+   - runtime config will automatically update non-null value.  
+   singleton engine object no need to parse config to every instance,  
+   the last config parse will update any non-null setting.  
 
 2. LLM and proxy config (YAML)
    - Provided by `config/context_memory.yaml`.
