@@ -19,7 +19,7 @@ English version: [README_en.md](README_en.md)
 
 ### 1. 通过 pip 安装（推荐）
 ```powershell
-pip install -i https://test.pypi.org/simple/ come-context-memory
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple come-context-memory
 ```
 
 安装后可直接使用：

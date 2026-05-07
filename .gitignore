@@ -29,15 +29,13 @@ coverage.xml
 Thumbs.db
 
 # Local runtime data
-cache/
-logs/
-data/
-/scripts/*
-/scripts/__pycache__/
+/cache/
+/logs/
+/data/
 /tests_data/
-scripts/
-version/
-config/
-.build_check/
-MANIFEST.in
-releases/
+/scripts/
+/version/
+/config/
+/MANIFEST.in
+/releases/
+/example/
