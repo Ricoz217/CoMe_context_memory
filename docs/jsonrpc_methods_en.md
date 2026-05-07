@@ -156,6 +156,10 @@ Rules:
 9. `gc_storage`
 10. `migrate_storage_paths_to_relative`
 
+Notes:
+1. `create_bucket` requires `parent_bucket_id`; you may pass `ROOT` to target root bucket explicitly.
+2. `create_child_bucket` uses current active bucket by default; `parent_bucket_id` is optional.
+
 ## 6. Key Methods: Parameters and Returns
 
 ### 6.1 list_memories

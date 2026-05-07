@@ -1,18 +1,18 @@
 # CLI 使用指南
 
-本文档说明 `come_context_memory.cli` 的常用启动参数与命令。
+本文档说明 `context_memory.cli` 的常用启动参数与命令。
 
 ## 1. 启动方式
 
 ```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\cli_runtime
+python -m context_memory.cli --base-dir <Your Memory Base Dir> --config <Your 'context_memory.yaml' path>
 ```
 
 ## 2. 启动参数
 
 1. 运行与模型
    - `--base-dir <path>`: 记忆库存储目录
+   - - `--config <path>`: 配置文件路径 (等同于设置 `COME_CONTEXT_MEMORY_CONFIG`)
    - `--preset <name>`: 主 LLM preset（默认 `CONTEXT_MEMORY`）
    - `--image-preset <name>`: 图片抽取 preset（默认 `KIMI2.6`）
    - `--timeout <sec>`: LLM 超时
@@ -59,7 +59,7 @@ python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\c
 5. 桶与系统
    - `buckets`
    - `create_bucket <parent_bucket_id> <title> [summary] [--lock-summary]`
-   - `create_child_bucket <parent_bucket_id> <title> [summary] [--lock-summary]`
+   - `create_child_bucket <title> [summary] [--lock-summary]`
    - `switch_bucket <bucket_id>`
    - `latest_bucket [bucket_id]`
    - `refresh_summary <bucket_id> [--force]`
@@ -98,3 +98,14 @@ list --with-content
 1. 同一个记忆库（同一 `BASE_DIR`）采用单写者模型。
 2. 不要让 CLI 与其他写入接口同时写同一 `BASE_DIR`。
 3. 如需多入口并用，建议统一通过一个服务进程进行写入（推荐 JSON-RPC）。
+
+## 配置文件路径（新增）
+
+CLI 现在支持：
+1. `--config <path>`：显式指定配置文件路径
+2. 其行为等价于设置环境变量 `COME_CONTEXT_MEMORY_CONFIG`
+
+## create_bucket / create_child_bucket 语义补充
+
+1. `create_bucket` 需要父桶 id，且支持传入 `ROOT` 表示根桶。
+2. `create_child_bucket` 默认以当前 active bucket 作为父桶。

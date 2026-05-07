@@ -373,3 +373,8 @@ print(res["answer"])
 1. 同一个记忆库（同一 `BASE_DIR`）只能有一个写入进程。
 2. 若 CLI/Python/RPC 需要并行使用，建议统一通过一个 RPC 进程作为写入入口。
 3. 避免多个进程直接写同一 `BASE_DIR`，以免出现多写者风险。
+
+## create_bucket / create_child_bucket 语义补充
+
+1. `create_bucket` 需要 `parent_bucket_id`，支持传入 `ROOT` 显式指向根桶。
+2. `create_child_bucket` 默认使用当前 active bucket 作为父桶，`parent_bucket_id` 可选。

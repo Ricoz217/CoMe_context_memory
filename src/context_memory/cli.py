@@ -3,12 +3,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import shlex
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
+if TYPE_CHECKING:
+    from context_memory import ContextMemoryConfig, ContextMemoryEngineV3
 
 
 def _default_enable_forgetting_from_config() -> bool:
@@ -41,7 +43,7 @@ Commands:
   list [--gray] [--bucket <bucket_id>] [--with-content]
   buckets
   create_bucket <parent_bucket_id> <title> [summary] [--lock-summary]
-  create_child_bucket <parent_bucket_id> <title> [summary] [--lock-summary]
+  create_child_bucket <title> [summary] [--lock-summary]
   switch_bucket <bucket_id>
   latest_bucket [bucket_id]
   refresh_summary <bucket_id> [--force]
@@ -76,7 +78,7 @@ def _print_json(data: Any) -> None:
     print(json.dumps(_jsonable(data), ensure_ascii=False, indent=2))
 
 
-async def _read_input(prompt: str = "come-memory> ") -> str:
+async def _read_input(prompt: str = "context_memory > ") -> str:
     return await asyncio.to_thread(input, prompt)
 
 
@@ -94,8 +96,14 @@ def _remove_flag_tokens(tokens: list[str], raw: str, flag: str, takes_value: boo
     return " ".join(out.split())
 
 
-def _parse_common_split_flags(parts: list[str]) -> tuple[bool, bool, int | None, int | None, str | None]:
-    force_split = "--force-split" in parts
+def _parse_common_split_flags(
+    parts: list[str],
+    *,
+    default_force_split: bool,
+) -> tuple[bool, bool, int | None, int | None, str | None]:
+    force_split = bool(default_force_split)
+    if "--force-split" in parts:
+        force_split = True
     create_new_bucket = "--create-new-bucket" in parts
     chunk_max_chars = None
     chunk_overlap_chars = None
@@ -122,7 +130,15 @@ def _parse_common_split_flags(parts: list[str]) -> tuple[bool, bool, int | None,
     return force_split, create_new_bucket, chunk_max_chars, chunk_overlap_chars, bucket_id
 
 
-def _make_config(args: argparse.Namespace) -> ContextMemoryConfig:
+def _apply_runtime_env(args: argparse.Namespace) -> None:
+    config_path = str(getattr(args, "config", "") or "").strip()
+    if config_path:
+        os.environ["COME_CONTEXT_MEMORY_CONFIG"] = str(Path(config_path).expanduser().resolve())
+
+
+def _make_config(args: argparse.Namespace) -> "ContextMemoryConfig":
+    from context_memory import ContextMemoryConfig
+
     enable_forgetting = False if bool(args.no_forgetting) else _default_enable_forgetting_from_config()
     return ContextMemoryConfig(
         base_dir=args.base_dir,
@@ -141,6 +157,8 @@ def _make_config(args: argparse.Namespace) -> ContextMemoryConfig:
 
 
 async def run_cli(args: argparse.Namespace) -> None:
+    from context_memory import ContextMemoryEngineV3
+
     engine = ContextMemoryEngineV3(config=_make_config(args))
 
     print("CoMe ContextMemory CLI")
@@ -170,7 +188,10 @@ async def run_cli(args: argparse.Namespace) -> None:
 
         try:
             if cmd == "add":
-                force_split, create_new_bucket, chunk_max, chunk_overlap, bucket_id = _parse_common_split_flags(parts)
+                force_split, create_new_bucket, chunk_max, chunk_overlap, bucket_id = _parse_common_split_flags(
+                    parts,
+                    default_force_split=False,
+                )
                 text = raw[len(parts[0]):].strip()
                 text = _remove_flag_tokens(parts, text, "--bucket", takes_value=True)
                 text = _remove_flag_tokens(parts, text, "--force-split", takes_value=False)
@@ -194,7 +215,10 @@ async def run_cli(args: argparse.Namespace) -> None:
                 if len(parts) < 2:
                     print("usage: add_file <path> [topic] [--bucket <bucket_id>] [--force-split] [--create-new-bucket]")
                     continue
-                force_split, create_new_bucket, chunk_max, chunk_overlap, bucket_id = _parse_common_split_flags(parts)
+                force_split, create_new_bucket, chunk_max, chunk_overlap, bucket_id = _parse_common_split_flags(
+                    parts,
+                    default_force_split=True,
+                )
                 file_path = parts[1]
                 topic = ""
                 if len(parts) >= 3 and not parts[2].startswith("--"):
@@ -214,7 +238,10 @@ async def run_cli(args: argparse.Namespace) -> None:
                 if len(parts) < 2:
                     print("usage: add_dir <dir> [--bucket <bucket_id>] [--auto-sub-buckets]")
                     continue
-                force_split, create_new_bucket, chunk_max, chunk_overlap, bucket_id = _parse_common_split_flags(parts)
+                force_split, create_new_bucket, chunk_max, chunk_overlap, bucket_id = _parse_common_split_flags(
+                    parts,
+                    default_force_split=True,
+                )
                 auto_sub = "--auto-sub-buckets" in parts
                 result = await engine.add_memory_from_dir(
                     parts[1],
@@ -339,19 +366,17 @@ async def run_cli(args: argparse.Namespace) -> None:
                 )
 
             elif cmd == "create_child_bucket":
-                if len(parts) < 3:
-                    print("usage: create_child_bucket <parent_bucket_id> <title> [summary] [--lock-summary]")
+                if len(parts) < 2:
+                    print("usage: create_child_bucket <title> [summary] [--lock-summary]")
                     continue
-                parent = parts[1]
-                title = parts[2]
+                title = parts[1]
                 summary_locked = "--lock-summary" in parts
                 summary = ""
-                if len(parts) >= 4:
+                if len(parts) >= 3:
                     summary = raw.split(title, 1)[1].strip()
                     summary = _remove_flag_tokens(parts, summary, "--lock-summary", takes_value=False)
                 _print_json(
                     await engine.create_child_bucket(
-                        parent,
                         title=title,
                         summary=summary,
                         summary_locked=summary_locked,
@@ -420,6 +445,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(Path(__file__).resolve().parents[2] / "data" / "cli_runtime"),
         help="Storage base directory",
     )
+    parser.add_argument("--config", default="", help="Explicit config file path (sets COME_CONTEXT_MEMORY_CONFIG)")
     parser.add_argument("--preset", default="CONTEXT_MEMORY", help="LLM preset name")
     parser.add_argument("--image-preset", default="KIMI2.6", help="Image extract LLM preset name")
     parser.add_argument("--timeout", type=float, default=180.0, help="LLM ask timeout in seconds")
@@ -436,6 +462,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def _main() -> None:
     args = build_parser().parse_args()
+    _apply_runtime_env(args)
     await run_cli(args)
 
 

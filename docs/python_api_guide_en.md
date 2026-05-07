@@ -59,7 +59,7 @@ asyncio.run(main())
    - `set_bucket(title, ...)`
    - `set_active_bucket(bucket_id)` / `switch_active_bucket(bucket_id)`
    - `create_bucket(parent_bucket_id, ...)`
-   - `create_child_bucket(parent_bucket_id, ...)`
+   - `create_child_bucket(parent_bucket_id=None, ...)`
    - `split_bucket(bucket_id, ...)`
    - `optimize(bucket_id=None, ...)`
    - `force_compress(bucket_id=None, ...)`
@@ -104,6 +104,8 @@ Notes:
 1. If `bucket_id` is omitted, calls use current `active_bucket_id`.
 2. It is recommended to call `set_active_bucket(...)` at session start.
 3. `latest_bucket_id(...)` can resolve to the latest bucket after optimize/split.
+4. `create_bucket(parent_bucket_id=...)` accepts `ROOT` as an explicit parent shortcut.
+5. `create_child_bucket(...)` defaults to the current active bucket when `parent_bucket_id` is omitted.
 
 ## 7. File Ingest Notes
 

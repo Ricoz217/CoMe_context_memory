@@ -1640,7 +1640,11 @@ class ContextMemoryEngineV3:
         return changed
 
     def _resolve_bucket_id(self, bucket_id: str | None) -> str:
-        resolved = bucket_id or self.active_bucket_id()
+        raw = str(bucket_id or "").strip()
+        if raw.upper() == "ROOT":
+            resolved = self.root_bucket_id()
+        else:
+            resolved = raw or self.active_bucket_id()
         final_id, lineage = self._resolve_bucket_redirect_chain(resolved)
         if len(lineage) > 1 and final_id:
             self._sync_bucket_mapping_redirect(old_ids=set(lineage[:-1]), new_id=final_id)
@@ -1807,15 +1811,16 @@ class ContextMemoryEngineV3:
 
     async def create_child_bucket(
         self,
-        parent_bucket_id: str,
+        parent_bucket_id: str | None = None,
         *,
         title: str,
         summary: str = "",
         content: str = "",
         summary_locked: bool = False,
     ) -> BucketInfo:
+        target_parent = str(parent_bucket_id or "").strip() or self.active_bucket_id()
         return await self.create_bucket(
-            parent_bucket_id,
+            target_parent,
             title=title,
             summary=summary,
             content=content,

@@ -193,7 +193,7 @@ def _handlers(engine: ContextMemoryEngineV3) -> dict[str, Callable[[dict[str, An
             summary_locked=bool(p.get("summary_locked", False)),
         ),
         "create_child_bucket": lambda p: engine.create_child_bucket(
-            str(p.get("parent_bucket_id", "")),
+            p.get("parent_bucket_id"),
             title=str(p.get("title", "")),
             summary=str(p.get("summary", "")),
             content=str(p.get("content", "")),
