@@ -49,7 +49,7 @@ asyncio.run(main())
    - `delete_memory(key_or_obj, ...)`
 
 2. Query and read
-   - `query(query_text, top_k=5, mode="auto", ...)`
+   - `query(query_text, top_k=None, mode="auto", ...)`
    - `list_memories(include_gray=False, include_content=False, ...)`
    - `get_memory(key, with_evidence=False, revision=None)`
    - `get_evidence_content(key, revision=None)`
@@ -59,7 +59,7 @@ asyncio.run(main())
    - `set_bucket(title, ...)`
    - `set_active_bucket(bucket_id)` / `switch_active_bucket(bucket_id)`
    - `create_bucket(parent_bucket_id, ...)`
-   - `create_child_bucket(parent_bucket_id, ...)`
+   - `create_child_bucket(parent_bucket_id=None, ...)`
    - `split_bucket(bucket_id, ...)`
    - `optimize(bucket_id=None, ...)`
    - `force_compress(bucket_id=None, ...)`
@@ -80,6 +80,10 @@ Public modes:
 
 Rule:
 1. `auto` routes literal-heavy queries to `hybrid`, and regular natural-language queries to `semantic`.
+
+Top-k default behavior:
+1. If `top_k` is omitted (`None`), engine uses global config `query_top_k_default` (default `5`).
+2. If `top_k` is explicitly provided, call value takes precedence.
 
 ## 5. Batch Ingest Return Values
 
@@ -104,6 +108,8 @@ Notes:
 1. If `bucket_id` is omitted, calls use current `active_bucket_id`.
 2. It is recommended to call `set_active_bucket(...)` at session start.
 3. `latest_bucket_id(...)` can resolve to the latest bucket after optimize/split.
+4. `create_bucket(parent_bucket_id=...)` accepts `ROOT` as an explicit parent shortcut.
+5. `create_child_bucket(...)` defaults to the current active bucket when `parent_bucket_id` is omitted.
 
 ## 7. File Ingest Notes
 
@@ -136,3 +142,8 @@ This releases internal resources such as query CPU thread pools.
 1. One memory store (`same BASE_DIR`) must follow a single-writer model.
 2. Running Python API, CLI, and JSON-RPC as separate processes on the same `BASE_DIR` can cause multi-writer risk.
 3. If you need multiple interfaces at the same time, use one service process as the write gateway (recommended: JSON-RPC).
+
+## 10. create_bucket / create_child_bucket
+
+1. `create_bucket(parent_bucket_id=...)` support parse "ROOT" for root_bucket.
+2. `create_child_bucket(...)` when not parse in `parent_bucket_id`, use active bucket by default.

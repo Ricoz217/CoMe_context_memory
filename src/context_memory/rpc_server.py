@@ -73,6 +73,7 @@ def _make_config(args: argparse.Namespace) -> ContextMemoryConfig:
         max_bucket_depth=args.max_bucket_depth,
         max_memory_bytes=args.max_memory_bytes,
         evidence_versions=args.evidence_versions,
+        query_top_k_default=args.query_top_k_default,
     )
 
 
@@ -168,7 +169,7 @@ def _handlers(engine: ContextMemoryEngineV3) -> dict[str, Callable[[dict[str, An
         ),
         "query": lambda p: engine.query(
             str(p.get("query_text", "")),
-            top_k=int(p.get("top_k", 5)),
+            top_k=(int(p["top_k"]) if "top_k" in p and p.get("top_k") is not None else None),
             include_gray=bool(p.get("include_gray", False)),
             with_evidence=bool(p.get("with_evidence", False)),
             use_cache=bool(p.get("use_cache", True)),
@@ -193,7 +194,7 @@ def _handlers(engine: ContextMemoryEngineV3) -> dict[str, Callable[[dict[str, An
             summary_locked=bool(p.get("summary_locked", False)),
         ),
         "create_child_bucket": lambda p: engine.create_child_bucket(
-            str(p.get("parent_bucket_id", "")),
+            p.get("parent_bucket_id"),
             title=str(p.get("title", "")),
             summary=str(p.get("summary", "")),
             content=str(p.get("content", "")),
@@ -319,7 +320,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--preset", default="CONTEXT_MEMORY")
     parser.add_argument("--image-preset", default="KIMI2.6")
-    parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--mock", action="store_true")
     parser.add_argument("--no-clean", action="store_true")
     parser.add_argument("--no-forgetting", action="store_true")
@@ -327,7 +328,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-auto-manage", action="store_true")
     parser.add_argument("--max-memory-bytes", type=int, default=1_000_000_000)
     parser.add_argument("--evidence-versions", type=int, default=5)
-    parser.add_argument("--max-bucket-depth", type=int, default=3)
+    parser.add_argument("--max-bucket-depth", type=int, default=4)
+    parser.add_argument("--query-top-k-default", type=int, default=5)
     return parser
 
 

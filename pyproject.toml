@@ -3,15 +3,16 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "context_memory"
+name = "come_context_memory"
 version = "0.3.0"
 description = "A Memory System Base on Context"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-  { name = "RicoZ", email = "fiwrst@163.com" }
+  { name = "RicoZ", email = "fiwrst217@gmail.com" }
 ]
-license = { text = "Proprietary" }
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["llm", "memory", "context", "rag", "knowledge-base"]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -21,6 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Operating System :: OS Independent",
 ]
+urls = { Homepage = "https://github.com/Ricoz217/CoMe_context_memory", Repository = "https://github.com/Ricoz217/CoMe_context_memory" }
 dependencies = [
   "httpx==0.28.1",
   "tiktoken==0.12.0",

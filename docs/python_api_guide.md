@@ -59,7 +59,7 @@ asyncio.run(main())
    - `set_bucket(title, ...)`
    - `set_active_bucket(bucket_id)` / `switch_active_bucket(bucket_id)`
    - `create_bucket(parent_bucket_id, ...)`
-   - `create_child_bucket(parent_bucket_id, ...)`
+   - `create_child_bucket(parent_bucket_id=None, ...)`
    - `split_bucket(bucket_id, ...)`
    - `optimize(bucket_id=None, ...)`
    - `force_compress(bucket_id=None, ...)`
@@ -116,8 +116,7 @@ asyncio.run(main())
    - `docx`
 
 3. 提示词参数：
-   - 推荐使用 `image_extract_hint`
-   - `query_hint` 仍保留兼容，但建议新代码不再使用
+   - 推荐使用 `image_extract_hint`，仅影响图片解析
 
 ## 8. 资源回收
 
@@ -136,3 +135,8 @@ engine.shutdown(wait=False)
 1. 同一个记忆库（同一 `BASE_DIR`）只能有一个写入进程。
 2. 若 Python/CLI/JSON-RPC 作为不同进程同时写入同一 `BASE_DIR`，会有多写者风险。
 3. 若需要多种接口同时使用，建议统一通过一个服务进程作为写入入口（推荐 JSON-RPC）。
+
+## create_bucket / create_child_bucket 语义补充
+
+1. `create_bucket(parent_bucket_id=...)` 支持传入 `ROOT` 作为根桶快捷写法。
+2. `create_child_bucket(...)` 在未传 `parent_bucket_id` 时，默认使用当前 active bucket。

@@ -35,7 +35,9 @@ data/
 /scripts/*
 /scripts/__pycache__/
 /tests_data/
-/scripts/
-/version/
-/config/
-/.build_check/
+scripts/
+version/
+config/
+.build_check/
+MANIFEST.in
+releases/

@@ -22,6 +22,7 @@
 1. 运行时引擎配置（`ContextMemoryConfig`）
    - 控制桶深度、自动维护、query 策略等
    - 在 Python/CLI/RPC 启动时传入
+   - 运行时配置采用非空值覆盖更新方式，即: 单例模式无需每个入口都传递配置，最后一个传递配置的入口，会将非空值全局自动更新。
 
 2. LLM 与代理配置（YAML）
    - 由 `config/context_memory.yaml` 提供
@@ -75,6 +76,9 @@ Logging:
   stdout_enabled: true
   write_error_file: true
   error_log_file: "logs/error.log"
+
+"Memory":
+  "enable_forgetting": true
 ```
 
 ## 4. llm_presets 字段说明
@@ -100,7 +104,13 @@ Logging:
 6. `price` 字段为历史遗留问题，不要删除也不需要填写值，保持空字典即可。
 7. LLM模板可以复制以创建你自己的模板。
 
-## 5. ContextMemoryConfig 关键字段
+## 5. 其他参数说明
+
+常用参数: 
+1. `stdout_enabled`: 是否输出到stdout。如果你是作为python库使用，并且不想被记忆系统的输出污染主程序，设为 `false`
+2. `enable_forgetting`: 记忆系统默认会 "遗忘" 低召回率的记忆，若你作为 `知识库/代码库` 使用，设为 `false`
+
+## 6. ContextMemoryConfig 关键字段
 
 常用字段：
 1. `base_dir`: 记忆库目录（强烈建议显式传入）
@@ -108,10 +118,11 @@ Logging:
 3. `use_mock_llm`
 4. `enable_cleaning`
 5. `enable_forgetting`
-6. `auto_manage`
-7. `max_bucket_depth`
-8. `max_memory_bytes`
-9. `query_mode_default`（仅支持 `auto|semantic|hybrid`）
+6. `auto_manage`: 不要关，除非你知道在干什么
+7. `max_bucket_depth`: 最大子桶嵌套深度，超过会报错
+8. `max_memory_bytes`: 动态内存管理阈值
+9. `query_top_k_default`: 全局 `query` top-k
+10. `query_mode_default`（仅支持 `auto|semantic|hybrid`）
 
 全局召回相关：
 1. `global_recall_top_n`
@@ -120,14 +131,14 @@ Logging:
 4. `global_recall_time_budget_ms`
 5. `global_recall_boost_weight`
 
-## 6. 模式与合法值
+## 7. 模式与合法值
 
 1. `query_mode_default` 支持：
    - `auto`
    - `semantic`
    - `hybrid`
 
-## 7. 优先级建议
+## 8. 优先级建议
 
 1. 业务项目建议：
    - 显式传 `ContextMemoryConfig(base_dir=...)`
@@ -137,7 +148,7 @@ Logging:
    - 每个实例使用不同 `base_dir`
    - 不要多写者共享同一个 `base_dir`
 
-## 8. 运行前检查清单
+## 9. 运行前检查清单
 
 1. `llm_presets.CONTEXT_MEMORY.token` 已填写
 2. `llm_presets.CONTEXT_MEMORY.endpoint` 与 `api_type` 匹配

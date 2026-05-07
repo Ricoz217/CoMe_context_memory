@@ -22,6 +22,9 @@ The project has two config layers:
 1. Runtime engine config (`ContextMemoryConfig`)
    - Controls bucket depth, auto-maintenance, query strategy, etc.
    - Passed at Python/CLI/RPC startup.
+   - runtime config will automatically update non-null value.  
+   singleton engine object no need to parse config to every instance,  
+   the last config parse will update any non-null setting.  
 
 2. LLM and proxy config (YAML)
    - Provided by `config/context_memory.yaml`.
@@ -75,6 +78,9 @@ Logging:
   stdout_enabled: true
   write_error_file: true
   error_log_file: "logs/error.log"
+
+"Memory":
+  "enable_forgetting": true
 ```
 
 ## 4. `llm_presets` Field Notes
@@ -94,12 +100,22 @@ Notes:
 1. `api_type` currently supports `openai` and `anthropic` style APIs.
 2. OpenAI Response API is not supported.
 3. `proxy_mode` can be either a proxy name (from `proxies`) or a direct proxy URL.
-4. `extra_parameter` contains model-specific extra options.
+4. `extra_parameter` contains model-specific extra options.  
+`thinking` is use to turn off think_mode for DeepSeek official API, doesn't ensure compatible to other provider.  
+`temperature` not suggest greater than 0.7, `max_token` keep same value with `max_context`.
 5. `auto_compress_gate` affects auto-compress and auto-split behavior.
 6. `price` is a compatibility field and can stay as an empty dict.
 7. You can copy preset templates to create custom presets.
 
-## 5. Key `ContextMemoryConfig` Fields
+
+## 5. Other Fields Explanation
+
+Common fields:
+1. `stdout_enabled`: set to `false` turn off CoMe print to stdout.
+2. `enable_forgetting`: CoMe default will "FORGET" low recall rate memories,  
+set to `false` when use to `KnowledgeLibrary/CodeLibrary`
+
+## 6. Key `ContextMemoryConfig` Fields
 
 Common fields:
 1. `base_dir`: storage directory (strongly recommended to set explicitly)
@@ -107,10 +123,11 @@ Common fields:
 3. `use_mock_llm`
 4. `enable_cleaning`
 5. `enable_forgetting`
-6. `auto_manage`
-7. `max_bucket_depth`
-8. `max_memory_bytes`
-9. `query_mode_default` (only `auto|semantic|hybrid`)
+6. `auto_manage` : Don't turn off unless you know what exactly you're doing
+7. `max_bucket_depth`: Maximum nesting depth of sub-buckets. An error will be reported if exceeded.
+8. `max_memory_bytes`: Dynamic memory management threshold
+9. `query_top_k_default` (default top-k for query when caller does not pass `top_k`)
+10. `query_mode_default` (only `auto|semantic|hybrid`)
 
 Global recall fields:
 1. `global_recall_top_n`
@@ -119,14 +136,19 @@ Global recall fields:
 4. `global_recall_time_budget_ms`
 5. `global_recall_boost_weight`
 
-## 6. Modes and Valid Values
+## 7. Modes and Valid Values
 
 1. `query_mode_default` supports:
    - `auto`
    - `semantic`
    - `hybrid`
 
-## 7. Recommended Usage
+2. `query_top_k_default`:
+   - default is `5`
+   - applies when Python API / CLI / JSON-RPC query call does not provide `top_k`
+   - explicit `top_k` in a call always overrides this global default
+
+## 8. Recommended Usage
 
 1. For business projects:
    - pass `ContextMemoryConfig(base_dir=...)` explicitly
@@ -136,7 +158,7 @@ Global recall fields:
    - use different `base_dir` per instance
    - do not use multiple writers on the same `base_dir`
 
-## 8. Pre-run Checklist
+## 9. Pre-run Checklist
 
 1. `llm_presets.CONTEXT_MEMORY.token` is set.
 2. `llm_presets.CONTEXT_MEMORY.endpoint` matches `api_type`.

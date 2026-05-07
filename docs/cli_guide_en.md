@@ -5,18 +5,19 @@ This document describes common startup parameters and commands for `come_context
 ## 1. Startup
 
 ```powershell
-$env:PYTHONPATH='D:\Python\CoMe_ContextMemory\src'
-python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\cli_runtime
+python -m context_memory.cli --base-dir <Your Memory Base Dir>
 ```
 
 ## 2. Startup Arguments
 
 1. Runtime and model
    - `--base-dir <path>`: memory storage directory
+   - `--config <path>`: explicit config file path (equivalent to setting `COME_CONTEXT_MEMORY_CONFIG`)
    - `--preset <name>`: main LLM preset (default `CONTEXT_MEMORY`)
    - `--image-preset <name>`: image extraction preset (default `KIMI2.6`)
    - `--timeout <sec>`: LLM timeout
    - `--mock`: use mock LLM
+   - `--query-top-k-default <int>`: set global `query` top-k, default 5.
 
 2. Feature switches
    - `--no-clean`: disable clean stage
@@ -28,6 +29,7 @@ python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\c
    - `--max-memory-bytes <int>`
    - `--evidence-versions <int>`
    - `--max-bucket-depth <int>`
+   - `--query-top-k-default <int>` (global default query top-k when command omits `--top-k`)
 
 ## 3. Command Overview
 
@@ -59,7 +61,7 @@ python -m come_context_memory.cli --base-dir D:\Python\CoMe_ContextMemory\data\c
 5. Buckets and system
    - `buckets`
    - `create_bucket <parent_bucket_id> <title> [summary] [--lock-summary]`
-   - `create_child_bucket <parent_bucket_id> <title> [summary] [--lock-summary]`
+   - `create_child_bucket <title> [summary] [--lock-summary]`
    - `switch_bucket <bucket_id>`
    - `latest_bucket [bucket_id]`
    - `refresh_summary <bucket_id> [--force]`
@@ -77,6 +79,7 @@ CLI supports only:
 Notes:
 1. `literal` has been removed and will raise a parameter error.
 2. `auto` routes query text to `semantic` or `hybrid` automatically.
+3. If `query` command omits `--top-k`, engine uses global `query_top_k_default` (default `5`).
 
 ## 5. Example Flow
 
@@ -94,3 +97,5 @@ list --with-content
 3. `add_file` currently does not support `pdf/docx`.
 4. Single-writer rule: do not run CLI and other writer interfaces against the same `BASE_DIR` at the same time.
 5. If multiple interfaces are required, route writes through one service process (recommended: JSON-RPC).
+6. `create_bucket` accepts a real parent bucket id; use `ROOT` to explicitly target root bucket.
+7. `create_child_bucket` always creates under current active bucket.
