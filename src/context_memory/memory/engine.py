@@ -212,6 +212,8 @@ class ContextMemoryConfig:
     gc_gray_key_retention_days: int = 45
     gc_archived_bucket_retention_days: int = 45
     query_top_k_default: int = 5
+    query_branch_expand_k: int = 5
+    query_branch_expand_bind_top_k: bool = False
     query_max_depth_default: int | None = None
     query_mode_default: str = "auto"
     global_recall_top_n: int = 120
@@ -254,6 +256,8 @@ class ContextMemoryConfig:
             gc_gray_key_retention_days=int(data.get("gc_gray_key_retention_days", 45)),
             gc_archived_bucket_retention_days=int(data.get("gc_archived_bucket_retention_days", 45)),
             query_top_k_default=int(data.get("query_top_k_default", 5)),
+            query_branch_expand_k=int(data.get("query_branch_expand_k", 5)),
+            query_branch_expand_bind_top_k=bool(data.get("query_branch_expand_bind_top_k", False)),
             query_max_depth_default=(
                 int(data.get("query_max_depth_default"))
                 if data.get("query_max_depth_default") is not None
@@ -333,6 +337,7 @@ class BucketHandle:
         global_recall_top_m: int | None = None,
         global_recall_depth_limit: int | None = None,
         global_recall_time_budget_ms: int | None = None,
+        branch_expand_k: int | None = None,
     ) -> QueryResult:
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.query(
@@ -345,6 +350,7 @@ class BucketHandle:
             global_recall_top_m=global_recall_top_m,
             global_recall_depth_limit=global_recall_depth_limit,
             global_recall_time_budget_ms=global_recall_time_budget_ms,
+            branch_expand_k=branch_expand_k,
         )
 
     async def force_compress(self, *, reason: str = "manual") -> CompressResult:
@@ -665,6 +671,8 @@ class ContextMemoryEngineV3:
         gc_gray_key_retention_days: int = 45,
         gc_archived_bucket_retention_days: int = 45,
         query_top_k_default: int = 5,
+        query_branch_expand_k: int = 5,
+        query_branch_expand_bind_top_k: bool = False,
         query_max_depth_default: int | None = None,
         query_mode_default: str = "auto",
         global_recall_top_n: int = 120,
@@ -708,6 +716,8 @@ class ContextMemoryEngineV3:
             gc_gray_key_retention_days = cfg_obj.gc_gray_key_retention_days
             gc_archived_bucket_retention_days = cfg_obj.gc_archived_bucket_retention_days
             query_top_k_default = cfg_obj.query_top_k_default
+            query_branch_expand_k = cfg_obj.query_branch_expand_k
+            query_branch_expand_bind_top_k = cfg_obj.query_branch_expand_bind_top_k
             query_max_depth_default = cfg_obj.query_max_depth_default
             query_mode_default = cfg_obj.query_mode_default
             global_recall_top_n = cfg_obj.global_recall_top_n
@@ -797,6 +807,8 @@ class ContextMemoryEngineV3:
         self._gc_gray_key_retention_days = max(1, int(gc_gray_key_retention_days))
         self._gc_archived_bucket_retention_days = max(1, int(gc_archived_bucket_retention_days))
         self._query_top_k_default = max(1, int(query_top_k_default))
+        self._query_branch_expand_k = max(1, int(query_branch_expand_k))
+        self._query_branch_expand_bind_top_k = bool(query_branch_expand_bind_top_k)
         self._query_max_depth_default = max(
             1,
             int(query_max_depth_default if query_max_depth_default is not None else self._max_depth),
@@ -910,6 +922,8 @@ class ContextMemoryEngineV3:
         self._gc_gray_key_retention_days = max(1, int(cfg_obj.gc_gray_key_retention_days))
         self._gc_archived_bucket_retention_days = max(1, int(cfg_obj.gc_archived_bucket_retention_days))
         self._query_top_k_default = max(1, int(cfg_obj.query_top_k_default))
+        self._query_branch_expand_k = max(1, int(cfg_obj.query_branch_expand_k))
+        self._query_branch_expand_bind_top_k = bool(cfg_obj.query_branch_expand_bind_top_k)
         self._query_max_depth_default = max(
             1,
             int(
@@ -1477,6 +1491,11 @@ class ContextMemoryEngineV3:
     ) -> None:
         if payload is None:
             payload = {}
+        event_key = str(record.key or "").strip()
+        if record.kind == BUCKET_KIND_BUCKET:
+            child_node_key = str(record.child_bucket_id or "").strip()
+            if child_node_key:
+                event_key = child_node_key
         if str(event_type).upper() == "GRAY_SET":
             min_payload: dict[str, Any] = {}
             reason = payload.get("reason")
@@ -1489,7 +1508,7 @@ class ContextMemoryEngineV3:
             event = {
                 "event_type": event_type,
                 "bucket_id": bucket_id,
-                "key": record.key,
+                "key": event_key,
                 "revision_id": record.revision_id,
                 "kind": record.kind,
                 "event": record.event,
@@ -1501,7 +1520,7 @@ class ContextMemoryEngineV3:
             event = {
                 "event_type": event_type,
                 "bucket_id": bucket_id,
-                "key": record.key,
+                "key": event_key,
                 "revision_id": record.revision_id,
                 "kind": record.kind,
                 "title": record.title,
@@ -3621,6 +3640,7 @@ class ContextMemoryEngineV3:
         global_recall_top_m: int | None = None,
         global_recall_depth_limit: int | None = None,
         global_recall_time_budget_ms: int | None = None,
+        branch_expand_k: int | None = None,
     ) -> QueryResult:
         self._ensure_query_side_effect_worker()
         mode = self._normalize_query_mode_value(mode, field_name="mode")
@@ -3638,6 +3658,7 @@ class ContextMemoryEngineV3:
             global_recall_top_m=global_recall_top_m,
             global_recall_depth_limit=global_recall_depth_limit,
             global_recall_time_budget_ms=global_recall_time_budget_ms,
+            branch_expand_k=branch_expand_k,
         )
 
     async def _query_bucket_recursive(
@@ -3657,6 +3678,7 @@ class ContextMemoryEngineV3:
         global_recall_top_m: int | None = None,
         global_recall_depth_limit: int | None = None,
         global_recall_time_budget_ms: int | None = None,
+        branch_expand_k: int | None = None,
         global_record_boost: dict[str, float] | None = None,
         global_bucket_boost: dict[str, float] | None = None,
     ) -> QueryResult:
@@ -3687,6 +3709,14 @@ class ContextMemoryEngineV3:
                     global_recall_time_budget_ms
                     if global_recall_time_budget_ms is not None
                     else self._global_recall_time_budget_ms
+                ),
+            ),
+            branch_expand_k=max(
+                1,
+                int(
+                    branch_expand_k
+                    if branch_expand_k is not None
+                    else self._query_branch_expand_k
                 ),
             ),
             global_record_boost=global_record_boost or {},
@@ -3727,6 +3757,7 @@ class ContextMemoryEngineV3:
         global_recall_top_m: int | None = None,
         global_recall_depth_limit: int | None = None,
         global_recall_time_budget_ms: int | None = None,
+        branch_expand_k: int | None = None,
         global_record_boost: dict[str, float] | None = None,
         global_bucket_boost: dict[str, float] | None = None,
     ) -> tuple[list[QueryMatch], str, str]:
@@ -3757,6 +3788,14 @@ class ContextMemoryEngineV3:
                     global_recall_time_budget_ms
                     if global_recall_time_budget_ms is not None
                     else self._global_recall_time_budget_ms
+                ),
+            ),
+            branch_expand_k=max(
+                1,
+                int(
+                    branch_expand_k
+                    if branch_expand_k is not None
+                    else self._query_branch_expand_k
                 ),
             ),
             global_record_boost=global_record_boost or {},

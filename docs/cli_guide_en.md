@@ -43,7 +43,7 @@ python -m context_memory.cli --base-dir <Your Memory Base Dir>
    - `add_dir <dir> [--bucket ...] [--auto-sub-buckets] [--force-split] [--create-new-bucket]`
 
 3. Query and read
-   - `query <text> [--top-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]`
+   - `query <text> [--top-k N] [--branch-expand-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]`
    - `list [--gray] [--bucket <bucket_id>] [--with-content]`
    - `get <key> [--evidence]`
    - `evidence <key>`

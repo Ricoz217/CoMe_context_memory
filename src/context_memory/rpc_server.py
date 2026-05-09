@@ -181,6 +181,7 @@ def _handlers(engine: ContextMemoryEngineV3) -> dict[str, Callable[[dict[str, An
             global_recall_top_m=p.get("global_recall_top_m"),
             global_recall_depth_limit=p.get("global_recall_depth_limit"),
             global_recall_time_budget_ms=p.get("global_recall_time_budget_ms"),
+            branch_expand_k=(int(p["branch_expand_k"]) if "branch_expand_k" in p and p.get("branch_expand_k") is not None else None),
         ),
         "force_compress": lambda p: engine.force_compress(
             reason=str(p.get("reason", "manual")),
