@@ -260,6 +260,7 @@ No business params.
 |---|---|---|---|---|
 | `query_text` | Yes | `str` | - | Query text |
 | `top_k` | No | `int` | `null` | When omitted, use global `query_top_k_default` |
+| `branch_expand_k` | No | `int` | `null` | Override recursive per-branch expansion candidate count |
 | `include_gray` | No | `bool` | `false` | Include gray records |
 | `with_evidence` | No | `bool` | `false` | Include evidence on matched records |
 | `use_cache` | No | `bool` | `true` | Enable query cache |

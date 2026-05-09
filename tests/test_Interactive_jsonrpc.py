@@ -84,6 +84,9 @@ async def main() -> None:
     async def add_memory(_text: str) -> None:
         print(_json_print(await client.call("add_memory", {"raw_text": _text})))
 
+    async def get_memory(key: str) -> None:
+        print(_json_print(await client.call("get_memory", {"key": key})))
+
     async def list_memory() -> None:
         print(_json_print(await client.call("list_memories", {"include_gray": False})))
 
@@ -143,6 +146,7 @@ async def main() -> None:
     exec_mapping = {
         "add_file": add_file,
         "add": add_memory,
+        "get": get_memory,
         "list": list_memory,
         "query": query,
         "stats": stats,
@@ -155,6 +159,11 @@ async def main() -> None:
         "latest_bucket": latest_bucket,
         "rpc": raw_rpc,
     }
+    async def _run():
+        if params:
+            await exec_mapping[cmd](params)
+        else:
+            await exec_mapping[cmd]()
 
     try:
         init_res = await _ensure_test_bucket(client, title="TEST")
@@ -176,10 +185,7 @@ async def main() -> None:
                 if cmd not in exec_mapping:
                     print(f"unknown cmd: {cmd}")
                     continue
-                if params:
-                    await exec_mapping[cmd](params)
-                else:
-                    await exec_mapping[cmd]()
+                asyncio.create_task(_run())
 
             except asyncio.CancelledError:
                 return

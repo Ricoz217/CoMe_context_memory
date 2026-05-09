@@ -29,6 +29,12 @@ _SEMANTIC_NGRAM_WEIGHT = 0.15
 _HYBRID_BM25_WEIGHT = 0.70
 _HYBRID_NGRAM_WEIGHT = 0.30
 _TOP_LEVEL_BUCKET_BRANCH_PARALLELISM = 8
+_BRANCH_EXPAND_K_DEFAULT = 5
+_BRANCH_PARENT_WEIGHT = 0.35
+_BRANCH_CHILD_WEIGHT = 0.65
+_BRANCH_FALLBACK_PARENT_WEIGHT = 0.85
+_BRANCH_MIN_ABS_SCORE = 0.25
+_BRANCH_MIN_RELATIVE_SCORE = 0.60
 
 
 class QueryService:
@@ -58,11 +64,12 @@ class QueryService:
         global_recall_top_m: int | None = None,
         global_recall_depth_limit: int | None = None,
         global_recall_time_budget_ms: int | None = None,
+        branch_expand_k: int | None = None,
     ) -> QueryResult:
         eng = self.runtime.engine
         root = eng._resolve_bucket_id(bucket_id)
         visited: set[str] = set()
-        depth_limit = max_depth if max_depth is not None else eng._max_depth + 2
+        depth_limit = max_depth if max_depth is not None else eng._query_max_depth_default
         mode_effective = self._resolve_query_mode(mode, query_text, eng._query_mode_default)
         recall_top_n = max(10, int(global_recall_top_n if global_recall_top_n is not None else eng._global_recall_top_n))
         recall_top_m = max(1, int(global_recall_top_m if global_recall_top_m is not None else eng._global_recall_top_m))
@@ -81,6 +88,10 @@ class QueryService:
                 if global_recall_time_budget_ms is not None
                 else eng._global_recall_time_budget_ms
             ),
+        )
+        effective_branch_expand_k = self._resolve_branch_expand_k(
+            branch_expand_k=branch_expand_k,
+            query_top_k=max(1, int(top_k)),
         )
         global_record_boost, global_bucket_boost = await self._build_global_recall_boosts(
             root_bucket_id=root,
@@ -107,6 +118,7 @@ class QueryService:
             global_recall_top_m=recall_top_m,
             global_recall_depth_limit=recall_depth_limit,
             global_recall_time_budget_ms=recall_time_budget_ms,
+            branch_expand_k=effective_branch_expand_k,
             global_record_boost=global_record_boost,
             global_bucket_boost=global_bucket_boost,
         )
@@ -129,6 +141,7 @@ class QueryService:
         global_recall_top_m: int,
         global_recall_depth_limit: int,
         global_recall_time_budget_ms: int,
+        branch_expand_k: int,
         global_record_boost: dict[str, float],
         global_bucket_boost: dict[str, float],
     ) -> QueryResult:
@@ -238,7 +251,13 @@ class QueryService:
         alias_miss_build = 0
         for rec, score in bm25_ranked:
             try:
-                alias_rec = eng.build_llm_view(bucket_id, rec.to_dict(), allow_create=False)
+                record_view = rec.to_dict()
+                if rec.kind == BUCKET_KIND_BUCKET:
+                    child = str(rec.child_bucket_id or "").strip()
+                    if child:
+                        # Keep bucket node alias semantics consistent in degraded/fallback path.
+                        record_view["key"] = child
+                alias_rec = eng.build_llm_view(bucket_id, record_view, allow_create=False)
             except AliasPayloadError:
                 alias_miss_build += 1
                 continue
@@ -336,6 +355,7 @@ class QueryService:
             global_recall_top_m=global_recall_top_m,
             global_recall_depth_limit=global_recall_depth_limit,
             global_recall_time_budget_ms=global_recall_time_budget_ms,
+            branch_expand_k=branch_expand_k,
             global_record_boost=global_record_boost,
             global_bucket_boost=global_bucket_boost,
         )
@@ -506,6 +526,7 @@ class QueryService:
         global_recall_top_m: int,
         global_recall_depth_limit: int,
         global_recall_time_budget_ms: int,
+        branch_expand_k: int,
         global_record_boost: dict[str, float],
         global_bucket_boost: dict[str, float],
     ) -> tuple[list[QueryMatch], str, str]:
@@ -515,13 +536,16 @@ class QueryService:
         sub_answer = ""
         sub_answer_from = ""
         best_sub_answer_score = -1.0
-        max_parent_candidates = max(1, int(parent_top_k))
+        parent_candidate_limit = max(1, int(parent_top_k))
+        bucket_parent_limit = 1 if depth > 1 else parent_candidate_limit
         bucket_candidates: list[tuple[QueryMatch, str]] = []
-        for match in query_matches[:max_parent_candidates]:
+        for match in query_matches[:parent_candidate_limit]:
             rec = eng.storage.get_record(match.key)
             if rec is None:
                 continue
             if rec.kind == BUCKET_KIND_BUCKET and rec.child_bucket_id and depth < depth_limit:
+                if len(bucket_candidates) >= bucket_parent_limit:
+                    continue
                 child_raw_id = str(rec.child_bucket_id).strip()
                 if not child_raw_id:
                     continue
@@ -563,12 +587,12 @@ class QueryService:
         async def _query_bucket_branch(
             parent_match: QueryMatch,
             child_bucket_id: str,
-        ) -> tuple[QueryMatch, float, str, str] | None:
+        ) -> tuple[list[QueryMatch], float, str, str] | None:
             try:
                 child = await self.query_bucket_recursive(
                     bucket_id=child_bucket_id,
                     query_text=query_text,
-                    top_k=1,
+                    top_k=branch_expand_k,
                     include_gray=include_gray,
                     use_cache=use_cache,
                     with_evidence=with_evidence,
@@ -580,6 +604,7 @@ class QueryService:
                     global_recall_top_m=global_recall_top_m,
                     global_recall_depth_limit=global_recall_depth_limit,
                     global_recall_time_budget_ms=global_recall_time_budget_ms,
+                    branch_expand_k=branch_expand_k,
                     global_record_boost=global_record_boost,
                     global_bucket_boost=global_bucket_boost,
                 )
@@ -587,24 +612,92 @@ class QueryService:
                 return None
 
             if not child.matches:
+                if depth + 1 >= depth_limit:
+                    fallback_score = _clamp_score(_BRANCH_FALLBACK_PARENT_WEIGHT * parent_match.score)
+                    fallback_match = QueryMatch(
+                        key=parent_match.key,
+                        score=fallback_score,
+                        reason=f"via_bucket_depth_limit:{parent_match.key}",
+                        summary=parent_match.summary,
+                        source="recursive_bucket_fallback",
+                        llm_score=parent_match.llm_score,
+                        bm25_score=parent_match.bm25_score,
+                        final_score=fallback_score,
+                    )
+                    candidate_sub_answer = ""
+                    candidate_sub_answer_from = str(parent_match.key)
+                    return [fallback_match], fallback_score, candidate_sub_answer, candidate_sub_answer_from
                 return None
-            child_top = child.matches[0]
-            merged_score = _clamp_score(0.70 * parent_match.score + 0.30 * child_top.score)
-            candidate_sub_answer = str(child.sub_answer or child.answer or "").strip()
-            candidate_sub_answer_from = str(getattr(child, "sub_answer_from", "") or "").strip() or str(child_top.key)
-            merged_match = QueryMatch(
-                key=child_top.key,
-                score=merged_score,
-                reason=f"via_bucket:{parent_match.key}",
-                summary=child_top.summary,
-                source="recursive",
-                llm_score=child_top.llm_score,
-                bm25_score=child_top.bm25_score,
-                final_score=merged_score,
-            )
-            return merged_match, merged_score, candidate_sub_answer, candidate_sub_answer_from
 
-        branch_results: list[tuple[QueryMatch, float, str, str] | None] = []
+            branch_candidates = list(child.matches[:branch_expand_k])
+            memory_candidates: list[QueryMatch] = []
+            for candidate in branch_candidates:
+                rec = eng.storage.get_record(candidate.key)
+                if rec is not None and rec.kind == BUCKET_KIND_MEMORY:
+                    memory_candidates.append(candidate)
+
+            selected_candidates = memory_candidates[:branch_expand_k]
+            if not selected_candidates and depth + 1 >= depth_limit:
+                bucket_candidate = None
+                for candidate in branch_candidates:
+                    rec = eng.storage.get_record(candidate.key)
+                    if rec is not None and rec.kind == BUCKET_KIND_BUCKET:
+                        bucket_candidate = candidate
+                        break
+                if bucket_candidate is not None:
+                    selected_candidates = [bucket_candidate]
+            if not selected_candidates:
+                return None
+
+            branch_top_score = float(selected_candidates[0].score)
+            branch_floor = max(_BRANCH_MIN_ABS_SCORE, branch_top_score * _BRANCH_MIN_RELATIVE_SCORE)
+            merged_matches: list[QueryMatch] = []
+            best_merged_score = -1.0
+            best_key = str(selected_candidates[0].key)
+            for idx, child_match in enumerate(selected_candidates):
+                if idx > 0 and float(child_match.score) < branch_floor:
+                    continue
+                merged_score = _clamp_score(
+                    (_BRANCH_PARENT_WEIGHT * parent_match.score + _BRANCH_CHILD_WEIGHT * child_match.score)
+                )
+                merged_match = QueryMatch(
+                    key=child_match.key,
+                    score=merged_score,
+                    reason=f"via_bucket:{parent_match.key}",
+                    summary=child_match.summary,
+                    source="recursive",
+                    llm_score=child_match.llm_score,
+                    bm25_score=child_match.bm25_score,
+                    final_score=merged_score,
+                )
+                merged_matches.append(merged_match)
+                if merged_score > best_merged_score:
+                    best_merged_score = merged_score
+                    best_key = str(child_match.key)
+
+            if not merged_matches:
+                if depth + 1 >= depth_limit:
+                    fallback_score = _clamp_score(_BRANCH_FALLBACK_PARENT_WEIGHT * parent_match.score)
+                    fallback_match = QueryMatch(
+                        key=parent_match.key,
+                        score=fallback_score,
+                        reason=f"via_bucket_depth_limit:{parent_match.key}",
+                        summary=parent_match.summary,
+                        source="recursive_bucket_fallback",
+                        llm_score=parent_match.llm_score,
+                        bm25_score=parent_match.bm25_score,
+                        final_score=fallback_score,
+                    )
+                    candidate_sub_answer = ""
+                    candidate_sub_answer_from = str(parent_match.key)
+                    return [fallback_match], fallback_score, candidate_sub_answer, candidate_sub_answer_from
+                return None
+
+            candidate_sub_answer = str(child.sub_answer or child.answer or "").strip()
+            candidate_sub_answer_from = str(getattr(child, "sub_answer_from", "") or "").strip() or best_key
+            return merged_matches, best_merged_score, candidate_sub_answer, candidate_sub_answer_from
+
+        branch_results: list[tuple[list[QueryMatch], float, str, str] | None] = []
         if bucket_candidates:
             if depth == 1:
                 semaphore = asyncio.Semaphore(_TOP_LEVEL_BUCKET_BRANCH_PARALLELISM)
@@ -612,7 +705,7 @@ class QueryService:
                 async def _guarded(
                     parent_match: QueryMatch,
                     child_bucket_id: str,
-                ) -> tuple[QueryMatch, float, str, str] | None:
+                ) -> tuple[list[QueryMatch], float, str, str] | None:
                     async with semaphore:
                         return await _query_bucket_branch(parent_match, child_bucket_id)
 
@@ -626,15 +719,16 @@ class QueryService:
         for result in branch_results:
             if result is None:
                 continue
-            merged_match, merged_score, candidate_sub_answer, candidate_sub_answer_from = result
+            merged_matches, merged_score, candidate_sub_answer, candidate_sub_answer_from = result
             if candidate_sub_answer and merged_score > best_sub_answer_score:
                 sub_answer = candidate_sub_answer
                 sub_answer_from = candidate_sub_answer_from
                 best_sub_answer_score = merged_score
-            if merged_match.key in seen:
-                continue
-            out.append(merged_match)
-            seen.add(merged_match.key)
+            for merged_match in merged_matches:
+                if merged_match.key in seen:
+                    continue
+                out.append(merged_match)
+                seen.add(merged_match.key)
 
         out.sort(key=lambda m: m.score, reverse=True)
         return out, sub_answer, sub_answer_from
@@ -653,6 +747,14 @@ class QueryService:
         if _LITERAL_HINT_PATTERN.search(text):
             return "hybrid"
         return "semantic"
+
+    def _resolve_branch_expand_k(self, *, branch_expand_k: int | None, query_top_k: int) -> int:
+        if branch_expand_k is not None:
+            return max(1, int(branch_expand_k))
+        eng = self.runtime.engine
+        if bool(getattr(eng, "_query_branch_expand_bind_top_k", False)):
+            return max(1, int(query_top_k))
+        return max(1, int(getattr(eng, "_query_branch_expand_k", _BRANCH_EXPAND_K_DEFAULT)))
 
     async def _build_global_recall_boosts(
         self,

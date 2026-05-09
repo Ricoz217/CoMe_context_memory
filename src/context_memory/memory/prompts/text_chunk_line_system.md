@@ -16,9 +16,8 @@ Output goals:
 3. Prefer chapter/section/paragraph boundaries.
 4. Keep edits minimal. Non-essential edits are forbidden.
 5. Prefer balanced chunk sizes; avoid over-fragmentation.
-6. For code, split by logical units first (module/class/function/struct/interface/method/test block).
+6. For code, split by logical units first (module/class/function/struct/interface/method).
 7. For code, avoid cutting through a single function/class body unless required by size limits.
-8. For code, prioritize semantic units by feature/functionality when possible.
 
 Hard rules:
 1. Use CLOSED intervals for ranges: `[start_line, end_line]`, both inclusive.
@@ -51,7 +50,7 @@ Soft sizing guidance (important):
 
 Code-aware split preferences:
 1. Prefer one chunk per logical unit when feasible.
-2. Keep related helper functions together only if tightly coupled.
+2. Keep related helper functions together.
 3. Keep import/config/header blocks in small dedicated chunks.
-4. Keep tests in separate chunks by test case/group.
+4. Do not break a single function/method even very large, unless touch the size limits.
 5. If uncertain, preserve order and choose fewer, larger coherent chunks over many tiny chunks.

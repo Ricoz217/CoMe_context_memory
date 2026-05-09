@@ -2,7 +2,7 @@
 
 English version: [README_en.md](README_en.md)
 
-`CoMe_ContextMemory` 是一个面向 LLM 上下文管理的本地记忆引擎。  
+`CoMe_ContextMemory` 是一个基于 LLM 上下文的记忆库，通过另一种方式实现RAG。  
 它不依赖向量数据库，而是通过桶树结构组织记忆，并提供 `query / optimize / compress / split` 等流程进行维护与检索。
 
 ## 文档入口
@@ -104,7 +104,7 @@ async def main():
     test_bucket = await memory_engine.set_bucket("TEST")  # 通过标题创建/获取桶。
 
     # 添加一条记忆
-    print(await test_bucket.add_memory("2021斯德哥尔摩Major核子危机3楼背身沙鹰三枪"))
+    print(await test_bucket.add_memory("今天是3月25日，地下室好冷，没什么人理我"))
 
     # 从文件添加记忆
     print(await test_bucket.add_memory_from_file("./母猪的产后护理.txt"))
@@ -154,7 +154,35 @@ new_engine = ContextMemoryEngineV3()
 ```
 - 不提供回退接口，批量入库需谨慎。记忆系统为了数据安全起见，即使中断了重启后也会继续未完成的任务。只能通过批量任务结果手动逐个删除新添加的记忆。
 - JSON-RPC 无鉴权，要自行编写网关。
+- 当前记忆未作时间管理，若要添加带时间要素的记忆(例如日程安排、重要事件)，需要在记忆中显式注明。  
+同时 `query` 也不会自动传入时间，若有需要请显式传入。 
+
+## 提问的智慧
+
+为了更快定位问题、减少来回沟通，建议提问时尽量包含以下信息：
+
+1. 明确目标
+   - 你想实现什么，而不只是“哪里报错了”。  
+
+2. 提供最小复现
+   - 最好给出最短代码片段、CLI 命令或 JSON-RPC 请求体。  
+
+3. 说明环境
+   - 包版本、安装方式（pip/embedding/source）、操作系统、Python 版本。  
+
+4. 提供完整报错
+   - 贴完整 traceback 或关键日志，不要只截最后一行。  
+
+5. 说明预期与实际差异
+   - 预期结果是什么，实际结果是什么。  
+
+6. 说明已尝试的排查
+   - 你已经做过哪些检查，能避免重复建议。  
+
+这样的问题通常能更快拿到准确答复。
 
 ## TODO
-
-- [ ] 还没想好
+- [ ] 显式记忆权重管理
+- [ ] 显式设置记忆过期时间
+- [ ] 显式锁定记忆
+- [ ] 加入时间管理功能
