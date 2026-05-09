@@ -39,7 +39,7 @@ Commands:
   update <key> <patch_text>
   gray <key> <set|clear> [reason]
   delete <key> [reason]
-  query <text> [--top-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]
+  query <text> [--top-k N] [--branch-expand-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]
   list [--gray] [--bucket <bucket_id>] [--with-content]
   buckets
   create_bucket <parent_bucket_id> <title> [summary] [--lock-summary]
@@ -154,6 +154,7 @@ def _make_config(args: argparse.Namespace) -> "ContextMemoryConfig":
         max_memory_bytes=args.max_memory_bytes,
         evidence_versions=args.evidence_versions,
         query_top_k_default=args.query_top_k_default,
+        query_max_depth_default=args.query_max_depth_default,
     )
 
 
@@ -305,10 +306,11 @@ async def run_cli(args: argparse.Namespace) -> None:
 
             elif cmd == "query":
                 if len(parts) < 2:
-                    print("usage: query <text> [--top-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]")
+                    print("usage: query <text> [--top-k N] [--branch-expand-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]")
                     continue
                 include_gray = "--gray" in parts
                 top_k: int | None = None
+                branch_expand_k: int | None = None
                 bucket_id = None
                 mode = "auto"
                 if "--top-k" in parts:
@@ -318,6 +320,13 @@ async def run_cli(args: argparse.Namespace) -> None:
                             top_k = int(parts[idx + 1])
                         except ValueError:
                             top_k = None
+                if "--branch-expand-k" in parts:
+                    idx = parts.index("--branch-expand-k")
+                    if idx + 1 < len(parts):
+                        try:
+                            branch_expand_k = int(parts[idx + 1])
+                        except ValueError:
+                            branch_expand_k = None
                 if "--bucket" in parts:
                     idx = parts.index("--bucket")
                     if idx + 1 < len(parts):
@@ -329,9 +338,19 @@ async def run_cli(args: argparse.Namespace) -> None:
                 q = raw[len(parts[0]):].strip()
                 q = _remove_flag_tokens(parts, q, "--gray", takes_value=False)
                 q = _remove_flag_tokens(parts, q, "--top-k", takes_value=True)
+                q = _remove_flag_tokens(parts, q, "--branch-expand-k", takes_value=True)
                 q = _remove_flag_tokens(parts, q, "--bucket", takes_value=True)
                 q = _remove_flag_tokens(parts, q, "--mode", takes_value=True)
-                _print_json(await engine.query(q, top_k=top_k, include_gray=include_gray, bucket_id=bucket_id, mode=mode))
+                _print_json(
+                    await engine.query(
+                        q,
+                        top_k=top_k,
+                        include_gray=include_gray,
+                        bucket_id=bucket_id,
+                        mode=mode,
+                        branch_expand_k=branch_expand_k,
+                    )
+                )
 
             elif cmd == "list":
                 include_gray = "--gray" in parts[1:]
@@ -459,6 +478,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-versions", type=int, default=5, help="Keep latest N evidence versions per key")
     parser.add_argument("--max-bucket-depth", type=int, default=3, help="Max bucket depth")
     parser.add_argument("--query-top-k-default", type=int, default=5, help="Global default top-k when query call omits --top-k")
+    parser.add_argument(
+        "--query-max-depth-default",
+        type=int,
+        default=None,
+        help="Global default recursive query max depth when query call omits --max-depth; default follows --max-bucket-depth",
+    )
     return parser
 
 

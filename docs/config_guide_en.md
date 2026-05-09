@@ -22,6 +22,9 @@ The project has two config layers:
 1. Runtime engine config (`ContextMemoryConfig`)
    - Controls bucket depth, auto-maintenance, query strategy, etc.
    - Passed at Python/CLI/RPC startup.
+   - runtime config will automatically update non-null value.  
+   singleton engine object no need to parse config to every instance,  
+   the last config parse will update any non-null setting.  
 
 2. LLM and proxy config (YAML)
    - Provided by `config/context_memory.yaml`.
@@ -124,7 +127,8 @@ Common fields:
 7. `max_bucket_depth`: Maximum nesting depth of sub-buckets. An error will be reported if exceeded.
 8. `max_memory_bytes`: Dynamic memory management threshold
 9. `query_top_k_default` (default top-k for query when caller does not pass `top_k`)
-10. `query_mode_default` (only `auto|semantic|hybrid`)
+10. `query_max_depth_default`: global default recursive query depth (used when caller does not pass `max_depth`; defaults to `max_bucket_depth`)
+11. `query_mode_default` (only `auto|semantic|hybrid`)
 
 Global recall fields:
 1. `global_recall_top_n`

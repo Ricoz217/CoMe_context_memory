@@ -178,9 +178,11 @@ Current boundaries:
 3. local filesystem storage only (no DB backend yet)
 4. no automated storage cleanup scheduler (manual `gc_storage` provided)
 5. memory and bucket revisions exist, but storage-level version governance is still limited
+6. no time relation, only partial llm pipeline will get memory create time
 
 Future directions:
 1. web visualization UI
 2. LLM Wiki-style upgrade
 3. incremental storage and history management optimization
 4. more complete automated cleanup and operations support
+5. more comprehensive memory management: explicit weights, expiration, locking

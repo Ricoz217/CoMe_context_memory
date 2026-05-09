@@ -3,8 +3,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "context_memory"
-version = "0.3.0"
+name = "come_context_memory"
+version = "0.3.1"
 description = "A Memory System Base on Context"
 readme = "README.md"
 requires-python = ">=3.10"

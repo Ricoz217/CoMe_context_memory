@@ -74,6 +74,7 @@ def _make_config(args: argparse.Namespace) -> ContextMemoryConfig:
         max_memory_bytes=args.max_memory_bytes,
         evidence_versions=args.evidence_versions,
         query_top_k_default=args.query_top_k_default,
+        query_max_depth_default=args.query_max_depth_default,
     )
 
 
@@ -180,6 +181,7 @@ def _handlers(engine: ContextMemoryEngineV3) -> dict[str, Callable[[dict[str, An
             global_recall_top_m=p.get("global_recall_top_m"),
             global_recall_depth_limit=p.get("global_recall_depth_limit"),
             global_recall_time_budget_ms=p.get("global_recall_time_budget_ms"),
+            branch_expand_k=(int(p["branch_expand_k"]) if "branch_expand_k" in p and p.get("branch_expand_k") is not None else None),
         ),
         "force_compress": lambda p: engine.force_compress(
             reason=str(p.get("reason", "manual")),
@@ -330,6 +332,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-versions", type=int, default=5)
     parser.add_argument("--max-bucket-depth", type=int, default=4)
     parser.add_argument("--query-top-k-default", type=int, default=5)
+    parser.add_argument(
+        "--query-max-depth-default",
+        type=int,
+        default=None,
+        help="Global default recursive query max depth when request omits max_depth; default follows max_bucket_depth",
+    )
     return parser
 
 

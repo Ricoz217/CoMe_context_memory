@@ -22,6 +22,7 @@
 1. 运行时引擎配置（`ContextMemoryConfig`）
    - 控制桶深度、自动维护、query 策略等
    - 在 Python/CLI/RPC 启动时传入
+   - 运行时配置采用非空值覆盖更新方式，即: 单例模式无需每个入口都传递配置，最后一个传递配置的入口，会将非空值全局自动更新。
 
 2. LLM 与代理配置（YAML）
    - 由 `config/context_memory.yaml` 提供
@@ -121,7 +122,8 @@ Logging:
 7. `max_bucket_depth`: 最大子桶嵌套深度，超过会报错
 8. `max_memory_bytes`: 动态内存管理阈值
 9. `query_top_k_default`: 全局 `query` top-k
-10. `query_mode_default`（仅支持 `auto|semantic|hybrid`）
+10. `query_max_depth_default`: 全局 `query` 递归深度默认值（调用不传 `max_depth` 时生效；默认跟 `max_bucket_depth` 一致）
+11. `query_mode_default`（仅支持 `auto|semantic|hybrid`）
 
 全局召回相关：
 1. `global_recall_top_n`

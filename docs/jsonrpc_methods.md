@@ -260,6 +260,7 @@
 |---|---|---|---|---|
 | `query_text` | 是 | `str` | - | 查询文本 |
 | `top_k` | 否 | `int` | `null` | 不传时走 `query_top_k_default` |
+| `branch_expand_k` | 否 | `int` | `null` | 覆盖每个分支递归展开候选数 |
 | `include_gray` | 否 | `bool` | `false` | 是否包含灰记录 |
 | `with_evidence` | 否 | `bool` | `false` | 是否返回证据信息 |
 | `use_cache` | 否 | `bool` | `true` | 是否启用缓存 |
