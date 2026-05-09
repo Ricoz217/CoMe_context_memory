@@ -1,6 +1,6 @@
 # CoMe ContextMemory
 
-`CoMe_ContextMemory` is a local memory engine for LLM context management.  
+`CoMe_ContextMemory` is a memory repository based on LLM context, implementing RAG in an alternative manner.
 It does not rely on vector databases. Instead, it organizes memory in a bucket-tree structure and provides workflows such as `query / optimize / compress / split` for maintenance and retrieval.
 
 ## Documentation
@@ -101,7 +101,7 @@ async def main():
     test_bucket = await memory_engine.set_bucket("TEST")
 
     # Add one memory
-    print(await test_bucket.add_memory("2021 Stockholm Major Nuke 3rd floor deagle triple kill"))
+    print(await test_bucket.add_memory("Today is March 25th, it's so cold in the basement and nobody pays attention to me"))
 
     # Add memory from a file
     print(await test_bucket.add_memory_from_file("./postpartum_care_of_sows.txt"))
@@ -113,7 +113,7 @@ async def main():
     print(await test_bucket.list_memories())
 
     # Query
-    print(await test_bucket.query("Who is the Mongolian top laner?"))
+    print(await test_bucket.query("Who is choko"))
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -149,8 +149,39 @@ new_engine = ContextMemoryEngineV3()
 ```
 - No rollback API is provided. Use batch ingestion carefully. For safety, interrupted tasks are resumed after restart, and added items must be manually deleted via returned keys if needed.
 - JSON-RPC has no built-in authentication; place it behind your own gateway/auth layer.
+- current memory system not include time management.  
+If you need to add time-related memories (such as schedules or important events),   
+please explicitly indicate the time in the memory.  
+Additionally, `query` will not automatically include time-related information;  
+please pass it explicitly if needed.
+
+## Asking Smart Questions
+
+To help others diagnose issues faster and reduce back-and-forth, try to include:
+
+1. Clear goal
+   - What you want to achieve, not only where it failed.
+
+2. Minimal reproducible case
+   - The shortest code snippet, CLI command, or JSON-RPC payload that reproduces the issue.
+
+3. Environment details
+   - Package version, install method (`pip` / `embedding` / `source`), OS, and Python version.
+
+4. Full error output
+   - Include full traceback or key logs, not only the last line.
+
+5. Expected vs actual behavior
+   - What you expected and what actually happened.
+
+6. What you already tried
+   - List checks you already performed to avoid repeated suggestions.
+
+Questions with this context usually get accurate answers much faster.
 
 ## TODO
 
-- [ ] TBD
-
+- [ ] Explicit management of memory weights
+- [ ] Explicit set expire for memory
+- [ ] Explicit lock memory
+- [ ] Memory time relation system
