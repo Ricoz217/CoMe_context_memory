@@ -62,7 +62,7 @@ class QueryService:
         eng = self.runtime.engine
         root = eng._resolve_bucket_id(bucket_id)
         visited: set[str] = set()
-        depth_limit = max_depth if max_depth is not None else eng._max_depth + 2
+        depth_limit = max_depth if max_depth is not None else eng._query_max_depth_default
         mode_effective = self._resolve_query_mode(mode, query_text, eng._query_mode_default)
         recall_top_n = max(10, int(global_recall_top_n if global_recall_top_n is not None else eng._global_recall_top_n))
         recall_top_m = max(1, int(global_recall_top_m if global_recall_top_m is not None else eng._global_recall_top_m))

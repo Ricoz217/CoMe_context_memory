@@ -127,7 +127,8 @@ Common fields:
 7. `max_bucket_depth`: Maximum nesting depth of sub-buckets. An error will be reported if exceeded.
 8. `max_memory_bytes`: Dynamic memory management threshold
 9. `query_top_k_default` (default top-k for query when caller does not pass `top_k`)
-10. `query_mode_default` (only `auto|semantic|hybrid`)
+10. `query_max_depth_default`: global default recursive query depth (used when caller does not pass `max_depth`; defaults to `max_bucket_depth`)
+11. `query_mode_default` (only `auto|semantic|hybrid`)
 
 Global recall fields:
 1. `global_recall_top_n`

@@ -154,6 +154,7 @@ def _make_config(args: argparse.Namespace) -> "ContextMemoryConfig":
         max_memory_bytes=args.max_memory_bytes,
         evidence_versions=args.evidence_versions,
         query_top_k_default=args.query_top_k_default,
+        query_max_depth_default=args.query_max_depth_default,
     )
 
 
@@ -459,6 +460,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-versions", type=int, default=5, help="Keep latest N evidence versions per key")
     parser.add_argument("--max-bucket-depth", type=int, default=3, help="Max bucket depth")
     parser.add_argument("--query-top-k-default", type=int, default=5, help="Global default top-k when query call omits --top-k")
+    parser.add_argument(
+        "--query-max-depth-default",
+        type=int,
+        default=None,
+        help="Global default recursive query max depth when query call omits --max-depth; default follows --max-bucket-depth",
+    )
     return parser
 
 
