@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import re
 import time
 from collections import deque
@@ -14,7 +15,7 @@ from ..models import (
     QueryMatch,
     QueryResult,
 )
-from ..rerank import normalize_scores, rank_records_with_index
+from ..rerank import rank_records_with_index
 from .runtime import ServiceRuntime
 
 
@@ -28,6 +29,7 @@ _SEMANTIC_BM25_WEIGHT = 0.85
 _SEMANTIC_NGRAM_WEIGHT = 0.15
 _HYBRID_BM25_WEIGHT = 0.70
 _HYBRID_NGRAM_WEIGHT = 0.30
+_LOCAL_ABS_SCORE_TAU = 2.0
 _TOP_LEVEL_BUCKET_BRANCH_PARALLELISM = 8
 _BRANCH_EXPAND_K_DEFAULT = 5
 _BRANCH_PARENT_WEIGHT = 0.35
@@ -464,17 +466,33 @@ class QueryService:
                 rec = record_map.get(key)
                 if rec is None or key in used:
                     continue
-                llm_score = _clamp_score(float(item.get("score", 0.0)))
+                raw_item_score = _clamp_score(float(item.get("score", 0.0)))
                 bm_score = _clamp_score(float(bm25_norm_map.get(key, 0.0)))
-                final = _clamp_score(0.85 * llm_score + 0.15 * bm_score)
-                final = eng._apply_negative_weight_adjust(key, final)
+                raw_reason = str(item.get("reason", "")).strip()
+                raw_source = str(item.get("source", "")).strip()
+                if raw_source:
+                    normalized_source = raw_source
+                elif raw_reason.lower() == "local rerank fallback":
+                    normalized_source = "local_rerank"
+                else:
+                    normalized_source = "llm"
+                if normalized_source == "local_rerank":
+                    llm_score = 0.0
+                    local_score = raw_item_score
+                    local_fused = _clamp_score(0.7 * bm_score + 0.3 * local_score)
+                    final = eng._apply_negative_weight_adjust(key, local_fused)
+                    final = min(0.6, _clamp_score(final))
+                else:
+                    llm_score = raw_item_score
+                    final = _clamp_score(0.85 * llm_score + 0.15 * bm_score)
+                    final = eng._apply_negative_weight_adjust(key, final)
                 merged.append(
                     QueryMatch(
                         key=key,
                         score=final,
-                        reason=str(item.get("reason", "")).strip() or "llm",
+                        reason=raw_reason or "llm",
                         summary=str(item.get("summary", "")).strip() or rec.summary,
-                        source="llm",
+                        source=normalized_source,
                         llm_score=llm_score,
                         bm25_score=bm_score,
                         final_score=final,
@@ -853,7 +871,7 @@ class QueryService:
         )
         if not ranked:
             return [], []
-        bm25_norm = normalize_scores([score for _, score in ranked])
+        bm25_conf = [QueryService._abs_confidence_from_raw(score) for _, score in ranked]
         query_grams = QueryService._char_ngrams(query_text, n=_NGRAM_SIZE)
         key_to_pos = {k: i for i, k in enumerate(getattr(bm25_index, "keys", []))}
         docs_text = list(getattr(bm25_index, "docs_text", []))
@@ -866,13 +884,19 @@ class QueryService:
                 doc_text = str(docs_text[pos] or "")
             doc_grams = QueryService._char_ngrams(doc_text, n=_NGRAM_SIZE)
             ngram_raw.append(QueryService._dice_score(query_grams, doc_grams))
-        ngram_norm = normalize_scores(ngram_raw)
+        ngram_conf = [_clamp_score(score) for score in ngram_raw]
         bm25_weight, ngram_weight = QueryService._mode_local_weights(mode)
         fused = [
-            _clamp_score(bm25_weight * bm25_norm[i] + ngram_weight * ngram_norm[i])
-            for i in range(len(bm25_norm))
+            _clamp_score(bm25_weight * bm25_conf[i] + ngram_weight * ngram_conf[i])
+            for i in range(len(bm25_conf))
         ]
         return ranked, fused
+
+    @staticmethod
+    def _abs_confidence_from_raw(raw_score: float, *, tau: float = _LOCAL_ABS_SCORE_TAU) -> float:
+        x = max(0.0, float(raw_score))
+        t = max(1e-6, float(tau))
+        return _clamp_score(1.0 - math.exp(-x / t))
 
     @staticmethod
     def _mode_local_weights(mode: str) -> tuple[float, float]:
