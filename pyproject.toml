@@ -3,13 +3,13 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "come_context_memory"
+name = "context_memory"
 version = "0.3.1"
 description = "A Memory System Base on Context"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-  { name = "RicoZ", email = "fiwrst217@gmail.com" }
+  { name = "RicoZ", email = "fiwrst@163.com" }
 ]
 license = "MIT"
 license-files = ["LICENSE"]

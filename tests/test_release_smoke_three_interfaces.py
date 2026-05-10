@@ -95,7 +95,6 @@ async def test_release_smoke_python_api(smoke_runtime_dir: Path, smoke_text_file
         enable_cleaning=True,
         init_config=False,
         auto_manage=False,
-        max_context_window=1_000_000,
     )
     engine = ContextMemoryEngineV3(config=cfg)
 

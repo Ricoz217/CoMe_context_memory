@@ -95,7 +95,6 @@ async def engine(smoke_runtime_dir: Path) -> ContextMemoryEngineV3:
         use_mock_llm=False,
         enable_cleaning=True,
         auto_manage=False,
-        max_context_window=1_000_000,
     )
     return ContextMemoryEngineV3(config=cfg)
 

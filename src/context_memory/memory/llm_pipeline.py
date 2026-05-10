@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -793,6 +794,7 @@ class LLMPipelineV3:
                     "score": norm_scores[idx],
                     "reason": "local rerank fallback",
                     "summary": str(record.get("summary", "")),
+                    "source": "local_rerank",
                 }
             )
         if matches:
@@ -805,11 +807,8 @@ class LLMPipelineV3:
     def _normalize_scores(raw_scores: list[float]) -> list[float]:
         if not raw_scores:
             return []
-        lo = min(raw_scores)
-        hi = max(raw_scores)
-        if hi - lo < 1e-12:
-            return [1.0 if s > 0 else 0.0 for s in raw_scores]
-        return [max(0.0, min(1.0, (s - lo) / (hi - lo))) for s in raw_scores]
+        tau = 2.0
+        return [max(0.0, min(1.0, 1.0 - math.exp(-max(0.0, float(s)) / tau))) for s in raw_scores]
 
     def _fallback_compress(self, payload: dict[str, Any]) -> dict[str, Any]:
         records = payload.get("records", [])
