@@ -39,8 +39,8 @@ python -m context_memory.cli --base-dir <Your Memory Base Dir>
 
 2. Ingest commands
    - `add <text> [--bucket ...] [--force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]`
-   - `add_file <path> [topic] [--bucket ...] [--force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]`
-   - `add_dir <dir> [--bucket ...] [--auto-sub-buckets] [--force-split] [--create-new-bucket]`
+   - `add_file <path> [topic] [--bucket ...] [--no-force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]`
+   - `add_dir <dir> [--bucket ...] [--auto-sub-buckets] [--no-force-split] [--create-new-bucket]`
 
 3. Query and read
    - `query <text> [--top-k N] [--branch-expand-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]`

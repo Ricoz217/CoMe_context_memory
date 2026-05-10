@@ -31,8 +31,8 @@ HELP_TEXT = """
 Commands:
   help
   add <text> [--bucket <bucket_id>] [--force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]
-  add_file <path> [topic] [--bucket <bucket_id>] [--force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]
-  add_dir <dir> [--bucket <bucket_id>] [--auto-sub-buckets] [--force-split] [--create-new-bucket]
+  add_file <path> [topic] [--bucket <bucket_id>] [--no-force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]
+  add_dir <dir> [--bucket <bucket_id>] [--auto-sub-buckets] [--no-force-split] [--create-new-bucket]
   get <key> [--evidence]
   evidence <key>
   export <memory_id>
@@ -102,8 +102,12 @@ def _parse_common_split_flags(
     default_force_split: bool,
 ) -> tuple[bool, bool, int | None, int | None, str | None]:
     force_split = bool(default_force_split)
-    if "--force-split" in parts:
-        force_split = True
+    # Respect flag order when both appear: later token wins.
+    for token in parts:
+        if token == "--force-split":
+            force_split = True
+        elif token == "--no-force-split":
+            force_split = False
     create_new_bucket = "--create-new-bucket" in parts
     chunk_max_chars = None
     chunk_overlap_chars = None
@@ -197,6 +201,7 @@ async def run_cli(args: argparse.Namespace) -> None:
                 text = raw[len(parts[0]):].strip()
                 text = _remove_flag_tokens(parts, text, "--bucket", takes_value=True)
                 text = _remove_flag_tokens(parts, text, "--force-split", takes_value=False)
+                text = _remove_flag_tokens(parts, text, "--no-force-split", takes_value=False)
                 text = _remove_flag_tokens(parts, text, "--create-new-bucket", takes_value=False)
                 text = _remove_flag_tokens(parts, text, "--chunk-max", takes_value=True)
                 text = _remove_flag_tokens(parts, text, "--chunk-overlap", takes_value=True)
@@ -215,7 +220,7 @@ async def run_cli(args: argparse.Namespace) -> None:
 
             elif cmd == "add_file":
                 if len(parts) < 2:
-                    print("usage: add_file <path> [topic] [--bucket <bucket_id>] [--force-split] [--create-new-bucket]")
+                    print("usage: add_file <path> [topic] [--bucket <bucket_id>] [--no-force-split] [--create-new-bucket]")
                     continue
                 force_split, create_new_bucket, chunk_max, chunk_overlap, bucket_id = _parse_common_split_flags(
                     parts,
@@ -238,7 +243,7 @@ async def run_cli(args: argparse.Namespace) -> None:
 
             elif cmd == "add_dir":
                 if len(parts) < 2:
-                    print("usage: add_dir <dir> [--bucket <bucket_id>] [--auto-sub-buckets]")
+                    print("usage: add_dir <dir> [--bucket <bucket_id>] [--auto-sub-buckets] [--no-force-split]")
                     continue
                 force_split, create_new_bucket, chunk_max, chunk_overlap, bucket_id = _parse_common_split_flags(
                     parts,

@@ -52,7 +52,9 @@ _LIST_FIELD_TYPES: dict[str, str] = {
     "split_keys": KEY_TYPE_MEMORY,
     "keep_keys": KEY_TYPE_MEMORY,
     "drop_keys": KEY_TYPE_MEMORY,
-    "keys": KEY_TYPE_MEMORY,
+    # "keys" appears in split/optimize planning payloads where model may
+    # reference either memory-node keys or bucket ids. Use ref to allow both.
+    "keys": KEY_TYPE_REF,
     "parent_keys": KEY_TYPE_MEMORY,
     "parent_flat_keys": KEY_TYPE_REF,
     "members": KEY_TYPE_REF,

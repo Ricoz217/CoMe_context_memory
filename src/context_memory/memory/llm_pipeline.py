@@ -441,7 +441,7 @@ class LLMPipelineV3:
             schema_filename="optimize_schema.md",
             user_payload=request_payload,
             bucket_context=bucket_context,
-            include_context=True,
+            include_context=False,
             preset_key="optimize",
         )
         if not result:
@@ -851,18 +851,9 @@ class LLMPipelineV3:
             key = str(rec.get("key", "")).strip()
             if not key:
                 continue
-            kind = str(rec.get("kind", "")).strip().lower()
-            if kind == "bucket":
-                keep_items.append(
-                    {
-                        "title": str(rec.get("title", "")).strip() or f"keep_{key[:8]}",
-                        "summary": str(rec.get("summary", "")).strip()[:140] or "kept bucket",
-                        "content": str(rec.get("content", "")).strip()[:1000] or "kept bucket detail",
-                        "keys": [key],
-                    }
-                )
-            else:
-                buckets[idx % group_count].append(key)
+            # Always allow bucket-like items to participate in fallback split;
+            # this guarantees fallback can still break "dead buckets".
+            buckets[idx % group_count].append(key)
         for idx, keys in enumerate(buckets):
             if not keys:
                 continue

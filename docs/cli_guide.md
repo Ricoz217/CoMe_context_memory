@@ -12,7 +12,7 @@ python -m context_memory.cli --base-dir <Your Memory Base Dir>
 
 1. 运行与模型
    - `--base-dir <path>`: 记忆库存储目录
-   - - `--config <path>`: 配置文件路径 (等同于设置 `COME_CONTEXT_MEMORY_CONFIG`)，不填会用默认路径
+   - `--config <path>`: 配置文件路径 (等同于设置 `COME_CONTEXT_MEMORY_CONFIG`)，不填会用默认路径
    - `--preset <name>`: 主 LLM preset（默认 `CONTEXT_MEMORY`）
    - `--image-preset <name>`: 图片抽取 preset（默认 `KIMI2.6`）
    - `--timeout <sec>`: LLM 超时
@@ -38,8 +38,8 @@ python -m context_memory.cli --base-dir <Your Memory Base Dir>
 
 2. 入库命令
    - `add <text> [--bucket ...] [--force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]`
-   - `add_file <path> [topic] [--bucket ...] [--force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]`
-   - `add_dir <dir> [--bucket ...] [--auto-sub-buckets] [--force-split] [--create-new-bucket]`
+   - `add_file <path> [topic] [--bucket ...] [--no-force-split] [--create-new-bucket] [--chunk-max N] [--chunk-overlap N]`
+   - `add_dir <dir> [--bucket ...] [--auto-sub-buckets] [--no-force-split] [--create-new-bucket]`
 
 3. 查询与读取
    - `query <text> [--top-k N] [--branch-expand-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]`
