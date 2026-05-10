@@ -59,6 +59,18 @@ from context_memory.LLM_usage import LLMUsage
 from context_memory.time_id import configure_global_time_id_state_file
 from context_memory.utils import AutoMapping, atomic_save_json
 
+"""ContextMemory 解耦引擎（Python API）。
+
+包信息:
+- 模块路径: `context_memory.memory.engine`
+- 当前版本: `0.3.1`（见 `__version__`）
+- 主要入口:
+  - `ContextMemoryConfig`: 引擎配置对象
+  - `get_context_memory_engine(...)`: 获取全局单例引擎
+  - `ContextMemoryEngineV3`: 引擎主体
+  - `BucketHandle`: 桶级操作句柄
+"""
+
 TCPU = TypeVar("TCPU")
 
 
@@ -183,6 +195,48 @@ def _normalize_tool_presets(tool_presets: dict[str, str] | None) -> dict[str, st
 
 @dataclass(slots=True)
 class ContextMemoryConfig:
+    """ContextMemory 引擎配置。
+
+    Attributes:
+        base_dir: 数据根目录；`None` 表示由外部稍后绑定。
+        llm_preset: 主 LLM 预设名称。
+        image_llm_preset: 图像理解 LLM 预设名称。
+        tool_presets: 各工具链路对应的预设映射（如 query/compress 等）。
+        ask_timeout: 单次 LLM 调用超时时间（秒）。
+        auto_resume_pending_jobs: 启动后是否自动恢复未完成分片任务。
+        use_mock_llm: 是否使用 mock LLM（用于离线测试）。
+        enable_cleaning: 是否启用输入清洗。
+        init_config: 初始化引擎时是否触发配置加载。
+        evidence_versions: 证据文件保留版本数。
+        auto_manage: 写入后是否自动执行压缩/分桶等治理。
+        enable_forgetting: 是否启用遗忘机制（负权衰减与自动灰化）。
+        max_bucket_depth: 桶树最大深度。
+        max_memory_bytes: 进程内记忆缓存上限（字节）。
+        auto_compress_trigger_ratio: 自动压缩触发阈值（上下文占用比例）。
+        auto_split_trigger_ratio: 自动分桶触发阈值（上下文占用比例）。
+        split_plan_target_items: 分桶规划目标条目数。
+        split_plan_hard_cap: 分桶规划硬上限条目数。
+        auto_split_cooldown_sec: 自动分桶冷却时间（秒）。
+        auto_split_min_drop_abs: 自动分桶最小收益阈值。
+        auto_split_max_round_per_manage: 单轮 auto manage 最多分桶次数。
+        split_ingest_parallelism: 分片写入并发度。
+        split_ingest_delay_min: 分片写入最小启动间隔（秒）。
+        split_ingest_delay_max: 分片写入最大启动间隔（秒）。
+        optimize_leaf_loss_threshold: optimize 叶子损耗阈值。
+        gc_revision_retention_days: 历史 revision 保留天数。
+        gc_gray_key_retention_days: 灰化 key 保留天数。
+        gc_archived_bucket_retention_days: 归档桶保留天数。
+        query_top_k_default: 查询默认 `top_k`。
+        query_branch_expand_k: 递归扩展时默认展开桶数。
+        query_branch_expand_bind_top_k: 是否将 `branch_expand_k` 绑定到 `top_k`。
+        query_max_depth_default: 查询默认递归深度；`None` 表示使用引擎默认。
+        query_mode_default: 默认查询模式（`auto`/`semantic`/`hybrid`）。
+        global_recall_top_n: 全局召回阶段候选数 N。
+        global_recall_top_m: 全局召回阶段参与重排桶数 M。
+        global_recall_depth_limit: 全局召回时桶遍历深度上限。
+        global_recall_time_budget_ms: 全局召回时间预算（毫秒）。
+        global_recall_boost_weight: 全局召回得分融合权重。
+    """
     base_dir: str | Path | None = None
     llm_preset: str = ""
     image_llm_preset: str = ""
@@ -224,6 +278,14 @@ class ContextMemoryConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ContextMemoryConfig":
+        """从字典构建配置对象。
+
+        Args:
+            data: 配置字典；缺失字段将回落到默认值。
+
+        Returns:
+            ContextMemoryConfig: 规范化后的配置实例。
+        """
         if not isinstance(data, dict):
             return cls()
         return cls(
@@ -273,7 +335,19 @@ class ContextMemoryConfig:
 
 
 class BucketHandle:
+    """桶级操作句柄。
+
+    该对象绑定一个 bucket_id，并将所有读写操作路由到对应桶。
+    若桶发生 seal/successor 重定向，句柄会自动刷新到最新 bucket_id。
+    """
+
     def __init__(self, engine: "ContextMemoryEngineV3", bucket_id: str) -> None:
+        """初始化桶句柄。
+        
+        Args:
+            engine: 所属引擎实例。
+            bucket_id: 句柄绑定的桶 ID。
+        """
         self._engine = engine
         self.bucket_id = bucket_id
 
@@ -283,22 +357,40 @@ class BucketHandle:
         return resolved
 
     async def latest_bucket_id(self) -> str:
-        """Return latest canonical bucket id after following redirect chain."""
+        """获取该句柄当前对应的最新规范 bucket_id。"""
         return await self._refresh_bucket_id()
 
     async def set_active_bucket(self, bucket_id: str | None = None) -> dict[str, Any]:
+        """切换全局活跃桶。
+
+        Args:
+            bucket_id: 目标桶 ID；为空时使用当前句柄桶。
+
+        Returns:
+            dict[str, Any]: 切换结果。
+        """
         target = str(bucket_id or "").strip()
         if not target:
             target = await self._refresh_bucket_id()
         return await self._engine.set_active_bucket(target)
 
     async def switch_active_bucket(self, bucket_id: str | None = None) -> dict[str, Any]:
+        """`set_active_bucket` 的别名。"""
         return await self.set_active_bucket(bucket_id)
 
     def get_bucket(self, bucket_id: str) -> BucketHandle:
+        """获取另一个桶句柄。
+
+        Args:
+            bucket_id: 目标桶 ID。
+
+        Returns:
+            BucketHandle: 新的桶句柄对象。
+        """
         return self._engine.get_bucket(bucket_id)
 
     def list_buckets(self) -> list[BucketInfo]:
+        """列出所有桶信息。"""
         return self._engine.list_buckets()
 
     async def add_memory(
@@ -313,6 +405,21 @@ class BucketHandle:
         chunk_max_chars: int = 4000,
         chunk_overlap_chars: int = 200,
     ) -> AddResult:
+        """向当前桶添加一条记忆。
+
+        Args:
+            raw_text: 原始文本内容。
+            evidence_path: 证据文件路径；提供后会复制并关联。
+            key: 指定记忆 key；为空则自动生成。
+            topic: 主题标签。
+            force_split: 是否强制分片写入。
+            create_new_bucket: 分片时是否先创建新桶承载。
+            chunk_max_chars: 分片最大字符数。
+            chunk_overlap_chars: 分片重叠字符数。
+
+        Returns:
+            AddResult: 添加结果（成功状态、key、分片信息等）。
+        """
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.add_memory(
             raw_text,
@@ -339,6 +446,22 @@ class BucketHandle:
         global_recall_time_budget_ms: int | None = None,
         branch_expand_k: int | None = None,
     ) -> QueryResult:
+        """在当前桶执行查询。
+
+        Args:
+            query_text: 查询文本。
+            top_k: 返回条数上限；为空使用系统默认。
+            use_cache: 是否使用查询缓存。
+            mode: 查询模式（`auto`/`semantic`/`hybrid`）。
+            global_recall_top_n: 全局召回候选数 N。
+            global_recall_top_m: 全局召回参与重排桶数 M。
+            global_recall_depth_limit: 全局召回深度限制。
+            global_recall_time_budget_ms: 全局召回时间预算（毫秒）。
+            branch_expand_k: 递归阶段每层展开桶数。
+
+        Returns:
+            QueryResult: 查询结果对象。
+        """
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.query(
             query_text,
@@ -354,6 +477,14 @@ class BucketHandle:
         )
 
     async def force_compress(self, *, reason: str = "manual") -> CompressResult:
+        """对当前桶执行强制压缩。
+
+        Args:
+            reason: 压缩原因标识，用于事件与审计记录。
+
+        Returns:
+            CompressResult: 压缩结果。
+        """
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.force_compress(reason=reason, bucket_id=bucket_id)
 
@@ -365,7 +496,17 @@ class BucketHandle:
             content: str = "",
             summary_locked: bool = False
     ):
-        """濡傛灉瀛樺湪锛岃繑鍥炶妗讹紱涓嶅瓨鍦ㄥ垯鍒涘缓銆傜被浼煎瓧鍏哥殑setdefault"""
+        """在当前桶下按标题获取或创建子桶（setdefault 语义）。
+
+        Args:
+            title: 子桶标题（用于映射与展示）。
+            summary: 子桶摘要。
+            content: 子桶详情内容。
+            summary_locked: 是否锁定摘要（锁定后自动摘要不会覆盖）。
+
+        Returns:
+            BucketHandle: 子桶句柄。
+        """
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.set_bucket_with_id(
             title,
@@ -383,6 +524,17 @@ class BucketHandle:
         content: str = "",
         summary_locked: bool = False,
     ) -> BucketInfo:
+        """强制创建子桶（不复用同名桶）。
+
+        Args:
+            title: 子桶标题。
+            summary: 子桶摘要。
+            content: 子桶详情内容。
+            summary_locked: 是否锁定摘要。
+
+        Returns:
+            BucketInfo: 新建子桶信息。
+        """
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.create_bucket(
             bucket_id,
@@ -400,13 +552,31 @@ class BucketHandle:
         content: str = "",
         summary_locked: bool = False,
     ) -> BucketInfo:
+        """`create_bucket` 的别名。"""
         return await self.create_bucket(title=title, summary=summary, content=content, summary_locked=summary_locked)
 
     async def refresh_bucket_summary(self, *, force: bool = False) -> dict[str, Any]:
+        """刷新当前桶摘要。
+
+        Args:
+            force: 是否强制刷新（忽略部分跳过条件）。
+
+        Returns:
+            dict[str, Any]: 刷新结果。
+        """
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.refresh_bucket_summary(bucket_id, force=force)
 
     async def delete_memory(self, key: Any, *, reason: str = "") -> DeleteResult:
+        """删除（灰化）记忆或桶节点。
+
+        Args:
+            key: 删除目标；可为 key、BucketInfo、MemoryRecord 或兼容对象。
+            reason: 删除原因，用于事件记录。
+
+        Returns:
+            DeleteResult: 删除结果。
+        """
         return await self._engine.delete_memory(key, reason=reason)
 
     async def add_memory_from_file(
@@ -424,6 +594,24 @@ class BucketHandle:
         dedup_in_bucket: bool = True,
         auto_optimize_after_split: bool = True,
     ) -> AddResult:
+        """从单个文件导入记忆到当前桶。
+
+        Args:
+            file_path: 文件路径。
+            topic: 主题标签。
+            bucket_id: 目标桶 ID；为空则使用当前句柄桶。
+            image_extract_hint: 图像提取提示词。
+            query_hint: 兼容参数，若提供且 `image_extract_hint` 为空会复用。
+            force_split: 是否强制分片写入。
+            create_new_bucket: 分片时是否创建新桶承载。
+            chunk_max_chars: 分片最大字符数。
+            chunk_overlap_chars: 分片重叠字符数。
+            dedup_in_bucket: 是否在目标桶内去重。
+            auto_optimize_after_split: 分片后是否自动优化。
+
+        Returns:
+            AddResult: 导入结果。
+        """
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
         effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
@@ -456,6 +644,24 @@ class BucketHandle:
         dedup_in_bucket: bool = True,
         collect_token_usage: bool = False,
     ) -> dict[str, Any]:
+        """从目录批量导入记忆到当前桶。
+
+        Args:
+            dir_path: 目录路径。
+            bucket_id: 目标桶 ID；为空则使用当前句柄桶。
+            auto_create_sub_buckets: 是否按目录层级自动创建子桶。
+            image_extract_hint: 图像提取提示词。
+            query_hint: 兼容参数，若提供且 `image_extract_hint` 为空会复用。
+            force_split: 是否强制分片写入。
+            create_new_bucket: 分片时是否创建新桶承载。
+            chunk_max_chars: 分片最大字符数。
+            chunk_overlap_chars: 分片重叠字符数。
+            dedup_in_bucket: 是否在目标桶内去重。
+            collect_token_usage: 是否返回本次 token 增量统计。
+
+        Returns:
+            dict[str, Any]: 批处理结果与统计信息。
+        """
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
         effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
@@ -480,6 +686,16 @@ class BucketHandle:
             with_evidence: bool = False,
             revision: str | None = None,
     ) -> MemoryRecord | None:
+        """读取记忆记录。
+
+        Args:
+            key: 记忆 key。
+            with_evidence: 是否附带证据文本。
+            revision: 指定 revision ID；为空读取最新版本。
+
+        Returns:
+            MemoryRecord | None: 命中记录或 `None`。
+        """
         return await self._engine.get_memory(
             key,
             with_evidence=with_evidence,
@@ -487,9 +703,26 @@ class BucketHandle:
         )
 
     async def export_memory_to_markdown(self, memory_id: str) -> dict[str, Any]:
+        """导出指定记忆为 Markdown 文件。
+
+        Args:
+            memory_id: 记忆 key。
+
+        Returns:
+            dict[str, Any]: 导出结果，含输出路径。
+        """
         return await self._engine.export_memory_to_markdown(memory_id)
 
     async def get_evidence_content(self, key: str, *, revision: str | None = None) -> str:
+        """获取记忆对应证据文本内容。
+
+        Args:
+            key: 记忆 key。
+            revision: 指定 revision ID；为空读取最新版本。
+
+        Returns:
+            str: 证据文本；不存在时通常为空字符串。
+        """
         return await self._engine.get_evidence_content(key, revision=revision)
 
     async def list_memories(
@@ -499,6 +732,16 @@ class BucketHandle:
             include_content: bool = False,
             bucket_id: str | None = None,
     ) -> dict[str, Any]:
+        """列出当前桶记录（可选包含子桶节点）。
+
+        Args:
+            include_gray: 是否包含灰化记录。
+            include_content: 是否返回完整 `content` 字段。
+            bucket_id: 指定桶 ID；为空使用当前句柄桶。
+
+        Returns:
+            dict[str, Any]: 包含 memories/buckets/count 等统计信息。
+        """
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
         return await self._engine.list_memories(
@@ -508,14 +751,37 @@ class BucketHandle:
         )
 
     async def get_bucket_context_usage(self, *, bucket_id: str | None = None) -> dict[str, Any]:
+        """获取桶上下文占用信息。
+
+        Args:
+            bucket_id: 目标桶 ID；为空使用当前句柄桶。
+
+        Returns:
+            dict[str, Any]: `estimated_tokens/max_context_window/usage_ratio` 等信息。
+        """
         resolved_current = await self._refresh_bucket_id()
         bucket_id = bucket_id or resolved_current
         return await self._engine.get_bucket_context_usage(bucket_id=bucket_id)
 
     async def migrate_storage_paths_to_relative(self) -> dict[str, int]:
+        """将存储中的绝对路径迁移为相对路径。
+
+        Returns:
+            dict[str, int]: 迁移统计结果。
+        """
         return await self._engine.migrate_storage_paths_to_relative()
 
     async def set_gray(self, key: str, *, gray: bool, reason: str = "manual") -> UpdateResult:
+        """设置记忆灰度状态。
+
+        Args:
+            key: 目标记忆 key。
+            gray: `True` 置灰，`False` 取消置灰。
+            reason: 操作原因。
+
+        Returns:
+            UpdateResult: 更新结果。
+        """
         return await self._engine.set_gray(key, gray=gray, reason=reason)
 
     async def split_bucket(
@@ -526,26 +792,66 @@ class BucketHandle:
             target_groups_min: int = 2,
             target_groups_max: int = 10,
     ) -> dict[str, Any]:
+        """对目标桶执行分桶。
+
+        Args:
+            bucket_id: 目标桶 ID；为空使用当前句柄桶。
+            reason: 分桶原因标识。
+            target_groups_min: 目标最小分组数。
+            target_groups_max: 目标最大分组数。
+
+        Returns:
+            dict[str, Any]: 分桶结果。
+        """
         bucket_id = bucket_id or self.bucket_id
         return await self._engine.split_bucket(bucket_id, reason=reason, target_groups_min=target_groups_min,
                                                target_groups_max=target_groups_max)
 
     async def cleanup_expired(self) -> CleanupResult:
+        """清理过期记录。"""
         return await self._engine.cleanup_expired()
 
     async def stats(self) -> EngineStats:
+        """获取引擎统计信息。"""
         return await self._engine.stats()
 
     async def optimize(self, *, reason: str = "manual_optimize") -> OptimizeResult:
+        """对当前桶执行优化。
+
+        Args:
+            reason: 优化原因标识。
+
+        Returns:
+            OptimizeResult: 优化结果。
+        """
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.optimize(bucket_id=bucket_id, reason=reason)
 
     async def move_item(self, key: str, *, target_bucket_id: str, reason: str = "manual_move") -> MoveResult:
+        """移动记忆到目标桶。
+
+        Args:
+            key: 要移动的记忆 key。
+            target_bucket_id: 目标桶 ID。
+            reason: 移动原因标识。
+
+        Returns:
+            MoveResult: 移动结果。
+        """
         resolved_current = await self._refresh_bucket_id()
         target = target_bucket_id or resolved_current
         return await self._engine.move_item(key=key, target_bucket_id=target, reason=reason)
 
     async def gc_storage(self, *, dry_run: bool = True, reason: str = "manual_gc") -> GCResult:
+        """执行存储层 GC。
+
+        Args:
+            dry_run: 是否仅预演不落盘删除。
+            reason: GC 原因标识。
+
+        Returns:
+            GCResult: GC 结果与统计。
+        """
         return await self._engine.gc_storage(dry_run=dry_run, reason=reason)
 
     async def __aiter__(self) -> AsyncIterator[MemoryRecord]:
@@ -638,6 +944,7 @@ class BucketHandle:
 
 
 class ContextMemoryEngineV3:
+    """ContextMemory V3 引擎主类（公开 Python API）。"""
     def __init__(
         self,
         base_dir: str | Path | None = None,
@@ -681,6 +988,49 @@ class ContextMemoryEngineV3:
         global_recall_time_budget_ms: int = 80,
         global_recall_boost_weight: float = 0.20,
     ) -> None:
+        """初始化引擎实例。
+
+        Args:
+            base_dir: 数据根目录。
+            config: 配置对象或配置字典；提供时优先覆盖同名参数。
+            llm_preset: 主 LLM 预设名。
+            image_llm_preset: 图像识别 LLM 预设名。
+            tool_presets: 工具预设映射。
+            ask_timeout: LLM 调用超时（秒）。
+            auto_resume_pending_jobs: 是否自动恢复未完成分片任务。
+            use_mock_llm: 是否启用 mock LLM。
+            enable_cleaning: 是否启用输入清洗。
+            init_config: 是否初始化配置模块。
+            evidence_versions: 证据保留版本数。
+            auto_manage: 是否启用自动治理流程。
+            enable_forgetting: 是否启用遗忘机制。
+            max_bucket_depth: 桶树最大深度。
+            max_memory_bytes: 内存缓存上限（字节）。
+            auto_compress_trigger_ratio: 自动压缩阈值。
+            auto_split_trigger_ratio: 自动分桶阈值。
+            split_plan_target_items: 分桶规划目标条目数。
+            split_plan_hard_cap: 分桶规划硬上限。
+            auto_split_cooldown_sec: 自动分桶冷却时间（秒）。
+            auto_split_min_drop_abs: 自动分桶最小收益阈值。
+            auto_split_max_round_per_manage: 单轮管理最大分桶次数。
+            split_ingest_parallelism: 分片写入并发数。
+            split_ingest_delay_min: 分片写入最小延时（秒）。
+            split_ingest_delay_max: 分片写入最大延时（秒）。
+            optimize_leaf_loss_threshold: optimize 叶子损耗阈值。
+            gc_revision_retention_days: revision 保留天数。
+            gc_gray_key_retention_days: 灰 key 保留天数。
+            gc_archived_bucket_retention_days: 归档桶保留天数。
+            query_top_k_default: 查询默认 top_k。
+            query_branch_expand_k: 查询默认分支展开数。
+            query_branch_expand_bind_top_k: 是否将 branch_expand_k 绑定 top_k。
+            query_max_depth_default: 查询默认深度。
+            query_mode_default: 默认查询模式。
+            global_recall_top_n: 全局召回候选数 N。
+            global_recall_top_m: 全局召回参与重排桶数 M。
+            global_recall_depth_limit: 全局召回深度上限。
+            global_recall_time_budget_ms: 全局召回时间预算（毫秒）。
+            global_recall_boost_weight: 全局召回融合权重。
+        """
         cfg_obj: ContextMemoryConfig | None = None
         if isinstance(config, ContextMemoryConfig):
             cfg_obj = config
@@ -736,7 +1086,7 @@ class ContextMemoryEngineV3:
         self._evidence_versions = max(1, int(evidence_versions))
 
         self.base_dir: Path | None = None
-        self.bucket_mapping: dict[str, str] = {}  # 瀛樺偍浜哄伐鍒涘缓鐨勬《鍚嶅拰瀹為檯id鏄犲皠
+        self.bucket_mapping: dict[str, str] = {}  # 存储人工创建的桶名与实际 bucket_id 的映射
         self.storage: MemoryStorageV3 | _UnconfiguredStorageProxy = _UnconfiguredStorageProxy()
         self._llm_usage_store: LLMUsage | None = None
         self._image_name_mapping_store: AutoMapping[list[str]] | None = None
@@ -864,6 +1214,11 @@ class ContextMemoryEngineV3:
             self.image_extractor.image_name_mapping = self._image_name_mapping_store
 
     def apply_config(self, config: ContextMemoryConfig | dict[str, Any]) -> None:
+        """应用配置到当前引擎实例。
+
+        Args:
+            config: `ContextMemoryConfig` 或等价字典。
+        """
         cfg_obj = config if isinstance(config, ContextMemoryConfig) else ContextMemoryConfig.from_dict(config)
         normalized_tool_presets = _normalize_tool_presets(cfg_obj.tool_presets)
 
@@ -997,16 +1352,28 @@ class ContextMemoryEngineV3:
         return token
 
     def root_bucket_id(self) -> str:
+        """返回根桶 ID。"""
         return self.storage.get_root_bucket_id()
 
     def active_bucket_id(self) -> str:
+        """返回当前活跃桶 ID。"""
         return self.storage.get_active_bucket_id()
 
     @property
     def bucket_id(self):
+        """当前活跃桶 ID（`active_bucket_id()` 的属性形式）。
+        """
         return self.active_bucket_id()
 
     async def set_active_bucket(self, bucket_id: str) -> dict[str, Any]:
+        """设置当前活跃桶。
+
+        Args:
+            bucket_id: 目标桶 ID。
+
+        Returns:
+            dict[str, Any]: 切换结果。
+        """
         target = str(bucket_id or "").strip()
         if not target:
             return {"success": False, "bucket_id": "", "message": "bucket_id is required"}
@@ -1019,6 +1386,7 @@ class ContextMemoryEngineV3:
             return {"success": True, "bucket_id": resolved, "message": "active bucket updated"}
 
     async def switch_active_bucket(self, bucket_id: str) -> dict[str, Any]:
+        """`set_active_bucket` 的别名。"""
         return await self.set_active_bucket(bucket_id)
 
     def _sync_bucket_mapping_redirect(self, *, old_ids: set[str], new_id: str) -> None:
@@ -1077,38 +1445,90 @@ class ContextMemoryEngineV3:
             yield resolved
 
     async def resolve_bucket_handle_id(self, bucket_id: str) -> str:
+        """解析桶句柄 ID 到最新规范 ID。
+
+        Args:
+            bucket_id: 原始桶 ID。
+
+        Returns:
+            str: 最新可用桶 ID。
+        """
         return await self._bucket_topology_service.resolve_bucket_handle_id(bucket_id)
 
     async def latest_bucket_id(self, bucket_id: str | None = None) -> str:
-        """
-        Resolve bucket id to the latest canonical id.
+        """获取桶的最新规范 ID（处理 successor 重定向）。
 
-        Useful when caller stores historical bucket ids and wants the current id
-        after optimize/successor redirect.
+        Args:
+            bucket_id: 桶 ID；为空使用当前活跃桶。
+
+        Returns:
+            str: 最新规范桶 ID。
         """
         async with self._global_meta_lock:
             return self._resolve_bucket_id(bucket_id)
 
     def get_bucket(self, bucket_id: str) -> BucketHandle:
+        """获取桶句柄。
+
+        Args:
+            bucket_id: 目标桶 ID。
+
+        Returns:
+            BucketHandle: 桶句柄对象。
+        """
         return self._bucket_topology_service.get_bucket(bucket_id)
 
     def list_buckets(self) -> list[BucketInfo]:
+        """列出全部桶信息。"""
         return self._bucket_topology_service.list_buckets()
 
     # Alias-First internal APIs (forced mode in this branch)
     def get_or_create_alias(self, bucket_id: str, real_key: str, key_type: str) -> str:
+        """获取或创建 alias。
+
+        Args:
+            bucket_id: 桶 ID。
+            real_key: 真实 key。
+            key_type: key 类型。
+
+        Returns:
+            str: alias key。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         return self.alias_codec.get_or_create_alias(resolved, real_key, key_type)
 
     def resolve_alias(self, bucket_id: str, alias: str, expected_type: str | None = None) -> str:
+        """将 alias 解析为真实 key。
+
+        Args:
+            bucket_id: 桶 ID。
+            alias: alias key。
+            expected_type: 期望类型（可选）。
+
+        Returns:
+            str: 真实 key。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         return self.alias_codec.resolve_alias(resolved, alias, expected_type)
 
     def freeze_alias_map(self, bucket_id: str) -> None:
+        """冻结桶的 alias 映射版本。
+
+        Args:
+            bucket_id: 桶 ID。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         self.alias_codec.freeze_alias_map(resolved)
 
     def alias_map_version(self, bucket_id: str) -> int:
+        """查询桶 alias 映射版本号。
+
+        Args:
+            bucket_id: 桶 ID。
+
+        Returns:
+            int: 版本号。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         return self.alias_codec.alias_map_version(resolved)
 
@@ -1120,6 +1540,17 @@ class ContextMemoryEngineV3:
         *,
         allow_create: bool = True,
     ) -> Any:
+        """构建供 LLM 使用的 alias 视图 payload。
+
+        Args:
+            bucket_id: 桶 ID。
+            real_payload: 真实 payload。
+            map_version: 映射版本（可选）。
+            allow_create: 是否允许创建新 alias。
+
+        Returns:
+            Any: alias 化后的 payload。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         return self.alias_codec.build_llm_view(
             resolved,
@@ -1129,10 +1560,26 @@ class ContextMemoryEngineV3:
         )
 
     def resolve_llm_output(self, bucket_id: str, alias_output: Any, map_version: int | None = None) -> Any:
+        """将 LLM alias 输出还原为真实结构。
+
+        Args:
+            bucket_id: 桶 ID。
+            alias_output: alias 形式输出。
+            map_version: 映射版本（可选）。
+
+        Returns:
+            Any: 还原后的真实输出。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         return self.alias_codec.resolve_llm_output(resolved, alias_output, map_version=map_version)
 
     def assert_alias_only_payload(self, bucket_id: str, payload: Any) -> None:
+        """断言 payload 仅含 alias，不含真实 key。
+
+        Args:
+            bucket_id: 桶 ID。
+            payload: 待校验 payload。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         try:
             self.alias_codec.assert_alias_only_payload(resolved, payload)
@@ -1297,6 +1744,11 @@ class ContextMemoryEngineV3:
         return await loop.run_in_executor(self._cpu_executor, call)  # type: ignore
 
     def shutdown(self, *, wait: bool = False) -> None:
+        """关闭线程池。
+
+        Args:
+            wait: 是否等待线程池任务结束。
+        """
         executor = getattr(self, "_cpu_executor", None)
         if executor is None:
             return
@@ -1307,6 +1759,11 @@ class ContextMemoryEngineV3:
             executor.shutdown(wait=wait)
 
     async def close(self, *, wait: bool = False) -> None:
+        """异步关闭入口。
+
+        Args:
+            wait: 是否等待线程池任务结束。
+        """
         self.shutdown(wait=wait)
 
     def _record_llm_diag(self) -> None:
@@ -1767,17 +2224,17 @@ class ContextMemoryEngineV3:
             content: str = "",
             summary_locked: bool = False
     ) -> BucketHandle:
-        """
-        Get-or-create bucket by title under a parent bucket and return BucketHandle.
+        """在父桶下按标题获取或创建子桶（并发安全 setdefault 语义）。
 
-        Concurrency semantics:
-        - This method guarantees setdefault-like behavior under concurrent calls.
-        - Calls with the same `title` will return the same existing bucket handle,
-          instead of raising duplicate-key errors.
+        Args:
+            title: 子桶标题。
+            parent_bucket_id: 父桶 ID。
+            summary: 子桶摘要。
+            content: 子桶内容。
+            summary_locked: 是否锁定摘要。
 
-        Exception semantics:
-        - If bucket depth would exceed the max limit (root included, max depth = configured limit),
-          this method propagates ValueError from internal create path.
+        Returns:
+            BucketHandle: 子桶句柄。
         """
         async with self._bucket_write_lock(parent_bucket_id) as resolved_parent:
             async with self._global_meta_lock:
@@ -1824,7 +2281,17 @@ class ContextMemoryEngineV3:
             content: str = "",
             summary_locked: bool = False
     ) -> BucketHandle:
-        """濡傛灉瀛樺湪锛岃繑鍥炶妗讹紱涓嶅瓨鍦ㄥ垯鍒涘缓銆傜被浼煎瓧鍏哥殑setdefault"""
+        """在根桶下按标题获取或创建子桶。
+
+        Args:
+            title: 子桶标题。
+            summary: 子桶摘要。
+            content: 子桶内容。
+            summary_locked: 是否锁定摘要。
+
+        Returns:
+            BucketHandle: 子桶句柄。
+        """
         return await self.set_bucket_with_id(
             title,
             self.root_bucket_id(),
@@ -1842,7 +2309,18 @@ class ContextMemoryEngineV3:
         content: str = "",
         summary_locked: bool = False,
     ) -> BucketInfo:
-        """杩欎釜鎺ュ彛涓嶄細琚玹itle褰卞搷锛屽嵆浣縯itle鐩稿悓"""
+        """强制创建子桶（不复用同名桶）。
+
+        Args:
+            parent_bucket_id: 父桶 ID。
+            title: 子桶标题。
+            summary: 子桶摘要。
+            content: 子桶内容。
+            summary_locked: 是否锁定摘要。
+
+        Returns:
+            BucketInfo: 新建子桶信息。
+        """
         async with self._bucket_write_lock(parent_bucket_id) as resolved_parent:
             async with self._global_meta_lock:
                 child = self._create_bucket_unlocked(
@@ -1864,6 +2342,18 @@ class ContextMemoryEngineV3:
         content: str = "",
         summary_locked: bool = False,
     ) -> BucketInfo:
+        """创建子桶（父桶为空时使用当前活跃桶）。
+
+        Args:
+            parent_bucket_id: 父桶 ID（可选）。
+            title: 子桶标题。
+            summary: 子桶摘要。
+            content: 子桶内容。
+            summary_locked: 是否锁定摘要。
+
+        Returns:
+            BucketInfo: 新建子桶信息。
+        """
         target_parent = str(parent_bucket_id or "").strip() or self.active_bucket_id()
         return await self.create_bucket(
             target_parent,
@@ -2126,6 +2616,15 @@ class ContextMemoryEngineV3:
         return successor.bucket_id
 
     async def refresh_bucket_summary(self, bucket_id: str, *, force: bool = False) -> dict[str, Any]:
+        """刷新桶摘要。
+
+        Args:
+            bucket_id: 目标桶 ID。
+            force: 是否强制刷新。
+
+        Returns:
+            dict[str, Any]: 刷新结果。
+        """
         async with self._bucket_write_lock(bucket_id) as resolved:
             return await self._bucket_summary_service.refresh_bucket_summary(resolved, force=force)
 
@@ -2281,6 +2780,23 @@ class ContextMemoryEngineV3:
         chunk_overlap_chars: int | None = None,
         dedup_in_bucket: bool = False,
     ) -> AddResult:
+        """向指定桶写入一条记忆。
+        
+        Args:
+            raw_text: 原始文本内容。
+            evidence_path: 证据文件路径。
+            key: 指定记忆 key；为空自动生成。
+            topic: 主题标签。
+            bucket_id: 目标桶 ID；为空使用当前活跃桶。
+            force_split: 是否强制分片。
+            create_new_bucket: 分片时是否创建新桶。
+            chunk_max_chars: 分片最大字符数。
+            chunk_overlap_chars: 分片重叠字符数。
+            dedup_in_bucket: 是否在桶内去重。
+        
+        Returns:
+            AddResult: 写入结果。
+        """
         self._begin_alias_session()
         try:
             async with self._bucket_write_lock(bucket_id) as bucket:
@@ -3066,6 +3582,11 @@ class ContextMemoryEngineV3:
         return {"batch_id": batch_id, "success": True, "completed": len(done_indices), "pending": 0}
 
     async def resume_pending_jobs(self) -> dict[str, Any]:
+        """恢复未完成分片任务。
+        
+        Returns:
+            dict[str, Any]: 恢复结果汇总。
+        """
         self._begin_alias_session()
         try:
             async with self._global_meta_lock:
@@ -3088,6 +3609,24 @@ class ContextMemoryEngineV3:
         dedup_in_bucket: bool = True,
         auto_optimize_after_split: bool = True,
     ) -> AddResult:
+        """从文件导入记忆。
+        
+        Args:
+            file_path: 文件路径。
+            topic: 主题标签。
+            bucket_id: 目标桶 ID；为空使用当前活跃桶。
+            image_extract_hint: 图像提取提示词。
+            query_hint: 兼容提示词参数。
+            force_split: 是否强制分片。
+            create_new_bucket: 分片时是否创建新桶。
+            chunk_max_chars: 分片最大字符数。
+            chunk_overlap_chars: 分片重叠字符数。
+            dedup_in_bucket: 是否桶内去重。
+            auto_optimize_after_split: 分片后是否自动优化。
+        
+        Returns:
+            AddResult: 导入结果。
+        """
         effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
         return await self._ingest_service.add_memory_from_file(
             file_path,
@@ -3119,6 +3658,23 @@ class ContextMemoryEngineV3:
         collect_token_usage: bool = False,
     ) -> dict[str, Any]:
         # effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
+        """从目录批量导入记忆。
+        
+        Args:
+            dir_path: 目录路径。
+            bucket_id: 目标桶 ID；为空使用当前活跃桶。
+            auto_create_sub_buckets: 是否按目录层级自动创建子桶。
+            image_extract_hint: 图像提取提示词。
+            force_split: 是否强制分片。
+            create_new_bucket: 分片时是否创建新桶。
+            chunk_max_chars: 分片最大字符数。
+            chunk_overlap_chars: 分片重叠字符数。
+            dedup_in_bucket: 是否桶内去重。
+            collect_token_usage: 是否返回 token 用量增量。
+        
+        Returns:
+            dict[str, Any]: 批处理结果。
+        """
         effective_image_hint = str(image_extract_hint or "").strip()
         root_dir = Path(dir_path).expanduser()
         if not root_dir.exists() or not root_dir.is_dir():
@@ -3290,6 +3846,16 @@ class ContextMemoryEngineV3:
         with_evidence: bool = False,
         revision: str | None = None,
     ) -> MemoryRecord | None:
+        """读取记忆记录。
+        
+        Args:
+            key: 记忆 key。
+            with_evidence: 是否附带证据文本。
+            revision: 指定 revision；为空读取最新版本。
+        
+        Returns:
+            MemoryRecord | None: 命中记录或 `None`。
+        """
         rec = self.storage.get_record(key, revision)
         if rec is None:
             return None
@@ -3298,6 +3864,14 @@ class ContextMemoryEngineV3:
         return rec
 
     async def export_memory_to_markdown(self, memory_id: str) -> dict[str, Any]:
+        """导出记忆为 Markdown 文件。
+        
+        Args:
+            memory_id: 记忆 key。
+        
+        Returns:
+            dict[str, Any]: 导出结果与输出路径。
+        """
         key = str(memory_id or "").strip()
         if not key:
             return {"success": False, "memory_id": key, "path": "", "message": "memory id is required"}
@@ -3328,6 +3902,15 @@ class ContextMemoryEngineV3:
         return {"success": True, "memory_id": key, "path": final_path, "message": "markdown exported"}
 
     async def get_evidence_content(self, key: str, *, revision: str | None = None) -> str:
+        """获取证据文本。
+        
+        Args:
+            key: 记忆 key。
+            revision: 指定 revision；为空读取最新版本。
+        
+        Returns:
+            str: 证据文本。
+        """
         return self.storage.get_evidence_content_by_key(key, revision)
 
     async def list_memories(
@@ -3337,6 +3920,16 @@ class ContextMemoryEngineV3:
         include_content: bool = False,
         bucket_id: str | None = None,
     ) -> dict[str, Any]:
+        """列出桶内记录与统计。
+        
+        Args:
+            include_gray: 是否包含灰化记录。
+            include_content: 是否返回完整内容。
+            bucket_id: 目标桶 ID；为空使用当前活跃桶。
+        
+        Returns:
+            dict[str, Any]: 记录列表与计数统计。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         records = self.storage.list_bucket_records(resolved, include_gray=include_gray)
         memories: list[MemoryRecord] = []
@@ -3395,6 +3988,14 @@ class ContextMemoryEngineV3:
         return total
 
     async def get_bucket_context_usage(self, bucket_id: str | None = None) -> dict[str, Any]:
+        """获取桶上下文占用。
+        
+        Args:
+            bucket_id: 目标桶 ID；为空使用当前活跃桶。
+        
+        Returns:
+            dict[str, Any]: 估算 token 与占用率。
+        """
         resolved = self._resolve_bucket_id(bucket_id)
         estimated = int(self.storage.estimate_bucket_tokens(resolved, include_gray=False))
         max_window = max(1, int(self.max_context_window))
@@ -3412,6 +4013,16 @@ class ContextMemoryEngineV3:
         *,
         evidence_path: str | None = None,
     ) -> UpdateResult:
+        """更新已有记忆。
+        
+        Args:
+            key: 目标记忆 key。
+            patch_text: 新文本内容。
+            evidence_path: 新证据路径；为空则沿用原证据。
+        
+        Returns:
+            UpdateResult: 更新结果。
+        """
         self._begin_alias_session()
         try:
             current0 = self.storage.get_record(key)
@@ -3500,6 +4111,16 @@ class ContextMemoryEngineV3:
             self._end_alias_session(flush=True)
 
     async def set_gray(self, key: str, *, gray: bool, reason: str = "manual") -> UpdateResult:
+        """设置灰度状态。
+        
+        Args:
+            key: 目标记忆 key。
+            gray: `True` 置灰，`False` 取消置灰。
+            reason: 操作原因。
+        
+        Returns:
+            UpdateResult: 更新结果。
+        """
         current0 = self.storage.get_record(key)
         if current0 is None:
             return UpdateResult(success=False, key=key, message="memory key not found")
@@ -3595,6 +4216,15 @@ class ContextMemoryEngineV3:
         return ""
 
     async def delete_memory(self, key: Any, *, reason: str = "") -> DeleteResult:
+        """删除目标（逻辑删除：标记为灰）。
+        
+        Args:
+            key: 删除目标；支持 key/对象/字典。
+            reason: 删除原因。
+        
+        Returns:
+            DeleteResult: 删除结果。
+        """
         target_key = self._resolve_delete_target_key(key)
         if not target_key:
             return DeleteResult(success=False, key="", message="invalid delete target")
@@ -3642,6 +4272,26 @@ class ContextMemoryEngineV3:
         global_recall_time_budget_ms: int | None = None,
         branch_expand_k: int | None = None,
     ) -> QueryResult:
+        """查询并返回重排结果。
+        
+        Args:
+            query_text: 查询文本。
+            top_k: 返回条数上限。
+            include_gray: 是否允许灰化记录参与。
+            with_evidence: 是否返回证据内容。
+            use_cache: 是否启用查询缓存。
+            bucket_id: 目标桶 ID；为空使用当前活跃桶。
+            max_depth: 最大递归深度。
+            mode: 查询模式（`auto`/`semantic`/`hybrid`）。
+            global_recall_top_n: 全局召回候选数 N。
+            global_recall_top_m: 全局召回参与重排桶数 M。
+            global_recall_depth_limit: 全局召回深度限制。
+            global_recall_time_budget_ms: 全局召回时间预算（毫秒）。
+            branch_expand_k: 每层分支展开数量。
+        
+        Returns:
+            QueryResult: 查询结果对象。
+        """
         self._ensure_query_side_effect_worker()
         mode = self._normalize_query_mode_value(mode, field_name="mode")
         effective_top_k = max(1, int(top_k if top_k is not None else self._query_top_k_default))
@@ -3803,6 +4453,15 @@ class ContextMemoryEngineV3:
         )
 
     async def force_compress(self, *, reason: str = "manual", bucket_id: str | None = None) -> CompressResult:
+        """强制压缩桶内容。
+        
+        Args:
+            reason: 压缩原因标识。
+            bucket_id: 目标桶 ID；为空使用当前活跃桶。
+        
+        Returns:
+            CompressResult: 压缩结果。
+        """
         self._begin_alias_session()
         try:
             async with self._bucket_write_lock(bucket_id) as resolved:
@@ -4060,6 +4719,17 @@ class ContextMemoryEngineV3:
         target_groups_min: int = 2,
         target_groups_max: int = 10,
     ) -> dict[str, Any]:
+        """执行分桶。
+        
+        Args:
+            bucket_id: 目标桶 ID。
+            reason: 分桶原因。
+            target_groups_min: 最小分组数。
+            target_groups_max: 最大分组数。
+        
+        Returns:
+            dict[str, Any]: 分桶结果摘要。
+        """
         self._begin_alias_session()
         try:
             async with self._bucket_write_lock(bucket_id) as resolved:
@@ -4078,6 +4748,15 @@ class ContextMemoryEngineV3:
         bucket_id: str | None = None,
         reason: str = "manual_optimize",
     ) -> OptimizeResult:
+        """执行优化流程。
+        
+        Args:
+            bucket_id: 目标桶 ID；为空使用当前活跃桶。
+            reason: 优化原因。
+        
+        Returns:
+            OptimizeResult: 优化结果。
+        """
         self._begin_alias_session()
         try:
             async with self._bucket_write_lock(bucket_id) as resolved:
@@ -4092,6 +4771,16 @@ class ContextMemoryEngineV3:
         target_bucket_id: str,
         reason: str = "manual_move",
     ) -> MoveResult:
+        """移动记忆到目标桶。
+        
+        Args:
+            key: 记忆 key。
+            target_bucket_id: 目标桶 ID。
+            reason: 移动原因。
+        
+        Returns:
+            MoveResult: 移动结果。
+        """
         self._begin_alias_session()
         try:
             current = self.storage.get_record(key)
@@ -4103,6 +4792,15 @@ class ContextMemoryEngineV3:
             self._end_alias_session(flush=True)
 
     async def gc_storage(self, *, dry_run: bool = True, reason: str = "manual_gc") -> GCResult:
+        """执行存储 GC。
+        
+        Args:
+            dry_run: 是否仅预演不落盘删除。
+            reason: GC 原因。
+        
+        Returns:
+            GCResult: GC 结果。
+        """
         async with self._global_meta_lock:
             return await self._gc_storage_unlocked(dry_run=dry_run, reason=reason)
 
@@ -4884,6 +5582,11 @@ class ContextMemoryEngineV3:
         return GCResult(success=(len(errors) == 0), dry_run=False, message="gc done", deleted=counts, skipped=skipped, errors=errors)
 
     async def cleanup_expired(self) -> CleanupResult:
+        """清理过期数据。
+        
+        Returns:
+            CleanupResult: 清理结果。
+        """
         async with self._global_meta_lock:
             return await self._maintenance_service.cleanup_expired()
 
@@ -4984,9 +5687,19 @@ class ContextMemoryEngineV3:
         return _clamp_score(adjusted)
 
     async def stats(self) -> EngineStats:
+        """获取引擎统计信息。
+        
+        Returns:
+            EngineStats: 统计对象。
+        """
         return await self._maintenance_service.stats()
 
     async def migrate_storage_paths_to_relative(self) -> dict[str, int]:
+        """迁移存储路径为相对路径。
+        
+        Returns:
+            dict[str, int]: 迁移统计。
+        """
         async with self._global_meta_lock:
             return self.storage.migrate_paths_to_relative()
 
@@ -5018,6 +5731,24 @@ class ContextMemorySystem:
         enable_forgetting: bool | None = None,
         init_config: bool = True,
     ) -> ContextMemoryEngineV3:
+        """获取 ContextMemory 引擎单例。
+        
+        Args:
+            config: 配置对象或配置字典；提供时优先使用。
+            base_dir: 数据根目录。
+            llm_preset: 主 LLM 预设名。
+            image_llm_preset: 图像识别 LLM 预设名。
+            tool_presets: 工具预设映射。
+            ask_timeout: LLM 调用超时（秒）。
+            auto_resume_pending_jobs: 是否自动恢复未完成任务。
+            use_mock_llm: 是否启用 mock LLM。
+            enable_cleaning: 是否启用输入清洗。
+            enable_forgetting: 是否启用遗忘机制。
+            init_config: 是否初始化配置模块。
+        
+        Returns:
+            ContextMemoryEngineV3: 全局单例引擎。
+        """
         if cls._instance is None:
             cfg_obj: ContextMemoryConfig | None = None
             if isinstance(config, ContextMemoryConfig):
@@ -5072,6 +5803,24 @@ def get_context_memory_engine(
         enable_forgetting: bool | None = None,
         init_config: bool = True
 ):
+    """获取 ContextMemory 引擎（`ContextMemorySystem.get_instance` 的便捷入口）。
+    
+    Args:
+        config: 配置对象或配置字典；提供时优先使用。
+        base_dir: 数据根目录。
+        llm_preset: 主 LLM 预设名。
+        image_llm_preset: 图像识别 LLM 预设名。
+        tool_presets: 工具预设映射。
+        ask_timeout: LLM 调用超时（秒）。
+        auto_resume_pending_jobs: 是否自动恢复未完成任务。
+        use_mock_llm: 是否启用 mock LLM。
+        enable_cleaning: 是否启用输入清洗。
+        enable_forgetting: 是否启用遗忘机制。
+        init_config: 是否初始化配置模块。
+    
+    Returns:
+        ContextMemoryEngineV3: 引擎单例。
+    """
     return ContextMemorySystem.get_instance(
         config=config,
         base_dir=base_dir,
