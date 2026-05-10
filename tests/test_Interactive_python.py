@@ -35,7 +35,7 @@ def _json_print(obj: Any) -> str:
 async def main():
     async def add_file(_file: str):
         _path = Path(_file.strip('"'))
-        result = await memory.add_memory_from_file(_path, force_split=True)
+        result = await memory.add_memory_from_file(_file, force_split=True)
         print(_json_print(result))
 
     async def add_memory(_text: str):
@@ -72,7 +72,7 @@ async def main():
 
     async def add_dir(_dir: str):
         _dir = Path(_dir.strip('"'))
-        result = await memory.add_memory_from_dir(_dir)
+        result = await memory.add_memory_from_dir(str(_dir))
         print(_json_print(result))
 
     async def switch(bucket_id: str):
