@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 import json
 import asyncio
 import hashlib
@@ -2660,11 +2660,16 @@ class ContextMemoryEngineV3:
 
         self._seal_bucket_unlocked(source_bucket_id=source_bucket_id, successor_bucket_id=successor.bucket_id)
 
-        # ROOT has no special behavior in logic, but routing pointers should follow successor.
+        # Update routing pointers independently:
+        # - source==ROOT: ROOT must follow successor
+        # - source==ACTIVE: ACTIVE must follow successor
+        # This avoids accidental ROOT drift when only an active sub-bucket is rebuilt.
         root_id = self.root_bucket_id()
         active_id = self.active_bucket_id()
-        if source_bucket_id == root_id or source_bucket_id == active_id:
-            self.storage.set_root_and_active_bucket_id(successor.bucket_id)
+        if source_bucket_id == root_id:
+            self.storage.set_root_bucket_id(successor.bucket_id)
+        if source_bucket_id == active_id:
+            self.storage.set_active_bucket_id(successor.bucket_id)
 
         if self._is_auto_split_reason(reason):
             self.storage.mark_auto_split(source_bucket_id=source_bucket_id, successor_bucket_id=successor.bucket_id)
@@ -5275,8 +5280,10 @@ class ContextMemoryEngineV3:
         self._seal_bucket_unlocked(source_bucket_id=source_bucket_id, successor_bucket_id=successor_bucket_id)
         root_id = self.root_bucket_id()
         active_id = self.active_bucket_id()
-        if source_bucket_id == root_id or source_bucket_id == active_id:
-            self.storage.set_root_and_active_bucket_id(successor_bucket_id)
+        if source_bucket_id == root_id:
+            self.storage.set_root_bucket_id(successor_bucket_id)
+        if source_bucket_id == active_id:
+            self.storage.set_active_bucket_id(successor_bucket_id)
         if self._is_auto_split_reason(reason):
             self.storage.mark_auto_split(source_bucket_id=source_bucket_id, successor_bucket_id=successor_bucket_id)
 
