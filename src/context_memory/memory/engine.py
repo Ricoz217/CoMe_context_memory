@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 import json
 import asyncio
 import hashlib
@@ -58,6 +58,11 @@ from context_memory.file_cache import configure_global_file_cache_dir
 from context_memory.LLM_usage import LLMUsage
 from context_memory.time_id import configure_global_time_id_state_file
 from context_memory.utils import AutoMapping, atomic_save_json
+
+try:
+    import tiktoken  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    tiktoken = None  # type: ignore
 
 """ContextMemory 解耦引擎（Python API）。
 
@@ -1724,8 +1729,58 @@ class ContextMemoryEngineV3:
 
     def _invalidate_bucket_context_cache(self, bucket_id: str) -> None:
         self.memory_manager.remove(f"ctx:{bucket_id}")
+        self.memory_manager.remove(f"ctx_tokens:{bucket_id}")
         keep_version = self.storage.get_bucket_version(bucket_id)
         self.bm25_cache.clear_old_versions(bucket_id=bucket_id, keep_version=keep_version)
+
+    def _bucket_context_tokens_real(self, bucket_id: str) -> int:
+        cache_key = f"ctx_tokens:{bucket_id}"
+        bucket_ver = int(self.storage.get_bucket_version(bucket_id))
+        cached = self.memory_manager.get(cache_key)
+        if isinstance(cached, dict):
+            try:
+                cached_ver = int(cached.get("version", -1))
+                cached_tokens = int(cached.get("tokens", 0))
+            except Exception:
+                cached_ver = -1
+                cached_tokens = 0
+            if cached_ver == bucket_ver and cached_tokens > 0:
+                return cached_tokens
+
+        ctx = self._bucket_context(bucket_id)
+        if ctx is None:
+            return 1
+
+        try:
+            prompts = ctx.to_prompts()
+        except Exception:
+            prompts = []
+
+        text_parts: list[str] = []
+        for prompt in prompts or []:
+            text = getattr(prompt, "text", None)
+            if isinstance(text, str) and text:
+                text_parts.append(text)
+
+        raw_text = "\n".join(text_parts)
+        if not raw_text:
+            tokens = 1
+        elif tiktoken is not None:
+            try:
+                enc = tiktoken.get_encoding("o200k_base")
+                tokens = max(1, int(len(enc.encode(raw_text))))
+            except Exception:
+                tokens = max(1, int(len(raw_text) / 3))
+        else:
+            tokens = max(1, int(len(raw_text) / 3))
+
+        self.memory_manager.set(
+            cache_key,
+            {"version": bucket_ver, "tokens": int(tokens)},
+            bytes_estimate=128,
+            dirty=False,
+        )
+        return int(tokens)
 
     def _record_llm_usage(self) -> None:
         self._record_llm_usage_values(self.pipeline.last_usage)
@@ -2605,11 +2660,16 @@ class ContextMemoryEngineV3:
 
         self._seal_bucket_unlocked(source_bucket_id=source_bucket_id, successor_bucket_id=successor.bucket_id)
 
-        # ROOT has no special behavior in logic, but routing pointers should follow successor.
+        # Update routing pointers independently:
+        # - source==ROOT: ROOT must follow successor
+        # - source==ACTIVE: ACTIVE must follow successor
+        # This avoids accidental ROOT drift when only an active sub-bucket is rebuilt.
         root_id = self.root_bucket_id()
         active_id = self.active_bucket_id()
-        if source_bucket_id == root_id or source_bucket_id == active_id:
-            self.storage.set_root_and_active_bucket_id(successor.bucket_id)
+        if source_bucket_id == root_id:
+            self.storage.set_root_bucket_id(successor.bucket_id)
+        if source_bucket_id == active_id:
+            self.storage.set_active_bucket_id(successor.bucket_id)
 
         if self._is_auto_split_reason(reason):
             self.storage.mark_auto_split(source_bucket_id=source_bucket_id, successor_bucket_id=successor.bucket_id)
@@ -4869,6 +4929,20 @@ class ContextMemoryEngineV3:
 
         key_to_rec = {r.key: r for r in records}
         key_set = set(key_to_rec.keys())
+        bucket_id_to_node_key: dict[str, str] = {}
+        for rec in records:
+            if rec.kind != BUCKET_KIND_BUCKET:
+                continue
+            child_raw = str(rec.child_bucket_id or "").strip()
+            if not child_raw:
+                continue
+            bucket_id_to_node_key[child_raw] = rec.key
+            try:
+                resolved_child = self._resolve_bucket_id(child_raw)
+            except Exception:
+                resolved_child = child_raw
+            if resolved_child:
+                bucket_id_to_node_key[str(resolved_child).strip()] = rec.key
         merge_groups: list[dict[str, Any]] = []
         keep_keys_set: set[str] = set()
 
@@ -4878,7 +4952,18 @@ class ContextMemoryEngineV3:
             keys_raw = g.get("keys", [])
             if not isinstance(keys_raw, list):
                 continue
-            keys = [str(k).strip() for k in keys_raw if str(k).strip() in key_set]
+            keys: list[str] = []
+            for raw_key in keys_raw:
+                token = str(raw_key).strip()
+                if not token:
+                    continue
+                normalized = token
+                if token not in key_set:
+                    mapped = str(bucket_id_to_node_key.get(token, "")).strip()
+                    if mapped:
+                        normalized = mapped
+                if normalized in key_set and normalized not in keys:
+                    keys.append(normalized)
             if not keys:
                 continue
             merge_groups.append(
@@ -4986,6 +5071,14 @@ class ContextMemoryEngineV3:
                 continue
             if rec.bucket_id != source.bucket_id:
                 continue
+            if rec.kind == BUCKET_KIND_BUCKET and str(rec.child_bucket_id or "").strip():
+                try:
+                    self.storage.reparent_bucket(
+                        bucket_id=str(rec.child_bucket_id).strip(),
+                        new_parent_bucket_id=dst_bucket,
+                    )
+                except Exception:
+                    pass
 
             # Source tombstone event.
             rel_old = normalize_relations(rec.relations)
@@ -5187,8 +5280,10 @@ class ContextMemoryEngineV3:
         self._seal_bucket_unlocked(source_bucket_id=source_bucket_id, successor_bucket_id=successor_bucket_id)
         root_id = self.root_bucket_id()
         active_id = self.active_bucket_id()
-        if source_bucket_id == root_id or source_bucket_id == active_id:
-            self.storage.set_root_and_active_bucket_id(successor_bucket_id)
+        if source_bucket_id == root_id:
+            self.storage.set_root_bucket_id(successor_bucket_id)
+        if source_bucket_id == active_id:
+            self.storage.set_active_bucket_id(successor_bucket_id)
         if self._is_auto_split_reason(reason):
             self.storage.mark_auto_split(source_bucket_id=source_bucket_id, successor_bucket_id=successor_bucket_id)
 
@@ -5628,7 +5723,7 @@ class ContextMemoryEngineV3:
             return
 
     def _bucket_pressure(self, bucket_id: str) -> tuple[float, int]:
-        est = self.storage.estimate_bucket_tokens(bucket_id, include_gray=True)
+        est = self._bucket_context_tokens_real(bucket_id)
         count = len(self.storage.list_bucket_records(bucket_id, include_gray=False))
         return est / max(1, self.max_context_window), count
 

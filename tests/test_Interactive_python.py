@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from dataclasses import is_dataclass, asdict
 
-from context_memory import get_context_memory_engine, ContextMemoryConfig
+from context_memory import get_context_memory_engine, ContextMemoryConfig  # 单例和配置
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.input_manager import read_command_async

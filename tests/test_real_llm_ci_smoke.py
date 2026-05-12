@@ -192,7 +192,10 @@ async def test_real_llm_ci_full_interface_smoke(
 
     iter_records = [rec async for rec in root]
     assert len(iter_records) >= 1
-    assert primary_key in child_handle
+    # optimize/split may legally rebalance records across buckets; ensure key is still retrievable.
+    primary_latest = await engine.get_memory(primary_key)
+    assert primary_latest is not None
+    assert primary_latest.key == primary_key
 
     bucket_usage = await root.get_bucket_context_usage()
     assert "estimated_tokens" in bucket_usage
