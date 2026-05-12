@@ -110,3 +110,46 @@ CLI 现在支持：
 
 1. `create_bucket` 需要父桶 id，且支持传入 `ROOT` 表示根桶。
 2. `create_child_bucket` 默认以当前 active bucket 作为父桶。
+
+## Query 参数语义补充（Agent 视角）
+
+这部分用于澄清一个常见误解：`mode` 不是遍历算法开关，`mode` 只影响打分融合；遍历始终包含 BFS 召回阶段。
+
+### 1. 两层机制（必须区分）
+
+1. 遍历层（Traversal）
+   - 全局召回阶段会按预算做 BFS 扫桶。
+   - 相关参数：`global_recall_top_n`、`global_recall_depth_limit`、`global_recall_time_budget_ms`、`max_depth`、`branch_expand_k`。
+
+2. 打分层（Scoring）
+   - `mode` 只控制桶内候选打分融合策略，不控制是否 BFS。
+   - `semantic`：更偏向词项匹配（适合代码符号、路径、术语）。
+   - `hybrid`：提高模糊语义权重（适合自然语言、描述式问题）。
+   - `auto`：按查询文本特征在 `semantic/hybrid` 间自动分流。
+
+### 2. 参数如何影响 Agent 自由度
+
+1. 想“少漏召回、允许探索更多方向”
+   - 增大：`global_recall_top_n`、`global_recall_depth_limit`、`global_recall_time_budget_ms`、`branch_expand_k`。
+   - 代价：延迟与噪声上升。
+
+2. 想“更快、更聚焦、可控”
+   - 减小：`global_recall_top_n`、`global_recall_depth_limit`、`branch_expand_k`，并设置较小 `max_depth`。
+   - 代价：可能漏掉远层相关信息。
+
+3. 想“精确查代码事实”
+   - 优先：`mode="semantic"`，并适度降低 `branch_expand_k`。
+
+4. 想“容忍表述变化/模糊问题”
+   - 优先：`mode="hybrid"`，并适度提高 BFS 预算参数。
+
+### 3. 推荐的多轮查询策略（给 Agent）
+
+1. 第一轮：广召回
+   - `mode="auto"`，中高 `global_recall_top_n`，中等 `branch_expand_k`。
+
+2. 第二轮：定向收敛
+   - 根据第一轮证据 key，降低 BFS 预算并收紧 `max_depth`。
+
+3. 第三轮：精确验证
+   - `mode="semantic"`，小 `top_k`，对关键 bucket 或 key 做复查。
