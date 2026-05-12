@@ -26,6 +26,8 @@ The core principle is `Event Append-Only`:
 1. Full context can be carried directly within a bucket, without strong dependency on chunk-only retrieval.
 2. Retrieval works without a separate vector database.
 3. Bucket structure and memory relations are explicit and controllable for manual intervention and debugging.
+4. You can directly input daily trivial matters or information without clear connections,  
+and directly obtain replies for specified content (such as preferences/habits/personal information, etc.).
 
 ### 2.2 Limitations
 1. Constrained by LLM context windows, deep subtree routing is inherently harder.
