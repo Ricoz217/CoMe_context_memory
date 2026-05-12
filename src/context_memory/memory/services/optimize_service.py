@@ -77,7 +77,7 @@ class OptimizeService:
             map_ver = eng.alias_map_version(target_bucket)
             eng.assert_alias_only_payload(target_bucket, alias_payload)
             llm_alias = await eng.pipeline.optimize(
-                bucket_context=eng._bucket_context(target_bucket),
+                bucket_context=None,
                 reason=reason,
                 payload=alias_payload,
             )

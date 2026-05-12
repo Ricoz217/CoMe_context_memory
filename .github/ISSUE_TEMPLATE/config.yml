@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/Ricoz217/CoMe_context_memory/tree/main/docs
+    about: Please check docs first for API, CLI, JSON-RPC, and config usage.
