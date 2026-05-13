@@ -186,3 +186,4 @@ new_engine = ContextMemoryEngineV3()
 - [ ] 显式设置记忆过期时间
 - [ ] 显式锁定记忆
 - [ ] 加入时间管理功能
+- [ ] 加入RTK和HEADROOM
