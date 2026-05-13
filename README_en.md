@@ -186,3 +186,4 @@ Questions with this context usually get accurate answers much faster.
 - [ ] Explicit lock memory
 - [ ] Memory time relation system
 - [ ] RTK and HEADROOM
+- [ ] Schema Migration System

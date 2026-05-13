@@ -187,3 +187,4 @@ new_engine = ContextMemoryEngineV3()
 - [ ] 显式锁定记忆
 - [ ] 加入时间管理功能
 - [ ] 加入RTK和HEADROOM
+- [ ] 记忆库升级系统
