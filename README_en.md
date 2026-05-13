@@ -185,3 +185,4 @@ Questions with this context usually get accurate answers much faster.
 - [ ] Explicit set expire for memory
 - [ ] Explicit lock memory
 - [ ] Memory time relation system
+- [ ] RTK and HEADROOM
