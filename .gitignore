@@ -32,6 +32,7 @@ Thumbs.db
 # Agent
 /.agents/*
 /.codex/*
+/project_index/*
 /AGENTS.md
 
 # Local runtime data
