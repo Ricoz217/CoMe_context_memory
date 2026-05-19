@@ -72,3 +72,24 @@
 - 修复：在 `project_index/` 建立完整索引（关系、契约、历史、问题、TODO、同步手册）。
 - 验证：可在新线程按文档顺序完成快速接手。
 - 结论：交接能力显著提升，后续需保持文档与代码同步更新。
+
+## M-2026-05-08：TODO 完成态核验与回填
+- 版本号：发布版 v0.3.2（索引治理）
+- 日期：2026-05-18
+- 影响范围：发布版
+- 问题：`TODO.md` 中“文档编码与交接治理”“大文本压力治理”仍为未完成状态，需核验代码与索引实际落地情况。
+- 根因：历史实施已落地，但 TODO 状态未及时回填，造成“代码状态与索引状态”不一致。
+- 修复：
+  - 对“文档编码与交接治理”执行 `project_index/*.md` UTF-8 可读性核验（12/12 通过）。
+  - 对“大文本压力治理”逐项核验代码落点：
+    - 自动治理压力触发使用真实 token 估算（`_bucket_context_tokens_real` + `_bucket_pressure`）。
+    - split fallback 允许 bucket 类节点参与拆分，避免“执行后不变”死桶。
+    - optimize 使用结构化 payload，并限制 payload 体积（>70% 窗口即拒绝），且禁用 context 注入。
+  - 将两项 TODO 标记为已完成。
+- 验证：
+  - `TODO.md` 两项状态已由 `[ ]` 更新为 `[x]`。
+  - 核验代码位置：
+    - `src/context_memory/memory/engine.py`
+    - `src/context_memory/memory/llm_pipeline.py`
+    - `src/context_memory/memory/services/optimize_service.py`
+- 结论：两项任务在发布版层面可判定“已落地并完成”；后续仅需持续保留压测回归与文档同步纪律。
