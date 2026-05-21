@@ -5698,11 +5698,24 @@ class ContextMemoryEngineV3:
         split_round = 0
 
         if pressure > self._auto_compress_trigger_ratio or count > 1000:
-            await self._force_compress_unlocked(bucket_id=bucket_id, reason="auto_threshold")
             did_compress = True
+            try:
+                comp = await self._force_compress_unlocked(bucket_id=bucket_id, reason="auto_threshold")
+                if not bool(getattr(comp, "success", False)):
+                    self.storage.append_event(
+                        event_type="AUTO_COMPRESS_FAIL",
+                        bucket_id=bucket_id,
+                        payload={"reason": "auto_threshold", "message": str(getattr(comp, "message", ""))},
+                    )
+            except Exception as exc:
+                self.storage.append_event(
+                    event_type="AUTO_COMPRESS_FAIL",
+                    bucket_id=bucket_id,
+                    payload={"reason": "auto_threshold", "error": repr(exc)},
+                )
             pressure, count = self._bucket_pressure(bucket_id)
 
-        if pressure > self._auto_split_trigger_ratio or count > 1000:
+        if did_compress and (pressure > self._auto_split_trigger_ratio or count > 1000):
             if did_split:
                 self.storage.record_auto_split_guard_hit()
                 return
