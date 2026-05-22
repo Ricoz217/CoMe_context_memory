@@ -932,6 +932,7 @@ class OptimizeService:
             expires_at=current.expires_at,
             source_hash=current.source_hash,
             child_bucket_id=current.child_bucket_id,
+            confidence_type=current.confidence_type,
         )
         eng.storage.write_memory_record(out_rec)
         eng._append_context_event(

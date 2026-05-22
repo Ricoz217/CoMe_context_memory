@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 __version__ = "0.3.3"
+__data_version__ = 2
 import json
 import asyncio
 import hashlib
+import os
 import random
 import shutil
+import traceback
 import yaml
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -13,13 +16,16 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable, TypeVar
+from typing import Any, AsyncIterator, Callable, Literal, TypeVar
 from uuid import uuid4
 
 from .llm_pipeline import LLMPipelineV3
 from .aliasing import AliasCodec, AliasPayloadError, stable_payload_hash
 from .memory_manager import MemoryManager
 from .services import (
+    ADVANCE_QUERY_MODE_BEST_EFFORT,
+    ADVANCE_QUERY_MODE_SINGLE_SHOT,
+    AdvanceQueryService,
     BucketSummaryService,
     BucketTopologyService,
     CompressSplitService,
@@ -53,7 +59,9 @@ from .models import (
 from .multimodal import ImageTextExtractor
 from .rerank import BM25IndexCache, louvain_split_groups
 from .storage import MemoryStorageV3
+from .migrations import MigrationContext, build_migration_plan, resolve_chain
 
+from context_memory.LLM_connect import Prompts, SystemPrompt, ToolInput
 from context_memory.file_cache import configure_global_file_cache_dir
 from context_memory.LLM_usage import LLMUsage
 from context_memory.time_id import configure_global_time_id_state_file
@@ -481,6 +489,35 @@ class BucketHandle:
             branch_expand_k=branch_expand_k,
         )
 
+    async def advance_query(
+        self,
+        *,
+        command: str = "",
+        system_prompt: str | SystemPrompt | None = None,
+        mode: Literal["single_shot", "best_effort_full_view"] = ADVANCE_QUERY_MODE_BEST_EFFORT,
+        max_expand_depth: int | None = None,
+        include_gray: bool = False,
+        llm_preset: str | None = None,
+        tool_input: ToolInput | list[ToolInput] | Prompts | None = None,
+        enable_aliasing: bool = True,
+        audit: bool = False,
+        max_parallel_chunks: int | None = None,
+    ) -> Any:
+        bucket_id = await self._refresh_bucket_id()
+        return await self._engine.advance_query(
+            command=command,
+            system_prompt=system_prompt,
+            mode=mode,
+            bucket_id=bucket_id,
+            max_expand_depth=max_expand_depth,
+            include_gray=include_gray,
+            llm_preset=llm_preset,
+            tool_input=tool_input,
+            enable_aliasing=enable_aliasing,
+            audit=audit,
+            max_parallel_chunks=max_parallel_chunks,
+        )
+
     async def force_compress(self, *, reason: str = "manual") -> CompressResult:
         """对当前桶执行强制压缩。
 
@@ -775,6 +812,12 @@ class BucketHandle:
             dict[str, int]: 迁移统计结果。
         """
         return await self._engine.migrate_storage_paths_to_relative()
+
+    async def migration_status(self) -> dict[str, Any]:
+        return await self._engine.migration_status()
+
+    async def migrate_schema(self, *, dry_run: bool = False) -> dict[str, Any]:
+        return await self._engine.migrate_schema(dry_run=dry_run)
 
     async def set_gray(self, key: str, *, gray: bool, reason: str = "manual") -> UpdateResult:
         """设置记忆灰度状态。
@@ -1187,6 +1230,7 @@ class ContextMemoryEngineV3:
         self._bucket_summary_service = BucketSummaryService(self._runtime)
         self._maintenance_service = MaintenanceService(self._runtime)
         self._optimize_service = OptimizeService(self._runtime)
+        self._advance_query_service = AdvanceQueryService(self._runtime)
         self._auto_resume_pending_jobs = bool(auto_resume_pending_jobs)
         self._auto_resume_task: asyncio.Task | None = None
         self._auto_resume_last_result: dict[str, Any] | None = None
@@ -1198,6 +1242,7 @@ class ContextMemoryEngineV3:
         self.bucket_mapping.clear()
         self.storage = MemoryStorageV3(self.base_dir, evidence_versions=self._evidence_versions)
         self.alias_codec = AliasCodec(self.storage)
+        self._migrate_if_needed(force=False, dry_run=False)
         self._last_sealed_link_repair_version = -1
         runtime_dir = self.base_dir / "runtime"
         usage_file = runtime_dir / "token_usage" / "usage.json"
@@ -1342,6 +1387,287 @@ class ContextMemoryEngineV3:
                 }
             return
         self._auto_resume_task = loop.create_task(self._auto_resume_pending_jobs_runner())
+
+    @staticmethod
+    def _migration_default_schema_version() -> int:
+        return 1
+
+    def _safe_append_migration_event(self, *, event_type: str, payload: dict[str, Any]) -> None:
+        try:
+            bucket_id = self.active_bucket_id()
+            self.storage.append_event(
+                event_type=event_type,
+                bucket_id=bucket_id,
+                payload=dict(payload),
+            )
+        except Exception:
+            pass
+
+    def _acquire_migration_lock(self, *, run_id: str) -> int:
+        lock_path = self.storage.migration_lock_file
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        try:
+            fd = os.open(str(lock_path), flags, 0o644)
+        except FileExistsError as exc:
+            raise RuntimeError(
+                f"schema migration lock exists: {lock_path}; "
+                "manual confirmation required before removing lock"
+            ) from exc
+        payload = {
+            "run_id": run_id,
+            "pid": os.getpid(),
+            "created_at": utc_now_iso(),
+            "engine_version": __version__,
+            "code_schema_version": int(__data_version__),
+        }
+        os.write(fd, (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+        os.fsync(fd)
+        return fd
+
+    def _release_migration_lock(self, fd: int | None) -> None:
+        try:
+            if fd is not None:
+                os.close(fd)
+        except Exception:
+            pass
+        try:
+            self.storage.migration_lock_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    def _migration_status_unlocked(self) -> dict[str, Any]:
+        code_version = int(__data_version__)
+        default_version = self._migration_default_schema_version()
+        schema_exists = bool(self.storage.schema_version_file.exists())
+        schema_info = self.storage.read_schema_version(default_schema_version=default_version)
+        data_version = int(schema_info.get("schema_version", default_version))
+        plan: list[dict[str, Any]] = []
+        plan_error = ""
+        try:
+            plan = build_migration_plan(from_version=data_version, to_version=code_version)
+        except Exception as exc:
+            plan_error = str(exc)
+        return {
+            "success": True,
+            "code_schema_version": code_version,
+            "data_schema_version": data_version,
+            "schema_file_exists": schema_exists,
+            "schema_info": schema_info,
+            "needs_migration": data_version != code_version,
+            "downgrade_blocked": data_version > code_version,
+            "lock_exists": bool(self.storage.migration_lock_file.exists()),
+            "plan": plan,
+            "plan_error": plan_error,
+            "journal": self.storage.load_migration_journal(),
+            "paths": {
+                "schema_version_file": str(self.storage.schema_version_file),
+                "migration_journal_file": str(self.storage.migration_journal_file),
+                "migration_lock_file": str(self.storage.migration_lock_file),
+                "migration_tmp_dir": str(self.storage.migration_tmp_dir),
+                "pre_upgrade_backup_dir": str(self.storage.pre_upgrade_backup_dir),
+            },
+        }
+
+    def _migrate_if_needed(self, *, force: bool, dry_run: bool) -> dict[str, Any]:
+        if not isinstance(self.storage, MemoryStorageV3):
+            return {"success": False, "message": "storage not initialized"}
+
+        code_version = int(__data_version__)
+        default_version = self._migration_default_schema_version()
+        schema_exists = bool(self.storage.schema_version_file.exists())
+        schema_info = self.storage.read_schema_version(default_schema_version=default_version)
+        data_version = int(schema_info.get("schema_version", default_version))
+        plan = build_migration_plan(from_version=data_version, to_version=code_version)
+
+        if dry_run:
+            return {
+                "success": True,
+                "dry_run": True,
+                "code_schema_version": code_version,
+                "data_schema_version": data_version,
+                "needs_migration": data_version != code_version,
+                "plan": plan,
+            }
+
+        if data_version > code_version:
+            raise RuntimeError(
+                f"memory data schema is newer than code: data={data_version}, code={code_version}; "
+                "please upgrade program code"
+            )
+
+        needs_migration = data_version < code_version
+        if not needs_migration:
+            if (not schema_exists) or (str(schema_info.get("engine_version", "")).strip() != str(__version__)):
+                self.storage.write_schema_version(schema_version=code_version, engine_version=__version__)
+            return {
+                "success": True,
+                "migrated": False,
+                "code_schema_version": code_version,
+                "data_schema_version": data_version,
+                "plan": [],
+                "forced": bool(force),
+            }
+
+        run_id = f"migration_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid4().hex[:8]}"
+        run_root = self.storage.migration_tmp_dir / f"run_{run_id}"
+        workspace_root = run_root / "workspace"
+        checkpoints_root = run_root / "checkpoints"
+        rollback_root = run_root / "rollback_live"
+        lock_fd: int | None = None
+        step_results: list[dict[str, Any]] = []
+
+        run_root.mkdir(parents=True, exist_ok=True)
+        checkpoints_root.mkdir(parents=True, exist_ok=True)
+
+        try:
+            lock_fd = self._acquire_migration_lock(run_id=run_id)
+            print(f"[memory-migration] start run_id={run_id} data={data_version} code={code_version}")
+            self.storage.save_migration_journal(
+                {
+                    "status": "running",
+                    "run_id": run_id,
+                    "started_at": utc_now_iso(),
+                    "from_version": data_version,
+                    "to_version": code_version,
+                    "plan": plan,
+                    "completed_steps": [],
+                }
+            )
+            self._safe_append_migration_event(
+                event_type="MIGRATION_START",
+                payload={
+                    "run_id": run_id,
+                    "from_version": data_version,
+                    "to_version": code_version,
+                    "plan": plan,
+                },
+            )
+
+            self.storage.clone_live_dataset(self.storage.pre_upgrade_backup_dir)
+            self.storage.clone_live_dataset(workspace_root)
+            workspace_storage = MemoryStorageV3(workspace_root, evidence_versions=self._evidence_versions)
+            workspace_storage.write_schema_version(schema_version=data_version, engine_version=__version__)
+
+            chain = resolve_chain(from_version=data_version, to_version=code_version)
+            for idx, step in enumerate(chain, start=1):
+                print(
+                    f"[memory-migration] step {idx}/{len(chain)} "
+                    f"{step.id} ({step.from_version}->{step.to_version})"
+                )
+                context = MigrationContext(
+                    run_id=run_id,
+                    from_version=int(step.from_version),
+                    to_version=int(step.to_version),
+                    workspace_root=workspace_root,
+                )
+                apply_out = step.apply(storage=workspace_storage, context=context) or {}
+                validate_out = step.validate(storage=workspace_storage, context=context) or {}
+                step_info = {
+                    "id": str(step.id),
+                    "from_version": int(step.from_version),
+                    "to_version": int(step.to_version),
+                    "apply": dict(apply_out) if isinstance(apply_out, dict) else {"result": apply_out},
+                    "validate": dict(validate_out) if isinstance(validate_out, dict) else {"result": validate_out},
+                    "completed_at": utc_now_iso(),
+                }
+                step_results.append(step_info)
+                workspace_storage.write_schema_version(schema_version=int(step.to_version), engine_version=__version__)
+                checkpoint_dir = checkpoints_root / f"step_{idx:03d}_{str(step.id).replace('/', '_')}"
+                workspace_storage.clone_live_dataset(checkpoint_dir)
+                workspace_storage.append_event(
+                    event_type="MIGRATION_STEP_DONE",
+                    bucket_id=workspace_storage.get_active_bucket_id(),
+                    payload={"run_id": run_id, "step": step_info},
+                )
+                self.storage.save_migration_journal(
+                    {
+                        "status": "running",
+                        "run_id": run_id,
+                        "started_at": utc_now_iso(),
+                        "from_version": data_version,
+                        "to_version": code_version,
+                        "plan": plan,
+                        "completed_steps": step_results,
+                        "current_step": str(step.id),
+                    }
+                )
+
+            workspace_storage.clear_query_cache()
+            workspace_storage.write_schema_version(schema_version=code_version, engine_version=__version__)
+            check = workspace_storage.validate_dataset_layout(root_dir=workspace_root)
+            if not bool(check.get("success", False)):
+                raise RuntimeError(f"migration validation failed: {check}")
+
+            workspace_storage.append_event(
+                event_type="MIGRATION_SUCCESS",
+                bucket_id=workspace_storage.get_active_bucket_id(),
+                payload={
+                    "run_id": run_id,
+                    "from_version": data_version,
+                    "to_version": code_version,
+                    "steps": step_results,
+                },
+            )
+
+            switch = self.storage.replace_live_dataset_from_workspace(
+                workspace_root=workspace_root,
+                rollback_root=rollback_root,
+            )
+            if not bool(switch.get("success", False)):
+                raise RuntimeError(f"dataset switch failed: {switch}")
+
+            self.storage.write_schema_version(schema_version=code_version, engine_version=__version__)
+            self.storage.save_migration_journal(
+                {
+                    "status": "success",
+                    "run_id": run_id,
+                    "finished_at": utc_now_iso(),
+                    "from_version": data_version,
+                    "to_version": code_version,
+                    "plan": plan,
+                    "completed_steps": step_results,
+                    "switch": switch,
+                }
+            )
+            print(f"[memory-migration] success run_id={run_id}")
+            return {
+                "success": True,
+                "migrated": True,
+                "run_id": run_id,
+                "from_version": data_version,
+                "to_version": code_version,
+                "plan": plan,
+                "step_results": step_results,
+            }
+        except Exception as exc:
+            fail_payload = {
+                "status": "failed",
+                "run_id": run_id,
+                "failed_at": utc_now_iso(),
+                "from_version": data_version,
+                "to_version": code_version,
+                "plan": plan,
+                "completed_steps": step_results,
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            }
+            self.storage.save_migration_journal(fail_payload)
+            self._safe_append_migration_event(
+                event_type="MIGRATION_FAIL",
+                payload={
+                    "run_id": run_id,
+                    "from_version": data_version,
+                    "to_version": code_version,
+                    "error": str(exc),
+                },
+            )
+            print(f"[memory-migration] failed run_id={run_id}: {exc}")
+            raise RuntimeError(f"schema migration failed: {exc}") from exc
+        finally:
+            self._release_migration_lock(lock_fd)
+            if run_root.exists():
+                shutil.rmtree(run_root, ignore_errors=True)
 
     @staticmethod
     def _normalize_query_mode_value(mode: str, *, field_name: str) -> str:
@@ -2025,6 +2351,7 @@ class ContextMemoryEngineV3:
                 "kind": record.kind,
                 "event": record.event,
                 "gray": record.gray,
+                "confidence_type": str(record.confidence_type or "common"),
                 "created_at": record.created_at,
                 "payload": payload,
             }
@@ -2040,6 +2367,7 @@ class ContextMemoryEngineV3:
                 "content": record.content,
                 "weight": record.weight,
                 "gray": record.gray,
+                "confidence_type": str(record.confidence_type or "common"),
                 "relations": record.relations,
                 "evidence_ref": record.evidence_ref,
                 "expires_at": record.expires_at,
@@ -2057,6 +2385,13 @@ class ContextMemoryEngineV3:
             revision_id=record.revision_id,
             payload=payload,
         )
+        try:
+            self.storage.touch_bucket_last_event_at(
+                bucket_id=bucket_id,
+                event_ts=datetime.now(timezone.utc).timestamp(),
+            )
+        except Exception:
+            pass
         self._invalidate_bucket_context_cache(bucket_id)
 
     def _has_duplicate_memory_in_bucket(self, bucket_id: str, raw_text: str) -> bool:
@@ -2119,6 +2454,7 @@ class ContextMemoryEngineV3:
             expires_at=ingested.get("expires_at"),
             source_hash=source_hash,
             child_bucket_id=child_bucket_id,
+            confidence_type=str(ingested.get("confidence_type", "common") or "common"),
         )
 
     def _repair_sealed_child_links_unlocked(self) -> int:
@@ -2165,6 +2501,7 @@ class ContextMemoryEngineV3:
                 expires_at=rec.expires_at,
                 source_hash=rec.source_hash,
                 child_bucket_id=successor_id,
+                confidence_type=rec.confidence_type,
             )
             self.storage.write_memory_record(patched)
             self._append_context_event(
@@ -2616,6 +2953,7 @@ class ContextMemoryEngineV3:
                 expires_at=rec.expires_at,
                 source_hash=rec.source_hash,
                 child_bucket_id=rec.child_bucket_id,
+                confidence_type=rec.confidence_type,
             )
             self.storage.write_memory_record(out_rec)
             self._append_context_event(
@@ -2649,6 +2987,7 @@ class ContextMemoryEngineV3:
                 expires_at=rec.expires_at,
                 source_hash=rec.source_hash,
                 child_bucket_id=rec.child_bucket_id,
+                confidence_type=rec.confidence_type,
             )
             self.storage.write_memory_record(in_rec)
             self._append_context_event(
@@ -2817,6 +3156,7 @@ class ContextMemoryEngineV3:
             expires_at=current.expires_at,
             source_hash=hashlib.sha1(content.encode("utf-8")).hexdigest(),
             child_bucket_id=current.child_bucket_id,
+            confidence_type=current.confidence_type,
         )
         self.storage.write_memory_record(updated)
         self._append_context_event(
@@ -4213,6 +4553,7 @@ class ContextMemoryEngineV3:
                 expires_at=current.expires_at,
                 source_hash=current.source_hash,
                 child_bucket_id=current.child_bucket_id,
+                confidence_type=current.confidence_type,
             )
             self.storage.write_memory_record(record)
             self._append_context_event(
@@ -4369,6 +4710,35 @@ class ContextMemoryEngineV3:
             global_recall_depth_limit=global_recall_depth_limit,
             global_recall_time_budget_ms=global_recall_time_budget_ms,
             branch_expand_k=branch_expand_k,
+        )
+
+    async def advance_query(
+        self,
+        *,
+        command: str = "",
+        system_prompt: str | SystemPrompt | None = None,
+        mode: Literal["single_shot", "best_effort_full_view"] = ADVANCE_QUERY_MODE_BEST_EFFORT,
+        bucket_id: str | None = None,
+        max_expand_depth: int | None = None,
+        include_gray: bool = False,
+        llm_preset: str | None = None,
+        tool_input: ToolInput | list[ToolInput] | Prompts | None = None,
+        enable_aliasing: bool = True,
+        audit: bool = False,
+        max_parallel_chunks: int | None = None,
+    ) -> Any:
+        return await self._advance_query_service.advance_query(
+            command=command,
+            system_prompt=system_prompt,
+            mode=mode,
+            bucket_id=bucket_id,
+            max_expand_depth=max_expand_depth,
+            include_gray=include_gray,
+            llm_preset=llm_preset,
+            tool_input=tool_input,
+            enable_aliasing=enable_aliasing,
+            audit=audit,
+            max_parallel_chunks=max_parallel_chunks,
         )
 
     async def _query_bucket_recursive(
@@ -4760,6 +5130,7 @@ class ContextMemoryEngineV3:
                 expires_at=rec.expires_at,
                 source_hash=rec.source_hash,
                 child_bucket_id=rec.child_bucket_id,
+                confidence_type=rec.confidence_type,
             )
             self.storage.write_memory_record(tomb)
             self._append_context_event(
@@ -5101,6 +5472,7 @@ class ContextMemoryEngineV3:
                 expires_at=rec.expires_at,
                 source_hash=rec.source_hash,
                 child_bucket_id=rec.child_bucket_id,
+                confidence_type=rec.confidence_type,
             )
             self.storage.write_memory_record(out_rec)
             self._append_context_event(
@@ -5130,6 +5502,7 @@ class ContextMemoryEngineV3:
                 expires_at=rec.expires_at,
                 source_hash=rec.source_hash,
                 child_bucket_id=rec.child_bucket_id,
+                confidence_type=rec.confidence_type,
             )
             self.storage.write_memory_record(in_rec)
             self._append_context_event(
@@ -5327,6 +5700,7 @@ class ContextMemoryEngineV3:
             expires_at=source_record.expires_at,
             source_hash=source_record.source_hash,
             child_bucket_id=source_record.child_bucket_id,
+            confidence_type=source_record.confidence_type,
         )
         self.storage.write_memory_record(in_rec)
         self._append_context_event(
@@ -5418,6 +5792,7 @@ class ContextMemoryEngineV3:
             expires_at=current.expires_at,
             source_hash=current.source_hash,
             child_bucket_id=child_bucket_id or current.child_bucket_id,
+            confidence_type=current.confidence_type,
         )
         self.storage.write_memory_record(out_rec)
         self._append_context_event(
@@ -5455,6 +5830,7 @@ class ContextMemoryEngineV3:
             expires_at=current.expires_at,
             source_hash=current.source_hash,
             child_bucket_id=child_bucket_id or current.child_bucket_id,
+            confidence_type=current.confidence_type,
         )
         self.storage.write_memory_record(in_rec)
         self._append_context_event(
@@ -5810,6 +6186,14 @@ class ContextMemoryEngineV3:
         """
         async with self._global_meta_lock:
             return self.storage.migrate_paths_to_relative()
+
+    async def migration_status(self) -> dict[str, Any]:
+        async with self._global_meta_lock:
+            return self._migration_status_unlocked()
+
+    async def migrate_schema(self, *, dry_run: bool = False) -> dict[str, Any]:
+        async with self._global_meta_lock:
+            return self._migrate_if_needed(force=True, dry_run=bool(dry_run))
 
     async def _run_memory_gc(self) -> None:
         evicted = self.memory_manager.cleanup()

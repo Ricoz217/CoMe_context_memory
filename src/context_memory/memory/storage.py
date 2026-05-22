@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 import json
@@ -29,6 +29,12 @@ class MemoryStorageV3:
         self.meta_file = self.index_dir / "meta.json"
         self.cache_file = self.index_dir / "query_cache.json"
         self.bucket_tree_file = self.index_dir / "bucket_tree.json"
+        self.schema_version_file = self.index_dir / "schema_version.json"
+        self.migration_journal_file = self.index_dir / "migration_journal.json"
+        self.migration_lock_file = self.index_dir / "migration.lock"
+        self.migration_tmp_dir = self.index_dir / "migration_tmp"
+        self.migration_backups_dir = self.index_dir / "migration_backups"
+        self.pre_upgrade_backup_dir = self.migration_backups_dir / "pre_upgrade_latest"
         self._prompt_version = prompt_version
         self._evidence_versions = max(1, int(evidence_versions))
         self._alias_map_cache: dict[str, dict[str, Any]] = {}
@@ -37,7 +43,16 @@ class MemoryStorageV3:
         self._ensure_layout()
 
     def _ensure_layout(self) -> None:
-        for p in (self.memories_dir, self.evidence_dir, self.buckets_dir, self.snapshots_dir, self.index_dir, self.jobs_dir):
+        for p in (
+            self.memories_dir,
+            self.evidence_dir,
+            self.buckets_dir,
+            self.snapshots_dir,
+            self.index_dir,
+            self.jobs_dir,
+            self.migration_tmp_dir,
+            self.migration_backups_dir,
+        ):
             p.mkdir(parents=True, exist_ok=True)
         if not self.events_file.exists():
             self.events_file.write_text("", encoding="utf-8")
@@ -209,6 +224,200 @@ class MemoryStorageV3:
 
     def save_cache(self, cache: dict) -> None:
         self._atomic_save_json(cache, self.cache_file)
+
+    @staticmethod
+    def _managed_dataset_items() -> list[tuple[str, bool]]:
+        # bool=True => directory, bool=False => file
+        return [
+            ("memories", True),
+            ("evidence", True),
+            ("buckets", True),
+            ("snapshots", True),
+            ("index/jobs", True),
+            ("index/events.ndjson", False),
+            ("index/alias_audit.ndjson", False),
+            ("index/state.json", False),
+            ("index/meta.json", False),
+            ("index/query_cache.json", False),
+            ("index/bucket_tree.json", False),
+            ("index/schema_version.json", False),
+            ("index/migration_journal.json", False),
+        ]
+
+    @staticmethod
+    def _delete_path(path: Path) -> None:
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+            return
+        if path.exists():
+            path.unlink(missing_ok=True)
+
+    def read_schema_version(self, *, default_schema_version: int) -> dict[str, Any]:
+        default_payload = {
+            "schema_version": int(default_schema_version),
+            "engine_version": "",
+            "updated_at": "",
+        }
+        payload = self._load_json(self.schema_version_file, default_payload)
+        out = dict(default_payload)
+        out.update(payload if isinstance(payload, dict) else {})
+        try:
+            out["schema_version"] = int(out.get("schema_version", default_schema_version))
+        except Exception:
+            out["schema_version"] = int(default_schema_version)
+        out["engine_version"] = str(out.get("engine_version", ""))
+        out["updated_at"] = str(out.get("updated_at", ""))
+        return out
+
+    def write_schema_version(self, *, schema_version: int, engine_version: str) -> dict[str, Any]:
+        payload = {
+            "schema_version": int(schema_version),
+            "engine_version": str(engine_version or "").strip(),
+            "updated_at": utc_now_iso(),
+        }
+        self._atomic_save_json(payload, self.schema_version_file)
+        return payload
+
+    def load_migration_journal(self) -> dict[str, Any]:
+        return self._load_json(self.migration_journal_file, {})
+
+    def save_migration_journal(self, journal: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(journal or {})
+        payload["updated_at"] = utc_now_iso()
+        self._atomic_save_json(payload, self.migration_journal_file)
+        return payload
+
+    def clear_query_cache(self) -> None:
+        self._atomic_save_json({}, self.cache_file)
+
+    def clone_live_dataset(self, target_root: str | Path) -> dict[str, int]:
+        dst = Path(target_root)
+        if dst.exists():
+            shutil.rmtree(dst, ignore_errors=True)
+        dst.mkdir(parents=True, exist_ok=True)
+        copied_dirs = 0
+        copied_files = 0
+        for rel, is_dir in self._managed_dataset_items():
+            src_path = self.root_dir / rel
+            dst_path = dst / rel
+            if is_dir:
+                if not src_path.exists():
+                    continue
+                shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+                copied_dirs += 1
+                continue
+            if not src_path.exists():
+                continue
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_path, dst_path)
+            copied_files += 1
+        return {"copied_dirs": copied_dirs, "copied_files": copied_files}
+
+    def _restore_live_dataset_from_snapshot(self, snapshot_root: str | Path) -> dict[str, int]:
+        src = Path(snapshot_root)
+        restored_dirs = 0
+        restored_files = 0
+        for rel, is_dir in self._managed_dataset_items():
+            live_path = self.root_dir / rel
+            src_path = src / rel
+            self._delete_path(live_path)
+            if not src_path.exists():
+                continue
+            if is_dir:
+                shutil.copytree(src_path, live_path, dirs_exist_ok=True)
+                restored_dirs += 1
+                continue
+            live_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_path, live_path)
+            restored_files += 1
+        return {"restored_dirs": restored_dirs, "restored_files": restored_files}
+
+    def replace_live_dataset_from_workspace(
+        self,
+        *,
+        workspace_root: str | Path,
+        rollback_root: str | Path,
+    ) -> dict[str, Any]:
+        workspace = Path(workspace_root)
+        rollback = Path(rollback_root)
+        self.clone_live_dataset(rollback)
+        switched_dirs = 0
+        switched_files = 0
+        try:
+            for rel, is_dir in self._managed_dataset_items():
+                live_path = self.root_dir / rel
+                src_path = workspace / rel
+                self._delete_path(live_path)
+                if not src_path.exists():
+                    continue
+                live_path.parent.mkdir(parents=True, exist_ok=True)
+                src_path.replace(live_path)
+                if is_dir:
+                    switched_dirs += 1
+                else:
+                    switched_files += 1
+            return {
+                "success": True,
+                "switched_dirs": switched_dirs,
+                "switched_files": switched_files,
+                "rollback_used": False,
+            }
+        except Exception as exc:
+            self._restore_live_dataset_from_snapshot(rollback)
+            return {
+                "success": False,
+                "switched_dirs": switched_dirs,
+                "switched_files": switched_files,
+                "rollback_used": True,
+                "error": str(exc),
+            }
+
+    def validate_dataset_layout(self, *, root_dir: str | Path | None = None) -> dict[str, Any]:
+        root = Path(root_dir) if root_dir is not None else self.root_dir
+        errors: list[str] = []
+        required_files = [
+            "index/state.json",
+            "index/meta.json",
+            "index/bucket_tree.json",
+        ]
+        parsed: dict[str, Any] = {}
+        for rel in required_files:
+            p = root / rel
+            if not p.exists():
+                errors.append(f"missing:{rel}")
+                continue
+            try:
+                parsed[rel] = json.loads(p.read_text(encoding="utf-8"))
+            except Exception as exc:
+                errors.append(f"invalid_json:{rel}:{exc}")
+
+        tree = parsed.get("index/bucket_tree.json", {})
+        if isinstance(tree, dict):
+            root_bucket = str(tree.get("root_bucket_id", "")).strip()
+            active_bucket = str(tree.get("active_bucket_id", "")).strip()
+            buckets = tree.get("buckets", {})
+            if not root_bucket:
+                errors.append("bucket_tree:missing_root_bucket_id")
+            if not active_bucket:
+                errors.append("bucket_tree:missing_active_bucket_id")
+            if not isinstance(buckets, dict):
+                errors.append("bucket_tree:buckets_not_dict")
+            elif root_bucket and root_bucket not in buckets:
+                errors.append("bucket_tree:root_bucket_not_found")
+            elif active_bucket and active_bucket not in buckets:
+                errors.append("bucket_tree:active_bucket_not_found")
+        else:
+            errors.append("bucket_tree:not_dict")
+
+        state = parsed.get("index/state.json", {})
+        if isinstance(state, dict):
+            keys = state.get("keys", {})
+            if not isinstance(keys, dict):
+                errors.append("state:keys_not_dict")
+        else:
+            errors.append("state:not_dict")
+
+        return {"success": len(errors) == 0, "errors": errors}
 
     def load_bucket_tree(self) -> dict:
         default = {"root_bucket_id": "", "active_bucket_id": "", "buckets": {}, "updated_at": utc_now_iso()}
@@ -654,6 +863,7 @@ class MemoryStorageV3:
                 "bucket_id": record.bucket_id,
                 "kind": record.kind,
                 "child_bucket_id": record.child_bucket_id,
+                "confidence_type": str(record.confidence_type or "common"),
                 "gray": bool(record.gray),
                 "expires_at": record.expires_at,
                 "updated_at": utc_now_iso(),
@@ -671,6 +881,42 @@ class MemoryStorageV3:
         self.save_state(state)
         self.mark_bucket_dirty(record.bucket_id)
         return save_path
+
+    def touch_bucket_last_event_at(self, *, bucket_id: str, event_ts: float | None = None) -> dict[str, Any]:
+        target = str(bucket_id or "").strip()
+        if not target:
+            return {"updated": 0, "event_ts": 0.0}
+        ts = float(event_ts if event_ts is not None else datetime.now(timezone.utc).timestamp())
+        if ts <= 0.0:
+            return {"updated": 0, "event_ts": ts}
+        tree = self.load_bucket_tree()
+        buckets = tree.get("buckets", {})
+        if not isinstance(buckets, dict):
+            return {"updated": 0, "event_ts": ts}
+        updated = 0
+        visited: set[str] = set()
+        current = target
+        while current and current not in visited:
+            visited.add(current)
+            raw = buckets.get(current)
+            if not isinstance(raw, dict):
+                break
+            info = BucketInfo.from_dict(raw)
+            prev = float(info.last_event_at or 0.0)
+            if prev < ts:
+                info.last_event_at = ts
+                info.updated_at = utc_now_iso()
+                buckets[current] = info.to_dict()
+                updated += 1
+            parent = str(info.parent_bucket_id or "").strip()
+            if not parent:
+                break
+            current = parent
+        if updated > 0:
+            tree["buckets"] = buckets
+            tree["updated_at"] = utc_now_iso()
+            self.save_bucket_tree(tree)
+        return {"updated": updated, "event_ts": ts}
 
     def get_record(self, key: str, revision_id: str | None = None) -> MemoryRecord | None:
         if revision_id:
@@ -1311,4 +1557,5 @@ class MemoryStorageV3:
         node["bucket_id"] = bucket_id
         node["updated_at"] = utc_now_iso()
         self.save_state(state)
+
 

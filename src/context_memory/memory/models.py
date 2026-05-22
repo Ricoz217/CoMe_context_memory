@@ -87,6 +87,7 @@ class BucketInfo:
     sealed: bool = False
     sealed_to: str = ""
     archived: bool = False
+    last_event_at: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -111,6 +112,7 @@ class BucketInfo:
             sealed=bool(data.get("sealed", False)),
             sealed_to=str(data.get("sealed_to", "")),
             archived=bool(data.get("archived", False)),
+            last_event_at=float(data.get("last_event_at", 0.0) or 0.0),
         )
 
 
@@ -133,6 +135,7 @@ class MemoryRecord:
     source_hash: str = ""
     child_bucket_id: str = ""
     evidence_content: str = ""
+    confidence_type: str = "common"
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -159,6 +162,7 @@ class MemoryRecord:
             source_hash=str(data.get("source_hash", "")),
             child_bucket_id=str(data.get("child_bucket_id", "")),
             evidence_content=str(data.get("evidence_content", "")),
+            confidence_type=str(data.get("confidence_type", "common") or "common"),
         )
 
 
