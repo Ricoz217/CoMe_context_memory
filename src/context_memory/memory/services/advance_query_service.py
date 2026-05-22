@@ -259,11 +259,11 @@ class AdvanceQueryService:
         user_command = str(command or "").strip()
         payload_text = json.dumps(payload, ensure_ascii=False, indent=2)
         return (
-            "# User Prompt (Payload)\n\n"
-            f"{user_command}\n\n"
+            "# 记忆库\n\n"
+            f"{payload_text}\n\n"
             "---\n\n"
-            "# 璁板繂搴揬n"
-            f"{payload_text}\n"
+            "# 指令\n\n"
+            f"{user_command}\n"
         )
 
     def _advance_build_full_markdown(self, *, system_text: str, command: str, payload: dict[str, Any]) -> str:
