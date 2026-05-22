@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 __version__ = "0.3.3"
 __data_version__ = 2
@@ -503,6 +503,23 @@ class BucketHandle:
         audit: bool = False,
         max_parallel_chunks: int | None = None,
     ) -> Any:
+        """在当前句柄桶执行全景查询（advance_query）。
+
+        Args:
+            command: 用户任务指令文本，可为空字符串。
+            system_prompt: 系统提示词；可传 `str`、`SystemPrompt` 或 `None`（使用默认系统提示词）。
+            mode: 查询模式，支持 `single_shot` 与 `best_effort_full_view`。
+            max_expand_depth: 子树展开最大深度；`None` 表示不限制。
+            include_gray: 是否包含灰化记忆。
+            llm_preset: 指定 LLM 预设名；为空时使用引擎默认预设。
+            tool_input: 顶层请求可用的 tool 定义（`ToolInput` / 列表 / `Prompts`）；仅最终请求会携带。
+            enable_aliasing: 是否启用 alias 映射（默认开启）。
+            audit: 是否写入 `ADVANCE_QUERY_*` 审计事件。
+            max_parallel_chunks: 分片并发上限；为空时使用系统默认并发配置。
+
+        Returns:
+            Any: 最终 LLM 原始响应对象（当前链路通常为 `Prompts`）。
+        """
         bucket_id = await self._refresh_bucket_id()
         return await self._engine.advance_query(
             command=command,
@@ -814,9 +831,22 @@ class BucketHandle:
         return await self._engine.migrate_storage_paths_to_relative()
 
     async def migration_status(self) -> dict[str, Any]:
+        """查询当前数据 schema 与代码 schema 的迁移状态。
+
+        Returns:
+            dict[str, Any]: 迁移状态信息，包含版本差异、迁移计划、锁状态、journal 与相关路径。
+        """
         return await self._engine.migration_status()
 
     async def migrate_schema(self, *, dry_run: bool = False) -> dict[str, Any]:
+        """手动触发 schema 迁移。
+
+        Args:
+            dry_run: 为 `True` 时仅返回迁移计划与状态，不执行实际迁移；`False` 时执行真实迁移。
+
+        Returns:
+            dict[str, Any]: 迁移执行结果（或 dry-run 结果）。
+        """
         return await self._engine.migrate_schema(dry_run=dry_run)
 
     async def set_gray(self, key: str, *, gray: bool, reason: str = "manual") -> UpdateResult:
@@ -4727,6 +4757,24 @@ class ContextMemoryEngineV3:
         audit: bool = False,
         max_parallel_chunks: int | None = None,
     ) -> Any:
+        """执行全景查询（advance_query），与常规 `query` 链路解耦。
+
+        Args:
+            command: 用户任务指令文本，可为空字符串。
+            system_prompt: 系统提示词；可传 `str`、`SystemPrompt` 或 `None`（使用默认系统提示词）。
+            mode: 查询模式，支持 `single_shot` 与 `best_effort_full_view`。
+            bucket_id: 目标桶 ID；为空时使用当前 active bucket。
+            max_expand_depth: 子树展开最大深度；`None` 表示不限制。
+            include_gray: 是否包含灰化记忆。
+            llm_preset: 指定 LLM 预设名；为空时使用引擎默认预设。
+            tool_input: 顶层请求可用的 tool 定义（`ToolInput` / 列表 / `Prompts`）；仅最终请求会携带。
+            enable_aliasing: 是否启用 alias 映射（默认开启）。
+            audit: 是否写入 `ADVANCE_QUERY_*` 审计事件。
+            max_parallel_chunks: 分片并发上限；为空时使用系统默认并发配置。
+
+        Returns:
+            Any: 最终 LLM 原始响应对象（当前链路通常为 `Prompts`）。
+        """
         return await self._advance_query_service.advance_query(
             command=command,
             system_prompt=system_prompt,
@@ -6188,10 +6236,23 @@ class ContextMemoryEngineV3:
             return self.storage.migrate_paths_to_relative()
 
     async def migration_status(self) -> dict[str, Any]:
+        """查询当前数据 schema 与代码 schema 的迁移状态。
+
+        Returns:
+            dict[str, Any]: 迁移状态信息，包含版本差异、迁移计划、锁状态、journal 与相关路径。
+        """
         async with self._global_meta_lock:
             return self._migration_status_unlocked()
 
     async def migrate_schema(self, *, dry_run: bool = False) -> dict[str, Any]:
+        """手动触发 schema 迁移。
+
+        Args:
+            dry_run: 为 `True` 时仅返回迁移计划与状态，不执行实际迁移；`False` 时执行真实迁移。
+
+        Returns:
+            dict[str, Any]: 迁移执行结果（或 dry-run 结果）。
+        """
         async with self._global_meta_lock:
             return self._migrate_if_needed(force=True, dry_run=bool(dry_run))
 
