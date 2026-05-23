@@ -183,3 +183,109 @@ engine.shutdown(wait=False)
 
 3. 第三轮：精确验证
    - `mode="semantic"`，小 `top_k`，对关键 bucket 或 key 做复查。
+## 11. Schema Migration（简要）
+
+发布版已内置 schema 迁移系统（当前 `__data_version__ = 2`），用于在启动阶段自动将旧数据升级到当前代码可用版本。
+
+1. 自动触发时机
+   - `ContextMemoryEngineV3` 完成存储绑定后会先执行迁移检查。
+   - 若数据版本低于代码版本，会先迁移再继续对外提供能力。
+
+2. 版本规则
+   - 缺失 `index/schema_version.json` 时按历史初版（v1）处理。
+   - 仅允许旧 -> 新。
+   - 若检测到 `data_version > code_version`，会直接拒绝运行并提示升级代码。
+
+3. 关键运行文件（位于 `BASE_DIR/index/`）
+   - `schema_version.json`：当前数据 schema 版本。
+   - `migration_journal.json`：迁移过程与失败信息。
+   - `migration.lock`：迁移互斥锁。
+   - `migration_tmp/`：迁移工作区与中间断点。
+   - `migration_backups/pre_upgrade_latest/`：唯一长期保留的升级前备份。
+
+4. 对外 API（Python）
+   - `await engine.migration_status()`：查询迁移状态、版本差异、迁移计划、锁与路径信息。
+   - `await engine.migrate_schema(dry_run=True)`：仅预览，不执行。
+   - `await engine.migrate_schema(dry_run=False)`：执行真实迁移。
+   - `BucketHandle` 也提供同名透传方法。
+
+## 12. advance_query（详细）
+
+`advance_query` 是与常规 `query` 完全分离的“全景查询”接口，面向整桶/子树总结、全量审阅、定制提示词任务。
+
+1. 接口定位
+   - 不走 BFS/Rerank 的 `query` 逻辑。
+   - 临时构造请求 payload，不落持久化。
+   - 返回最终 LLM 原始响应对象（当前链路通常为 `Prompts`）。
+
+2. 入口与签名（Engine）
+
+```python
+await engine.advance_query(
+    command="",
+    system_prompt=None,
+    mode="best_effort_full_view",  # 或 "single_shot"
+    bucket_id=None,
+    max_expand_depth=None,
+    include_gray=False,
+    llm_preset=None,
+    tool_input=None,
+    enable_aliasing=True,
+    audit=False,
+    max_parallel_chunks=None,
+)
+```
+
+3. 参数说明（关键）
+   - `mode`
+     - `single_shot`：只允许单次请求；若超窗直接报错。
+     - `best_effort_full_view`：超窗时自动分片并最终汇总。
+   - `max_expand_depth`：限制子树展开深度；`None` 表示不限。
+   - `include_gray`：是否把灰化记忆纳入全景内容。
+   - `tool_input`：仅最终顶层请求可携带 tool；chunk 阶段强制禁用 tool。
+   - `audit`：是否写入 `ADVANCE_QUERY_*` 事件。
+   - `max_parallel_chunks`：分片并发上限；为空时使用 `split_ingest_parallelism`。
+
+4. Payload 结构（重要）
+   - 采用 Markdown 外壳 + JSON（`indent=2`）记忆体。
+   - 顺序固定为：先记忆库，再指令（用于提升 KV cache 稳定命中）。
+
+```markdown
+# System Prompt
+
+<system_prompt>
+
+---
+
+# 记忆库
+
+<RESTRUCTURE_MEMORY_JSON>
+
+---
+
+# 指令
+
+<command>
+```
+
+5. RESTRUCTURE_MEMORY 组织规则
+   - 顶层从 `bucket_id`（或 active bucket）开始，按子树展开。
+   - 每个桶的 `content` 内：
+     - 记忆单片在前，按 key 字典序。
+     - 子桶在后，按 `(last_event_at 升序, bucket_id 升序)`；越活跃的桶越靠后。
+   - 默认只保留必要 metadata 字段，减少 token 占用。
+
+6. 超窗与分片规则
+   - 真实 token 估算：对“最终完整 Markdown 字符串”做 tiktoken 计数。
+   - 阈值固定：`0.8 * max_context_window`。
+   - `best_effort_full_view` 在超窗时使用稳定 first-fit 分片（非 FFD）。
+   - 先叶子 chunk 并发执行，再按依赖向上汇总；必要时进入 `result_chunk` 二次分片。
+   - 每个子请求失败自动重试 1 次；仍失败会保留缺失占位并继续汇总，尽量保证最终有结果。
+
+7. Aliasing 规则
+   - `enable_aliasing=True` 时，子树统一使用目标桶（顶层桶）的 alias map。
+   - 不回写子桶 alias map，避免多映射源混乱。
+
+8. BucketHandle 透传
+   - `await bucket.advance_query(...)` 与 engine 行为一致。
+   - `BucketHandle` 场景下默认作用于当前句柄桶，不需要额外传 `bucket_id`。
