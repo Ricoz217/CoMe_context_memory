@@ -7,6 +7,13 @@ from .bucket_summary_service import BucketSummaryService
 from .maintenance_service import MaintenanceService
 from .bucket_topology_service import BucketTopologyService
 from .optimize_service import OptimizeService
+from .advance_query_service import (
+    AdvanceQueryService,
+    ADVANCE_QUERY_DEFAULT_SYSTEM_PROMPT,
+    ADVANCE_QUERY_MODE_BEST_EFFORT,
+    ADVANCE_QUERY_MODE_SINGLE_SHOT,
+    ADVANCE_QUERY_OVERFLOW_RATIO,
+)
 
 __all__ = [
     "ServiceRuntime",
@@ -18,4 +25,9 @@ __all__ = [
     "MaintenanceService",
     "BucketTopologyService",
     "OptimizeService",
+    "AdvanceQueryService",
+    "ADVANCE_QUERY_MODE_SINGLE_SHOT",
+    "ADVANCE_QUERY_MODE_BEST_EFFORT",
+    "ADVANCE_QUERY_OVERFLOW_RATIO",
+    "ADVANCE_QUERY_DEFAULT_SYSTEM_PROMPT",
 ]

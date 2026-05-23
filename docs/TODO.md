@@ -128,3 +128,10 @@
 - Even if no dedicated new test suite, at least verify:
   - category is not lost after `compress/split/optimize`.
   - `NONE` category works end-to-end with old flow.
+## Bucket Event Timestamp (New)
+
+- [P1] 新增桶级字段 `last_event_at`，用于表示“桶内容（context event）最后写入时间”。
+- 目标：避免把 `BucketInfo.updated_at`（元数据更新时间）误用为事件时间。
+- 验收：
+  - 每次 `append_bucket_event` 后同步更新 `last_event_at`；
+  - 对同一 `bucket_id`，`last_event_at` 与全局 `events.ndjson` 的最新 `timestamp` 语义一致。

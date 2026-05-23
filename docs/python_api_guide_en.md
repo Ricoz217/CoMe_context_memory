@@ -147,3 +147,109 @@ This releases internal resources such as query CPU thread pools.
 
 1. `create_bucket(parent_bucket_id=...)` support parse "ROOT" for root_bucket.
 2. `create_child_bucket(...)` when not parse in `parent_bucket_id`, use active bucket by default.
+## 11. Schema Migration (Brief)
+
+Release build now includes a built-in schema migration system (current `__data_version__ = 2`) to upgrade old stores before runtime operations.
+
+1. Auto trigger point
+   - After storage binding, `ContextMemoryEngineV3` runs migration checks before exposing normal operations.
+   - If store schema is older than code schema, migration runs first.
+
+2. Version rules
+   - Missing `index/schema_version.json` is treated as legacy v1.
+   - Upgrade direction is forward-only (old -> new).
+   - If `data_version > code_version`, engine refuses to run and asks for newer code.
+
+3. Runtime files (under `BASE_DIR/index/`)
+   - `schema_version.json`: current data schema version.
+   - `migration_journal.json`: migration progress and failure details.
+   - `migration.lock`: migration mutex lock.
+   - `migration_tmp/`: migration workspace and checkpoints.
+   - `migration_backups/pre_upgrade_latest/`: the only long-term retained pre-upgrade backup.
+
+4. Python APIs
+   - `await engine.migration_status()`: inspect schema gap, planned steps, lock state, journal, and paths.
+   - `await engine.migrate_schema(dry_run=True)`: preview only.
+   - `await engine.migrate_schema(dry_run=False)`: execute migration.
+   - `BucketHandle` provides the same passthrough methods.
+
+## 12. advance_query (Detailed)
+
+`advance_query` is a panoramic query interface fully separated from regular `query`, designed for full-bucket/subtree summarization and custom prompt-driven tasks.
+
+1. Positioning
+   - Does not use the regular `query` BFS/rerank chain.
+   - Builds a temporary payload per request (no persistence).
+   - Returns the final raw LLM response object (typically `Prompts` in current pipeline).
+
+2. Engine signature
+
+```python
+await engine.advance_query(
+    command="",
+    system_prompt=None,
+    mode="best_effort_full_view",  # or "single_shot"
+    bucket_id=None,
+    max_expand_depth=None,
+    include_gray=False,
+    llm_preset=None,
+    tool_input=None,
+    enable_aliasing=True,
+    audit=False,
+    max_parallel_chunks=None,
+)
+```
+
+3. Key parameters
+   - `mode`
+     - `single_shot`: one request only; overflow raises an error.
+     - `best_effort_full_view`: overflow triggers automatic chunking and final aggregation.
+   - `max_expand_depth`: subtree expansion depth limit; `None` means unlimited.
+   - `include_gray`: include gray memories or not.
+   - `tool_input`: tools are allowed only on the final top-level request; all chunk passes disable tools.
+   - `audit`: whether to emit `ADVANCE_QUERY_*` events.
+   - `max_parallel_chunks`: chunk concurrency cap; defaults to `split_ingest_parallelism`.
+
+4. Payload layout (important)
+   - Markdown shell + JSON (`indent=2`) memory payload.
+   - Fixed order: memory first, command last (for stable KV-cache behavior).
+
+```markdown
+# System Prompt
+
+<system_prompt>
+
+---
+
+# 记忆库
+
+<RESTRUCTURE_MEMORY_JSON>
+
+---
+
+# 指令
+
+<command>
+```
+
+5. RESTRUCTURE_MEMORY ordering
+   - Starts from target `bucket_id` (or active bucket) and expands subtree.
+   - Inside each bucket `content`:
+     - memories first, sorted by memory key.
+     - child buckets after memories, sorted by `(last_event_at ASC, bucket_id ASC)`.
+   - Only necessary metadata fields are included to reduce token overhead.
+
+6. Overflow and chunking
+   - Exact token estimation uses tiktoken on the final full markdown string.
+   - Threshold is fixed at `0.8 * max_context_window`.
+   - `best_effort_full_view` uses stable first-fit chunking (not FFD).
+   - Leaf chunks run in parallel; parent chunks wait for dependencies; result aggregation may enter `result_chunk` splitting if needed.
+   - Each subrequest retries once; if still failing, a missing placeholder is kept and aggregation continues.
+
+7. Aliasing
+   - With `enable_aliasing=True`, the expanded subtree uses the top target bucket alias map.
+   - Child bucket alias maps are not written back.
+
+8. BucketHandle passthrough
+   - `await bucket.advance_query(...)` matches engine behavior.
+   - On `BucketHandle`, target bucket defaults to the handle bucket; no manual `bucket_id` is required in normal use.

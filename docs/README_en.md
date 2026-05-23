@@ -14,3 +14,7 @@
 - A single memory store (`same BASE_DIR`) is **single-writer**.
 - Do not run multiple writer processes against the same `BASE_DIR` at the same time (for example Python + CLI + RPC concurrently).
 - If you need multiple entry interfaces together, route all writes through one service process (recommended: one JSON-RPC server).
+
+## New Highlights (v0.3.4)
+- `python_api_guide_en.md` now includes a detailed `advance_query` section (overflow chunking, payload order, tool constraints).
+- `python_api_guide_en.md` now includes a brief Schema Migration section (version rules, runtime files, API usage).

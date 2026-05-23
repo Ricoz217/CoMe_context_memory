@@ -22,3 +22,7 @@
 - 同一个记忆库（同一 `BASE_DIR`）采用**单写者模型**。
 - 不要让多个写入进程同时操作同一 `BASE_DIR`（例如 Python + CLI + RPC 同时写）。
 - 如需多入口并用，建议统一通过一个服务进程进行写入（推荐 JSON-RPC 服务）。
+
+## 新增重点（v0.3.4）
+- `python_api_guide.md` 已补充：`advance_query` 详细说明（含超窗分片、payload 顺序、tool 约束）。
+- `python_api_guide.md` 已补充：Schema Migration 简要说明（版本规则、运行文件、API 用法）。
