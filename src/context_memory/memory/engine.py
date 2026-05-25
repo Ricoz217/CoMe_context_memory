@@ -787,7 +787,7 @@ class BucketHandle:
     async def list_memories(
             self,
             *,
-            include_gray: bool = True,
+            include_gray: bool = False,
             include_content: bool = False,
             bucket_id: str | None = None,
     ) -> dict[str, Any]:
@@ -4346,7 +4346,7 @@ class ContextMemoryEngineV3:
     async def list_memories(
         self,
         *,
-        include_gray: bool = True,
+        include_gray: bool = False,
         include_content: bool = False,
         bucket_id: str | None = None,
     ) -> dict[str, Any]:
