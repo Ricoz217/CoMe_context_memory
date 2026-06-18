@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 __data_version__ = 2
 import json
 import asyncio
@@ -3229,6 +3229,8 @@ class ContextMemoryEngineV3:
         """
         self._begin_alias_session()
         try:
+            post_manage_buckets: list[str] = []
+            result: AddResult | None = None
             async with self._bucket_write_lock(bucket_id) as bucket:
                 memory_count_before = self._bucket_memory_count(bucket)
                 text = str(raw_text or "")
@@ -3249,7 +3251,7 @@ class ContextMemoryEngineV3:
     
                 if effective_force_split or len(text) > self._max_memory_chars:
                     split_reason = "force_split" if effective_force_split else "oversize_auto_split"
-                    return await self._add_memory_with_split(
+                    result = await self._add_memory_with_split(
                         raw_text=text,
                         topic=topic,
                         key=key,
@@ -3261,80 +3263,85 @@ class ContextMemoryEngineV3:
                         apply_clean_gate=False,
                         split_reason=split_reason,
                         dedup_in_bucket=dedup_in_bucket,
+                        deferred_auto_manage=post_manage_buckets,
                     )
-    
-                memory_key = key.strip() if isinstance(key, str) and key.strip() else self.storage.generate_key()
-                evidence_ref = ""
-                evidence_text = ""
-                if evidence_path:
-                    evidence_ref = self.storage.copy_evidence(evidence_path, key=memory_key)
-                    evidence_text = self.storage.read_evidence(evidence_ref)
-    
-                clean_result = await self.pipeline.clean(raw_text=text, evidence_text=evidence_text)
-                self._record_llm_usage()
-                self._record_llm_diag()
-                diag = self.pipeline.last_diagnostics
-                if str(diag.get("degraded_reason", "")) == "clean_fallback":
-                    self.storage.record_clean_fallback()
-    
-                if not bool(clean_result.get("accept", True)):
-                    self.storage.record_clean_reject()
-                    self.storage.record_ingest_blocked_by_clean()
-                    reason = str(clean_result.get("reject_reason", "")).strip() or "clean rejected input"
-                    return AddResult(success=False, key=memory_key, message=f"memory rejected: {reason}")
+                else:
+                    memory_key = key.strip() if isinstance(key, str) and key.strip() else self.storage.generate_key()
+                    evidence_ref = ""
+                    evidence_text = ""
+                    if evidence_path:
+                        evidence_ref = self.storage.copy_evidence(evidence_path, key=memory_key)
+                        evidence_text = self.storage.read_evidence(evidence_ref)
+        
+                    clean_result = await self.pipeline.clean(raw_text=text, evidence_text=evidence_text)
+                    self._record_llm_usage()
+                    self._record_llm_diag()
+                    diag = self.pipeline.last_diagnostics
+                    if str(diag.get("degraded_reason", "")) == "clean_fallback":
+                        self.storage.record_clean_fallback()
+        
+                    if not bool(clean_result.get("accept", True)):
+                        self.storage.record_clean_reject()
+                        self.storage.record_ingest_blocked_by_clean()
+                        reason = str(clean_result.get("reject_reason", "")).strip() or "clean rejected input"
+                        return AddResult(success=False, key=memory_key, message=f"memory rejected: {reason}")
 
-                if dedup_in_bucket and self._has_duplicate_memory_in_bucket(bucket, text):
-                    return AddResult(success=False, key=memory_key, message="duplicate_in_bucket")
-    
-                clean_type = str(clean_result.get("input_type", "")).strip().lower()
-                preserve_literal = bool(clean_result.get("preserve_literal", False)) or clean_type == "source_code"
-                skip_clean = bool(clean_result.get("skip_clean", False)) or preserve_literal
-                ingest_input = text if skip_clean else (str(clean_result.get("clean_text", "")).strip() or text)
-                ingested = await self._ingest_with_overflow_retry(
-                    pipeline=self.pipeline,
-                    bucket_id=bucket,
-                    ingest_kwargs={
-                        "bucket_context": self._bucket_context(bucket),
-                        "key": memory_key,
-                        "event": "ADD",
-                        "raw_text": ingest_input,
-                        "evidence_text": evidence_text,
-                        "topic": topic,
-                        "input_type": clean_type,
-                        "skip_clean": skip_clean,
-                        "preserve_literal": preserve_literal,
-                    },
-                )
-    
-                record = self._build_record(
-                    key=memory_key,
-                    event="ADD",
-                    ingested=ingested,
-                    bucket_id=bucket,
-                    evidence_ref=evidence_ref,
-                    kind=BUCKET_KIND_MEMORY,
-                    child_bucket_id="",
-                )
-                self.storage.write_memory_record(record)
-                self._append_context_event(bucket_id=bucket, event_type="ADD", record=record, payload={"topic": topic})
-                if memory_count_before == 0:
-                    info = self.storage.get_bucket_info(bucket)
-                    if not self._should_skip_auto_summary(info):
-                        await self._refresh_bucket_summary_unlocked(
-                            bucket_id=bucket,
-                            force=False,
-                            reason="auto_first_memory",
+                    if dedup_in_bucket and self._has_duplicate_memory_in_bucket(bucket, text):
+                        return AddResult(success=False, key=memory_key, message="duplicate_in_bucket")
+        
+                    clean_type = str(clean_result.get("input_type", "")).strip().lower()
+                    preserve_literal = bool(clean_result.get("preserve_literal", False)) or clean_type == "source_code"
+                    skip_clean = bool(clean_result.get("skip_clean", False)) or preserve_literal
+                    ingest_input = text if skip_clean else (str(clean_result.get("clean_text", "")).strip() or text)
+                    ingested = await self._ingest_with_overflow_retry(
+                        pipeline=self.pipeline,
+                        bucket_id=bucket,
+                        ingest_kwargs={
+                            "bucket_context": self._bucket_context(bucket),
+                            "key": memory_key,
+                            "event": "ADD",
+                            "raw_text": ingest_input,
+                            "evidence_text": evidence_text,
+                            "topic": topic,
+                            "input_type": clean_type,
+                            "skip_clean": skip_clean,
+                            "preserve_literal": preserve_literal,
+                        },
+                    )
+        
+                    record = self._build_record(
+                        key=memory_key,
+                        event="ADD",
+                        ingested=ingested,
+                        bucket_id=bucket,
+                        evidence_ref=evidence_ref,
+                        kind=BUCKET_KIND_MEMORY,
+                        child_bucket_id="",
+                    )
+                    self.storage.write_memory_record(record)
+                    self._append_context_event(bucket_id=bucket, event_type="ADD", record=record, payload={"topic": topic})
+                    if memory_count_before == 0:
+                        info = self.storage.get_bucket_info(bucket)
+                        if not self._should_skip_auto_summary(info):
+                            await self._refresh_bucket_summary_unlocked(
+                                bucket_id=bucket,
+                                force=False,
+                                reason="auto_first_memory",
+                            )
+                    post_manage_buckets.append(bucket)
+                    result = AddResult(
+                        success=True,
+                        key=record.key,
+                        revision_id=record.revision_id,
+                        message="memory added",
+                        added_keys=[record.key],
+                        split_performed=False,
                         )
-                await self._auto_manage_bucket(bucket)
+            for post_bucket in dict.fromkeys(post_manage_buckets):
+                await self._auto_manage_bucket(post_bucket)
+            if result is not None and result.success:
                 await self._run_memory_gc()
-                return AddResult(
-                    success=True,
-                    key=record.key,
-                    revision_id=record.revision_id,
-                    message="memory added",
-                    added_keys=[record.key],
-                    split_performed=False,
-                )
+            return result if result is not None else AddResult(success=False, message="memory add produced no result")
         finally:
             self._end_alias_session(flush=True)
 
@@ -3352,6 +3359,7 @@ class ContextMemoryEngineV3:
         apply_clean_gate: bool,
         split_reason: str,
         dedup_in_bucket: bool,
+        deferred_auto_manage: list[str] | None = None,
     ) -> AddResult:
         info = self.storage.get_bucket_info(target_bucket_id)
         if info is None:
@@ -3653,7 +3661,10 @@ class ContextMemoryEngineV3:
                 except Exception:
                     pass
                 try:
-                    await self._auto_manage_bucket(old_bucket_id)
+                    if deferred_auto_manage is not None:
+                        deferred_auto_manage.append(old_bucket_id)
+                    else:
+                        await self._auto_manage_bucket(old_bucket_id)
                 except Exception:
                     pass
 
@@ -3761,7 +3772,8 @@ class ContextMemoryEngineV3:
         pending_after = [i for i in range(chunk_total) if i not in committed_indices]
         if fatal_recoverable_error:
             _save_job("paused", message=fatal_recoverable_error)
-            await self._run_memory_gc()
+            if deferred_auto_manage is None:
+                await self._run_memory_gc()
             return AddResult(
                 success=False,
                 key=first_key,
@@ -3774,7 +3786,10 @@ class ContextMemoryEngineV3:
                 split_performed=True,
             )
 
-        await self._auto_manage_bucket(current_bucket_id)
+        if deferred_auto_manage is not None:
+            deferred_auto_manage.append(current_bucket_id)
+        else:
+            await self._auto_manage_bucket(current_bucket_id)
         target_info = self.storage.get_bucket_info(current_bucket_id)
         if not self._should_skip_auto_summary(target_info):
             await self._refresh_bucket_summary_unlocked(
@@ -3783,7 +3798,8 @@ class ContextMemoryEngineV3:
                 reason=f"auto_split_batch:{split_reason}",
             )
         _save_job("completed", message="ok")
-        await self._run_memory_gc()
+        if deferred_auto_manage is None:
+            await self._run_memory_gc()
         return AddResult(
             success=True,
             key=first_key,
@@ -4455,6 +4471,8 @@ class ContextMemoryEngineV3:
         """
         self._begin_alias_session()
         try:
+            post_manage_bucket: str | None = None
+            result: UpdateResult | None = None
             current0 = self.storage.get_record(key)
             if current0 is None:
                 return UpdateResult(success=False, key=key, message="memory key not found")
@@ -4534,9 +4552,12 @@ class ContextMemoryEngineV3:
                     record=record,
                     payload={"from_revision": current.revision_id},
                 )
-                await self._auto_manage_bucket(current.bucket_id)
-                await self._run_memory_gc()
-                return UpdateResult(success=True, key=key, revision_id=record.revision_id, message="memory updated")
+                post_manage_bucket = current.bucket_id
+                result = UpdateResult(success=True, key=key, revision_id=record.revision_id, message="memory updated")
+            if post_manage_bucket:
+                await self._auto_manage_bucket(post_manage_bucket)
+            await self._run_memory_gc()
+            return result if result is not None else UpdateResult(success=False, key=key, message="memory update produced no result")
         finally:
             self._end_alias_session(flush=True)
 
@@ -6116,48 +6137,52 @@ class ContextMemoryEngineV3:
         if info is None or info.sealed:
             return
         await self._apply_forgetting(bucket_id, from_compress=False)
-        pressure, count = self._bucket_pressure(bucket_id)
-        did_compress = False
-        did_split = False
-        split_round = 0
+        async with self._bucket_write_lock(bucket_id) as locked_bucket:
+            info = self.storage.get_bucket_info(locked_bucket)
+            if info is None or info.sealed:
+                return
+            pressure, count = self._bucket_pressure(locked_bucket)
+            did_compress = False
+            did_split = False
+            split_round = 0
 
-        if pressure > self._auto_compress_trigger_ratio or count > 1000:
-            did_compress = True
-            try:
-                comp = await self._force_compress_unlocked(bucket_id=bucket_id, reason="auto_threshold")
-                if not bool(getattr(comp, "success", False)):
+            if pressure > self._auto_compress_trigger_ratio or count > 1000:
+                did_compress = True
+                try:
+                    comp = await self._force_compress_unlocked(bucket_id=locked_bucket, reason="auto_threshold")
+                    if not bool(getattr(comp, "success", False)):
+                        self.storage.append_event(
+                            event_type="AUTO_COMPRESS_FAIL",
+                            bucket_id=locked_bucket,
+                            payload={"reason": "auto_threshold", "message": str(getattr(comp, "message", ""))},
+                        )
+                except Exception as exc:
                     self.storage.append_event(
                         event_type="AUTO_COMPRESS_FAIL",
-                        bucket_id=bucket_id,
-                        payload={"reason": "auto_threshold", "message": str(getattr(comp, "message", ""))},
+                        bucket_id=locked_bucket,
+                        payload={"reason": "auto_threshold", "error": repr(exc)},
                     )
-            except Exception as exc:
-                self.storage.append_event(
-                    event_type="AUTO_COMPRESS_FAIL",
-                    bucket_id=bucket_id,
-                    payload={"reason": "auto_threshold", "error": repr(exc)},
-                )
-            pressure, count = self._bucket_pressure(bucket_id)
+                pressure, count = self._bucket_pressure(locked_bucket)
 
-        if did_compress and (pressure > self._auto_split_trigger_ratio or count > 1000):
-            if did_split:
-                self.storage.record_auto_split_guard_hit()
-                return
-            if split_round >= self._auto_split_max_round_per_manage:
-                self.storage.record_auto_split_guard_hit()
-                return
-            if not self._can_auto_split_now(bucket_id=bucket_id):
-                self.storage.record_auto_split_cooldown_skip()
-                return
-            result = await self._split_bucket_unlocked(bucket_id=bucket_id, reason="auto_post_compress")
-            split_round += 1
-            did_split = bool(result.get("success", False))
-            if not did_split:
-                self.storage.record_auto_split_guard_hit()
-                return
+            if did_compress and (pressure > self._auto_split_trigger_ratio or count > 1000):
+                if did_split:
+                    self.storage.record_auto_split_guard_hit()
+                    return
+                if split_round >= self._auto_split_max_round_per_manage:
+                    self.storage.record_auto_split_guard_hit()
+                    return
+                if not self._can_auto_split_now(bucket_id=locked_bucket):
+                    self.storage.record_auto_split_cooldown_skip()
+                    return
+                result = await self._split_bucket_unlocked(bucket_id=locked_bucket, reason="auto_post_compress")
+                split_round += 1
+                did_split = bool(result.get("success", False))
+                if not did_split:
+                    self.storage.record_auto_split_guard_hit()
+                    return
 
-        if did_compress and did_split:
-            return
+            if did_compress and did_split:
+                return
 
     def _bucket_pressure(self, bucket_id: str) -> tuple[float, int]:
         est = self._bucket_context_tokens_real(bucket_id)
