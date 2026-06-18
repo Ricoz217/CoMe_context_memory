@@ -12,6 +12,7 @@ English version: [README_en.md](README_en.md)
 - CLI 指南: [docs/cli_guide.md](docs/cli_guide.md)
 - JSON-RPC 指南: [docs/jsonrpc_methods.md](docs/jsonrpc_methods.md)
 - 配置指南: [docs/config_guide.md](docs/config_guide.md)
+- 介绍视频: [[开源] Context Memory：一种不依赖RAG的记忆方案](https://www.bilibili.com/video/BV1xf5g6CExH "[开源] Context Memory：一种不依赖RAG的记忆方案")
 
 ---  
 
