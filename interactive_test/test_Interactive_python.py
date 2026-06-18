@@ -1,3 +1,4 @@
+import os
 import asyncio
 import sys
 import traceback
@@ -18,6 +19,7 @@ memory_config = ContextMemoryConfig(
     llm_preset="CONTEXT_MEMORY",
     image_llm_preset="KIMI2.6"
 )
+root = get_context_memory_engine(config=memory_config)
 
 def _json_print(obj: Any) -> str:
     def _default_json(_obj):
@@ -111,7 +113,7 @@ async def main():
         "lastest": latest_bucket
     }
 
-    root = get_context_memory_engine(config=memory_config)
+
     memory = await root.set_bucket("TEST_FROMDIR")
     while True:
         try:
@@ -139,4 +141,5 @@ async def main():
             print(traceback.format_exc())
 
 if __name__ == '__main__':
+    print(os.getcwd())
     asyncio.run(main())
