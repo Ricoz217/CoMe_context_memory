@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import copy
 import json
 import re
+import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any
@@ -23,6 +27,7 @@ _ALIAS_RE = re.compile(r"^(memory|bucket|revision|ref)_[1-9]\d*$")
 _REAL_MEMORY_RE = re.compile(r"^mem_[0-9]{14}_[0-9a-f]{32}$")
 _REAL_BUCKET_RE = re.compile(r"^bucket_[0-9]{14}_[0-9a-f]{32}$")
 _REAL_REVISION_RE = re.compile(r"^rev_[0-9]{14}_[0-9a-f]{32}$")
+_REAL_ID_IN_TEXT_RE = re.compile(r"(?:mem|bucket|rev)_[0-9]{14}_[0-9a-f]{32}")
 
 _FIELD_TYPES: dict[str, str] = {
     "key": KEY_TYPE_MEMORY,
@@ -69,6 +74,443 @@ class AliasPayloadError(RuntimeError):
     pass
 
 
+class AliasTable:
+    """Thread-safe alias mapping for one resolved bucket."""
+
+    def __init__(self, storage: Any, bucket_id: str) -> None:
+        self.storage = storage
+        self.bucket_id = str(bucket_id or "").strip()
+        if not self.bucket_id:
+            raise ValueError("bucket_id is empty")
+        lock_factory = getattr(storage, "get_alias_map_lock", None)
+        self._lock = lock_factory(self.bucket_id) if callable(lock_factory) else threading.RLock()
+
+    def to_alias(self, real_id: str, *, key_type: str | None = None, allow_create: bool = True) -> str:
+        token = str(real_id or "").strip()
+        inferred = infer_real_key_type(token)
+        resolved_type = _normalize_key_type(key_type) if key_type else inferred
+        if not resolved_type:
+            raise ValueError(f"invalid real id: {real_id}")
+        if inferred and key_type and resolved_type != KEY_TYPE_REF and inferred != resolved_type:
+            raise ValueError(f"real id type mismatch: expected={resolved_type}, got={inferred}")
+        with self._lock:
+            if self._supports_transactions():
+                encoded = self._encode_tree_transaction(token, allow_create=allow_create, forced_type=resolved_type)
+                return str(encoded)
+            if allow_create:
+                return str(self.storage.get_or_create_alias(self.bucket_id, token, resolved_type))
+            found = self.storage.find_alias(self.bucket_id, token, resolved_type)
+            if found:
+                return str(found)
+            raise AliasPayloadError(f"missing alias for {resolved_type}:{token}")
+
+    def to_real(self, alias: str, *, expected_type: str | None = None) -> str:
+        token = str(alias or "").strip()
+        if not token:
+            raise ValueError("alias is empty")
+        with self._lock:
+            return str(self.storage.resolve_alias(self.bucket_id, token, expected_type))
+
+    def to_real_many(
+        self,
+        aliases: Iterable[str],
+        *,
+        expected_type: str | None = None,
+        strict: bool = False,
+    ) -> dict[str, str]:
+        """Resolve aliases under one table lock, optionally skipping invalid entries."""
+        if isinstance(aliases, (str, bytes)):
+            raise TypeError("aliases must be an iterable of alias strings, not a string")
+        resolved: dict[str, str] = {}
+        seen: set[str] = set()
+        with self._lock:
+            for alias in aliases:
+                token = str(alias or "").strip()
+                if not token:
+                    if strict:
+                        raise ValueError("alias is empty")
+                    continue
+                if token in seen:
+                    continue
+                seen.add(token)
+                try:
+                    real_id = self.storage.resolve_alias(self.bucket_id, token, expected_type)
+                except (KeyError, TypeError):
+                    if strict:
+                        raise
+                    continue
+                resolved[token] = str(real_id)
+        return resolved
+
+    async def resolve_many(
+        self,
+        aliases: Iterable[str],
+        *,
+        expected_type: str | None = None,
+        strict: bool = False,
+    ) -> dict[str, str]:
+        if isinstance(aliases, (str, bytes)):
+            raise TypeError("aliases must be an iterable of alias strings, not a string")
+        alias_batch = tuple(aliases)
+        return await asyncio.to_thread(
+            self.to_real_many,
+            alias_batch,
+            expected_type=expected_type,
+            strict=strict,
+        )
+
+    def encode_text(self, text: str, *, allow_create: bool = True) -> str:
+        with self._lock:
+            return str(self._encode_tree_transaction(str(text), allow_create=allow_create))
+
+    def encode_tree(
+        self,
+        value: Any,
+        *,
+        allow_create: bool = True,
+        map_version: int | None = None,
+    ) -> Any:
+        with self._lock:
+            encoded = self._encode_tree_transaction(
+                value,
+                allow_create=allow_create,
+                map_version=map_version,
+            )
+        self.assert_safe(encoded)
+        return encoded
+
+    def decode_tree(
+        self,
+        value: Any,
+        *,
+        map_version: int | None = None,
+        strict_unknown: bool = True,
+    ) -> Any:
+        """Restore exact alias tokens in an arbitrary structured value."""
+        with self._lock:
+            amap = self.storage.load_alias_map(self.bucket_id)
+            self._validate_map(amap)
+            self._assert_map_version(amap, map_version)
+            return self._decode_value(value, amap, strict_unknown=strict_unknown)
+
+    async def prepare(
+        self,
+        value: Any,
+        *,
+        allow_create: bool = True,
+        map_version: int | None = None,
+    ) -> Any:
+        return await asyncio.to_thread(
+            self.encode_tree,
+            value,
+            allow_create=allow_create,
+            map_version=map_version,
+        )
+
+    async def restore(
+        self,
+        value: Any,
+        *,
+        map_version: int | None = None,
+        strict_unknown: bool = True,
+    ) -> Any:
+        return await asyncio.to_thread(
+            self.decode_tree,
+            value,
+            map_version=map_version,
+            strict_unknown=strict_unknown,
+        )
+
+    def assert_safe(self, value: Any) -> None:
+        leak = self._find_leak(value, "$")
+        if not leak:
+            return
+        record = getattr(self.storage, "record_alias_real_key_leak", None)
+        if callable(record):
+            record()
+        raise AliasPayloadError(f"real id leaked in alias payload for bucket={self.bucket_id}: {leak}")
+
+    def map_version(self) -> int:
+        return int(self.storage.alias_map_version(self.bucket_id))
+
+    def freeze(self) -> None:
+        with self._lock:
+            self.storage.freeze_alias_map(self.bucket_id)
+
+    def snapshot_hash(self) -> str:
+        with self._lock:
+            amap = copy.deepcopy(self.storage.load_alias_map(self.bucket_id))
+            self._validate_map(amap)
+            return stable_payload_hash(amap)
+
+    def _supports_transactions(self) -> bool:
+        return callable(getattr(self.storage, "load_alias_map", None)) and (
+            callable(getattr(self.storage, "commit_alias_map", None))
+            or callable(getattr(self.storage, "save_alias_map", None))
+        )
+
+    def _encode_tree_transaction(
+        self,
+        value: Any,
+        *,
+        allow_create: bool = True,
+        forced_type: str | None = None,
+        map_version: int | None = None,
+    ) -> Any:
+        if not self._supports_transactions():
+            return self._encode_with_callbacks(value, allow_create=allow_create, forced_type=forced_type)
+
+        original = self.storage.load_alias_map(self.bucket_id)
+        snapshot = copy.deepcopy(original)
+        self._validate_map(snapshot)
+        self._assert_map_version(snapshot, map_version)
+        added = [0]
+        encoded = self._encode_value(
+            value,
+            snapshot,
+            allow_create=allow_create,
+            added=added,
+            forced_type=forced_type,
+        )
+        if added[0] > 0:
+            commit = getattr(self.storage, "commit_alias_map", None)
+            if callable(commit):
+                commit(self.bucket_id, snapshot)
+            else:
+                self.storage.save_alias_map(self.bucket_id, snapshot)
+        return encoded
+
+    def _decode_value(self, value: Any, amap: dict[str, Any], *, strict_unknown: bool) -> Any:
+        if isinstance(value, dict):
+            out: dict[str, Any] = {}
+            for key, item in value.items():
+                key_out = self._decode_value(str(key), amap, strict_unknown=strict_unknown)
+                key_token = str(key_out)
+                if key_token in out:
+                    raise AliasPayloadError(f"real key collision after alias decode: {key_token}")
+                out[key_token] = self._decode_value(item, amap, strict_unknown=strict_unknown)
+            return out
+        if isinstance(value, list):
+            return [self._decode_value(item, amap, strict_unknown=strict_unknown) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self._decode_value(item, amap, strict_unknown=strict_unknown) for item in value)
+        if not isinstance(value, str):
+            return value
+
+        token = value.strip()
+        if not looks_like_alias(token):
+            return value
+        reverse = amap["alias_to_real"].get(token)
+        if not isinstance(reverse, dict):
+            if strict_unknown:
+                raise AliasPayloadError(f"unknown alias in bucket={self.bucket_id}: {token}")
+            return value
+        real_id = str(reverse.get("real_key", "")).strip()
+        if not real_id:
+            raise AliasPayloadError(f"invalid reverse alias mapping: {token}")
+        return real_id
+
+    @staticmethod
+    def _assert_map_version(amap: dict[str, Any], map_version: int | None) -> None:
+        if map_version is None:
+            return
+        current = int(amap.get("map_version", 1))
+        if int(map_version) != current:
+            raise AliasPayloadError(f"alias map version changed: expect={map_version}, got={current}")
+
+    def _encode_with_callbacks(self, value: Any, *, allow_create: bool, forced_type: str | None = None) -> Any:
+        if forced_type and isinstance(value, str):
+            if allow_create:
+                return self.storage.get_or_create_alias(self.bucket_id, value, forced_type)
+            found = self.storage.find_alias(self.bucket_id, value, forced_type)
+            if found:
+                return found
+            raise AliasPayloadError(f"missing alias for {forced_type}:{value}")
+        if isinstance(value, dict):
+            out: dict[str, Any] = {}
+            for key, item in value.items():
+                key_out = self._encode_with_callbacks(str(key), allow_create=allow_create)
+                if key_out in out:
+                    raise AliasPayloadError(f"alias key collision: {key_out}")
+                out[str(key_out)] = self._encode_with_callbacks(item, allow_create=allow_create)
+            return out
+        if isinstance(value, list):
+            return [self._encode_with_callbacks(item, allow_create=allow_create) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self._encode_with_callbacks(item, allow_create=allow_create) for item in value)
+        if not isinstance(value, str):
+            return value
+
+        def _replace(match: re.Match[str]) -> str:
+            real_id = match.group(0)
+            key_type = infer_real_key_type(real_id)
+            if allow_create:
+                return str(self.storage.get_or_create_alias(self.bucket_id, real_id, key_type))
+            found = self.storage.find_alias(self.bucket_id, real_id, key_type)
+            if found:
+                return str(found)
+            raise AliasPayloadError(f"missing alias for {key_type}:{real_id}")
+
+        return _REAL_ID_IN_TEXT_RE.sub(_replace, value)
+
+    def _encode_value(
+        self,
+        value: Any,
+        amap: dict[str, Any],
+        *,
+        allow_create: bool,
+        added: list[int],
+        forced_type: str | None = None,
+    ) -> Any:
+        if forced_type and isinstance(value, str):
+            return self._alias_from_map(value, forced_type, amap, allow_create=allow_create, added=added)
+        if isinstance(value, dict):
+            out: dict[str, Any] = {}
+            for key, item in value.items():
+                key_out = self._encode_value(str(key), amap, allow_create=allow_create, added=added)
+                key_token = str(key_out)
+                if key_token in out:
+                    raise AliasPayloadError(f"alias key collision: {key_token}")
+                out[key_token] = self._encode_value(item, amap, allow_create=allow_create, added=added)
+            return out
+        if isinstance(value, list):
+            return [self._encode_value(item, amap, allow_create=allow_create, added=added) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self._encode_value(item, amap, allow_create=allow_create, added=added) for item in value)
+        if not isinstance(value, str):
+            return value
+
+        def _replace(match: re.Match[str]) -> str:
+            real_id = match.group(0)
+            key_type = infer_real_key_type(real_id)
+            return self._alias_from_map(real_id, key_type, amap, allow_create=allow_create, added=added)
+
+        return _REAL_ID_IN_TEXT_RE.sub(_replace, value)
+
+    def _alias_from_map(
+        self,
+        real_id: str,
+        key_type: str,
+        amap: dict[str, Any],
+        *,
+        allow_create: bool,
+        added: list[int],
+    ) -> str:
+        real_to_alias = amap["real_to_alias"]
+        typed_key = f"{key_type}:{real_id}"
+        existing = str(real_to_alias.get(typed_key, "")).strip()
+        if existing:
+            return existing
+        if not allow_create:
+            raise AliasPayloadError(f"missing alias for {typed_key}")
+        if bool(amap.get("sealed", False)):
+            raise RuntimeError(f"alias map sealed; cannot allocate new alias in bucket={self.bucket_id}")
+
+        counters = amap["counters"]
+        current = max(0, int(counters.get(key_type, 0))) + 1
+        alias = f"{key_type}_{current}"
+        alias_to_real = amap["alias_to_real"]
+        if alias in alias_to_real:
+            raise AliasPayloadError(f"alias counter collision: {alias}")
+        counters[key_type] = current
+        real_to_alias[typed_key] = alias
+        alias_to_real[alias] = {"key_type": key_type, "real_key": real_id}
+        amap["map_version"] = int(amap.get("map_version", 1)) + 1
+        added[0] += 1
+        return alias
+
+    @staticmethod
+    def _validate_map(amap: dict[str, Any]) -> None:
+        real_to_alias = amap.get("real_to_alias")
+        alias_to_real = amap.get("alias_to_real")
+        counters = amap.get("counters")
+        if not isinstance(real_to_alias, dict) or not isinstance(alias_to_real, dict) or not isinstance(counters, dict):
+            raise AliasPayloadError("invalid alias map structure")
+        for typed_key, alias in real_to_alias.items():
+            key_type, separator, real_id = str(typed_key).partition(":")
+            reverse = alias_to_real.get(str(alias))
+            if not separator or not isinstance(reverse, dict):
+                raise AliasPayloadError(f"invalid alias mapping: {typed_key}")
+            if str(reverse.get("key_type", "")) != key_type or str(reverse.get("real_key", "")) != real_id:
+                raise AliasPayloadError(f"inconsistent alias mapping: {typed_key}")
+        for alias, reverse in alias_to_real.items():
+            if not isinstance(reverse, dict):
+                raise AliasPayloadError(f"invalid reverse alias mapping: {alias}")
+            typed_key = f"{reverse.get('key_type', '')}:{reverse.get('real_key', '')}"
+            if str(real_to_alias.get(typed_key, "")) != str(alias):
+                raise AliasPayloadError(f"orphan reverse alias mapping: {alias}")
+
+    def _find_leak(self, value: Any, path: str) -> str:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                key_match = _REAL_ID_IN_TEXT_RE.search(str(key))
+                if key_match:
+                    return f"{path}.key={key_match.group(0)}"
+                leak = self._find_leak(item, f"{path}.{key}")
+                if leak:
+                    return leak
+            return ""
+        if isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                leak = self._find_leak(item, f"{path}[{index}]")
+                if leak:
+                    return leak
+            return ""
+        if isinstance(value, str):
+            match = _REAL_ID_IN_TEXT_RE.search(value)
+            if match:
+                return f"{path}={match.group(0)}"
+        return ""
+
+
+class AliasStore:
+    """Owns one AliasTable instance per bucket for an engine storage."""
+
+    def __init__(self, storage: Any) -> None:
+        self.storage = storage
+        self._tables: dict[str, AliasTable] = {}
+        self._lock = threading.RLock()
+
+    def open(self, bucket_id: str) -> AliasTable:
+        token = str(bucket_id or "").strip()
+        if not token:
+            raise ValueError("bucket_id is empty")
+        with self._lock:
+            table = self._tables.get(token)
+            if table is None:
+                table = AliasTable(self.storage, token)
+                self._tables[token] = table
+            return table
+
+    async def prepare(
+        self,
+        bucket_id: str,
+        value: Any,
+        *,
+        allow_create: bool = True,
+        map_version: int | None = None,
+    ) -> Any:
+        return await self.open(bucket_id).prepare(
+            value,
+            allow_create=allow_create,
+            map_version=map_version,
+        )
+
+    async def restore(
+        self,
+        bucket_id: str,
+        value: Any,
+        *,
+        map_version: int | None = None,
+        strict_unknown: bool = True,
+    ) -> Any:
+        return await self.open(bucket_id).restore(
+            value,
+            map_version=map_version,
+            strict_unknown=strict_unknown,
+        )
+
+
 def _normalize_key_type(key_type: str) -> str:
     t = str(key_type or "").strip().lower()
     if t not in KEY_TYPES:
@@ -110,12 +552,15 @@ def stable_payload_hash(payload: Any) -> str:
 class AliasCodec:
     storage: Any
 
+    def __post_init__(self) -> None:
+        self.store = AliasStore(self.storage)
+
     def get_or_create_alias(self, bucket_id: str, real_key: str, key_type: str) -> str:
-        return self.storage.get_or_create_alias(bucket_id, real_key, _normalize_key_type(key_type))
+        return self.store.open(bucket_id).to_alias(real_key, key_type=_normalize_key_type(key_type))
 
     def resolve_alias(self, bucket_id: str, alias: str, expected_type: str | None = None) -> str:
-        et = _normalize_key_type(expected_type) if expected_type else None
-        return self.storage.resolve_alias(bucket_id, alias, et)
+        expected = _normalize_key_type(expected_type) if expected_type else None
+        return self.store.open(bucket_id).to_real(alias, expected_type=expected)
 
     def freeze_alias_map(self, bucket_id: str) -> None:
         self.storage.freeze_alias_map(bucket_id)
@@ -133,7 +578,11 @@ class AliasCodec:
     ) -> Any:
         if map_version is not None and int(map_version) != self.alias_map_version(bucket_id):
             raise AliasPayloadError(f"alias map version changed: expect={map_version}, got={self.alias_map_version(bucket_id)}")
-        return self._walk_to_alias(bucket_id, real_payload, "", allow_create=allow_create)
+        table = self.store.open(bucket_id)
+        generic_payload = table.encode_tree(real_payload, allow_create=allow_create)
+        alias_payload = self._walk_to_alias(bucket_id, generic_payload, "", allow_create=allow_create)
+        table.assert_safe(alias_payload)
+        return alias_payload
 
     def resolve_llm_output(self, bucket_id: str, alias_output: Any, map_version: int | None = None) -> Any:
         if map_version is not None and int(map_version) != self.alias_map_version(bucket_id):
@@ -141,10 +590,7 @@ class AliasCodec:
         return self._walk_to_real(bucket_id, alias_output, "")
 
     def assert_alias_only_payload(self, bucket_id: str, payload: Any) -> None:
-        leak = self._find_real_key_leak(payload, "")
-        if leak:
-            self.storage.record_alias_real_key_leak()
-            raise AliasPayloadError(f"real key leaked in alias payload for bucket={bucket_id}: {leak}")
+        self.store.open(bucket_id).assert_safe(payload)
 
     def _walk_to_alias(self, bucket_id: str, value: Any, parent_key: str, *, allow_create: bool) -> Any:
         if isinstance(value, dict):
@@ -176,7 +622,7 @@ class AliasCodec:
             out: dict[str, Any] = {}
             for k, v in value.items():
                 sk = str(k)
-                key_out = sk
+                key_out = self._resolve_known_alias_key(bucket_id, sk)
                 if parent_key == "children":
                     key_out = str(self._to_real_scalar(bucket_id, sk, KEY_TYPE_REF, strict=True))
                 lk = sk.lower()
@@ -195,6 +641,15 @@ class AliasCodec:
         if isinstance(value, list):
             return [self._walk_to_real(bucket_id, x, parent_key) for x in value]
         return value
+
+    def _resolve_known_alias_key(self, bucket_id: str, value: str) -> str:
+        token = str(value or "").strip()
+        if not looks_like_alias(token):
+            return value
+        try:
+            return self.resolve_alias(bucket_id, token, None)
+        except KeyError:
+            return value
 
     def _aliasize_relations(self, bucket_id: str, relations: dict[str, Any], *, allow_create: bool) -> dict[str, Any]:
         out: dict[str, Any] = {}

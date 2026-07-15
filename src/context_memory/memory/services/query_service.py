@@ -7,7 +7,7 @@ import time
 from collections import deque
 from typing import Any
 
-from ..aliasing import AliasPayloadError, infer_real_key_type, looks_like_alias
+from ..aliasing import AliasPayloadError, looks_like_alias
 from ..models import (
     BUCKET_KIND_BUCKET,
     BUCKET_KIND_MEMORY,
@@ -251,6 +251,7 @@ class QueryService:
                     node_key_to_record_key[child] = rec.key
         alias_fallback_candidates: list[tuple[dict[str, Any], float]] = []
         alias_miss_build = 0
+        alias_table = eng._alias_table(bucket_id)
         for rec, score in bm25_ranked:
             try:
                 record_view = rec.to_dict()
@@ -259,7 +260,7 @@ class QueryService:
                     if child:
                         # Keep bucket node alias semantics consistent in degraded/fallback path.
                         record_view["key"] = child
-                alias_rec = eng.build_llm_view(bucket_id, record_view, allow_create=False)
+                alias_rec = alias_table.encode_tree(record_view, allow_create=False)
             except AliasPayloadError:
                 alias_miss_build += 1
                 continue
@@ -278,18 +279,14 @@ class QueryService:
             hint_keys = [self._node_view_key(r) for r in records[:50]]
         alias_key_hints: list[str] = []
         for key in hint_keys:
-            key_type = infer_real_key_type(key)
-            if not key_type:
+            try:
+                token = alias_table.to_alias(key, allow_create=False)
+            except (AliasPayloadError, ValueError):
                 alias_miss_build += 1
                 continue
-            token = eng.storage.find_alias(bucket_id, key, key_type)
-            if token:
-                alias_key_hints.append(token)
-            else:
-                alias_miss_build += 1
+            alias_key_hints.append(token)
         if alias_miss_build > 0:
             eng._enqueue_query_side_effect("record_alias_miss_build", {"count": alias_miss_build})
-        map_ver = eng.alias_map_version(bucket_id)
         query_alias_payload = {
             "query_text": query_text,
             "top_k": top_k,
@@ -297,13 +294,18 @@ class QueryService:
             "key_hints": alias_key_hints,
             "hint_count": len(alias_key_hints),
         }
-        eng.assert_alias_only_payload(bucket_id, query_alias_payload)
+        query_alias_payload = await eng.prepare_alias_payload(
+            bucket_id,
+            query_alias_payload,
+        )
+        map_ver = alias_table.map_version()
+        alias_table.assert_safe(query_alias_payload)
         llm_result_alias = await eng.pipeline.query(
             bucket_context=eng._bucket_context(bucket_id),
-            query_text=query_text,
+            query_text=str(query_alias_payload.get("query_text", "")),
             top_k=top_k,
             include_gray=include_gray,
-            key_hints=alias_key_hints,
+            key_hints=list(query_alias_payload.get("key_hints", [])),
             fallback_candidates=alias_fallback_candidates,
         )
         eng._audit_alias_llm_call(
@@ -415,6 +417,7 @@ class QueryService:
         miss = 0
         if not isinstance(raw_matches, list):
             raw_matches = []
+        alias_table = eng._alias_table(bucket_id)
         for item in raw_matches:
             if not isinstance(item, dict):
                 continue
@@ -425,7 +428,7 @@ class QueryService:
                 miss += 1
                 continue
             try:
-                real_key = eng.resolve_alias(bucket_id, raw_key, expected_type=None)
+                real_key = alias_table.to_real(raw_key)
             except Exception:
                 miss += 1
                 continue

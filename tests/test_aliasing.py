@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from aliasing import AliasCodec, AliasPayloadError
+from context_memory.memory.aliasing import AliasCodec, AliasPayloadError
 
 
 class _MockStorage:
