@@ -65,12 +65,28 @@ class AdvanceQueryService:
                 visited=set(),
             )
             full_payload = self._advance_render_top_payload(root_node)
-            token_count = self._advance_payload_tokens(
+            prepared_system, prepared_command, prepared_full_payload = await self._advance_prepare_components_for_llm(
                 raw_payload=full_payload,
                 alias_bucket_id=target_bucket_id,
                 enable_aliasing=bool(enable_aliasing),
                 system_text=system_text,
                 command=command,
+            )
+            prepared_user_markdown = self._advance_build_user_markdown(
+                command=prepared_command,
+                payload=prepared_full_payload,
+            )
+            self._advance_assert_request_safe(
+                alias_bucket_id=target_bucket_id,
+                enable_aliasing=bool(enable_aliasing),
+                system_text=prepared_system,
+                user_markdown=prepared_user_markdown,
+            )
+            token_count = self._advance_count_tokens_exact(
+                self._advance_combine_request_markdown(
+                    system_text=prepared_system,
+                    user_markdown=prepared_user_markdown,
+                )
             )
             self._advance_audit_event(
                 enabled=bool(audit),
@@ -92,19 +108,19 @@ class AdvanceQueryService:
                         f"advance_query single_shot overflow: tokens={token_count}, threshold={threshold_tokens}; "
                         "please compress/split bucket or use best_effort_full_view."
                     )
-                user_markdown = self._advance_build_user_markdown(command=command, payload=full_payload)
                 return await self._advance_llm_request(
-                    system_text=system_text,
-                    user_markdown=user_markdown,
+                    system_text=prepared_system,
+                    user_markdown=prepared_user_markdown,
                     llm_preset=llm_preset,
                     tool_input=tool_input,
                     allow_tools=True,
+                    alias_bucket_id=target_bucket_id if enable_aliasing else None,
                 )
 
             response = await self._advance_run_best_effort_node(
                 node=root_node,
-                command=command,
-                system_text=system_text,
+                command=prepared_command,
+                system_text=prepared_system,
                 llm_preset=llm_preset,
                 threshold_tokens=threshold_tokens,
                 alias_bucket_id=target_bucket_id,
@@ -268,12 +284,54 @@ class AdvanceQueryService:
 
     def _advance_build_full_markdown(self, *, system_text: str, command: str, payload: dict[str, Any]) -> str:
         user_markdown = self._advance_build_user_markdown(command=command, payload=payload)
+        return self._advance_combine_request_markdown(system_text=system_text, user_markdown=user_markdown)
+
+    @staticmethod
+    def _advance_combine_request_markdown(*, system_text: str, user_markdown: str) -> str:
         return (
             "# System Prompt\n\n"
             f"{str(system_text or '').strip()}\n\n"
             "---\n\n"
             f"{user_markdown}"
         )
+
+    async def _advance_prepare_components_for_llm(
+        self,
+        *,
+        raw_payload: dict[str, Any],
+        alias_bucket_id: str,
+        enable_aliasing: bool,
+        system_text: str,
+        command: str,
+    ) -> tuple[str, str, dict[str, Any]]:
+        if not enable_aliasing:
+            return str(system_text), str(command), raw_payload
+        prepared = await self.runtime.engine.prepare_alias_payload(
+            alias_bucket_id,
+            {
+                "system_text": str(system_text),
+                "command": str(command),
+                "payload": raw_payload,
+            },
+        )
+        return (
+            str(prepared.get("system_text", "")),
+            str(prepared.get("command", "")),
+            dict(prepared.get("payload", {})),
+        )
+
+    def _advance_assert_request_safe(
+        self,
+        *,
+        alias_bucket_id: str,
+        enable_aliasing: bool,
+        system_text: str,
+        user_markdown: str,
+    ) -> None:
+        if enable_aliasing:
+            self.runtime.engine._alias_table(alias_bucket_id).assert_safe(
+                {"system_text": system_text, "user_markdown": user_markdown}
+            )
 
     def _advance_count_tokens_exact(self, text: str) -> int:
         if tiktoken is None:
@@ -294,8 +352,9 @@ class AdvanceQueryService:
         eng = self.runtime.engine
         if not enable_aliasing:
             return raw_payload
-        alias_payload = eng.build_llm_view(alias_bucket_id, raw_payload)
-        eng.assert_alias_only_payload(alias_bucket_id, alias_payload)
+        alias_table = eng._alias_table(alias_bucket_id)
+        alias_payload = alias_table.encode_tree(raw_payload)
+        alias_table.assert_safe(alias_payload)
         return alias_payload
 
     def _advance_payload_tokens(
@@ -327,8 +386,13 @@ class AdvanceQueryService:
         llm_preset: str | None,
         tool_input: ToolInput | list[ToolInput] | Prompts | None,
         allow_tools: bool,
+        alias_bucket_id: str | None = None,
     ) -> Prompts:
         eng = self.runtime.engine
+        if alias_bucket_id:
+            eng._alias_table(alias_bucket_id).assert_safe(
+                {"system_text": system_text, "user_markdown": user_markdown}
+            )
         preset = str(llm_preset or eng.llm_preset or "CONTEXT_MEMORY").strip()
         last_error: Exception | None = None
         for _ in range(2):
@@ -499,20 +563,29 @@ class AdvanceQueryService:
                 source=[str(x) for x in spec.get("source", [])],
                 content=dict(spec.get("content", {})),
             )
-            req_payload = self._advance_prepare_payload_for_llm(
+            request_system, request_command, req_payload = await self._advance_prepare_components_for_llm(
                 raw_payload=payload,
                 alias_bucket_id=alias_bucket_id,
                 enable_aliasing=enable_aliasing,
+                system_text=system_text,
+                command=command,
             )
-            user_markdown = self._advance_build_user_markdown(command=command, payload=req_payload)
+            user_markdown = self._advance_build_user_markdown(command=request_command, payload=req_payload)
+            self._advance_assert_request_safe(
+                alias_bucket_id=alias_bucket_id,
+                enable_aliasing=enable_aliasing,
+                system_text=request_system,
+                user_markdown=user_markdown,
+            )
             async with sem:
                 try:
                     resp = await self._advance_llm_request(
-                        system_text=system_text,
+                        system_text=request_system,
                         user_markdown=user_markdown,
                         llm_preset=llm_preset,
                         tool_input=None,
                         allow_tools=False,
+                        alias_bucket_id=alias_bucket_id if enable_aliasing else None,
                     )
                     content = self._advance_chunk_response_content(label=label, response=resp)
                     self._advance_audit_event(
@@ -582,18 +655,27 @@ class AdvanceQueryService:
                 command=command,
             )
             if tok <= threshold_tokens:
-                req_payload = self._advance_prepare_payload_for_llm(
+                request_system, request_command, req_payload = await self._advance_prepare_components_for_llm(
                     raw_payload=payload,
                     alias_bucket_id=alias_bucket_id,
                     enable_aliasing=enable_aliasing,
-                )
-                user_markdown = self._advance_build_user_markdown(command=command, payload=req_payload)
-                return await self._advance_llm_request(
                     system_text=system_text,
+                    command=command,
+                )
+                user_markdown = self._advance_build_user_markdown(command=request_command, payload=req_payload)
+                self._advance_assert_request_safe(
+                    alias_bucket_id=alias_bucket_id,
+                    enable_aliasing=enable_aliasing,
+                    system_text=request_system,
+                    user_markdown=user_markdown,
+                )
+                return await self._advance_llm_request(
+                    system_text=request_system,
                     user_markdown=user_markdown,
                     llm_preset=llm_preset,
                     tool_input=final_tool_input if allow_tools_on_final else None,
                     allow_tools=bool(allow_tools_on_final and final_tool_input is not None),
+                    alias_bucket_id=alias_bucket_id if enable_aliasing else None,
                 )
 
             result_boxes: list[dict[str, Any]] = []
@@ -660,18 +742,27 @@ class AdvanceQueryService:
             command=command,
         )
         if tok <= threshold_tokens:
-            req_payload = self._advance_prepare_payload_for_llm(
+            request_system, request_command, req_payload = await self._advance_prepare_components_for_llm(
                 raw_payload=raw_payload,
                 alias_bucket_id=alias_bucket_id,
                 enable_aliasing=enable_aliasing,
-            )
-            user_markdown = self._advance_build_user_markdown(command=command, payload=req_payload)
-            return await self._advance_llm_request(
                 system_text=system_text,
+                command=command,
+            )
+            user_markdown = self._advance_build_user_markdown(command=request_command, payload=req_payload)
+            self._advance_assert_request_safe(
+                alias_bucket_id=alias_bucket_id,
+                enable_aliasing=enable_aliasing,
+                system_text=request_system,
+                user_markdown=user_markdown,
+            )
+            return await self._advance_llm_request(
+                system_text=request_system,
                 user_markdown=user_markdown,
                 llm_preset=llm_preset,
                 tool_input=final_tool_input if allow_tools_on_final else None,
                 allow_tools=bool(allow_tools_on_final and final_tool_input is not None),
+                alias_bucket_id=alias_bucket_id if enable_aliasing else None,
             )
 
         memory_content: dict[str, Any] = {}

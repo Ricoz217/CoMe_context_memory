@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -55,3 +56,32 @@ async def test_bucket_handle_resolve_alias_preserves_validation_errors(tmp_path:
 
     with pytest.raises(KeyError, match="unknown alias"):
         await handle.resolve_alias("memory_999")
+
+
+@pytest.mark.asyncio
+async def test_bucket_handle_resolve_aliases_batches_successes_with_one_refresh(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    handle = await engine.set_bucket("ALIAS_BATCH")
+    added = await handle.add_memory("batch memory")
+    child = await handle.create_bucket(title="batch child")
+    memory_alias = engine.get_or_create_alias(handle.bucket_id, added.key, "memory")
+    bucket_alias = engine.get_or_create_alias(handle.bucket_id, child.bucket_id, "bucket")
+
+    with patch.object(engine, "_resolve_bucket_id", wraps=engine._resolve_bucket_id) as resolve_bucket:
+        resolved = await handle.resolve_aliases(
+            [memory_alias, bucket_alias, "memory_999", "not-an-alias", memory_alias]
+        )
+
+    assert resolved == {memory_alias: added.key, bucket_alias: child.bucket_id}
+    assert resolve_bucket.call_count == 1
+
+    memory_only = await handle.resolve_aliases(
+        [memory_alias, bucket_alias],
+        expected_type="memory",
+    )
+    assert memory_only == {memory_alias: added.key}
+
+    with pytest.raises(KeyError, match="unknown alias"):
+        await handle.resolve_aliases([memory_alias, "memory_999"], strict=True)
+    with pytest.raises(TypeError, match="alias type mismatch"):
+        await handle.resolve_aliases([bucket_alias], expected_type="memory", strict=True)

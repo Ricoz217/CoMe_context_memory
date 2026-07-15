@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import shutil
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,8 @@ class MemoryStorageV3:
         self._alias_map_cache: dict[str, dict[str, Any]] = {}
         self._alias_map_dirty: set[str] = set()
         self._alias_session_depth: int = 0
+        self._alias_table_locks: dict[str, threading.RLock] = {}
+        self._alias_table_locks_guard = threading.RLock()
         self._ensure_layout()
 
     def _ensure_layout(self) -> None:
@@ -540,6 +543,24 @@ class MemoryStorageV3:
         self._alias_map_dirty.add(bucket_id)
         if self._alias_session_depth <= 0:
             self.flush_alias_maps(bucket_id=bucket_id)
+
+    def get_alias_map_lock(self, bucket_id: str) -> threading.RLock:
+        token = str(bucket_id or "").strip()
+        with self._alias_table_locks_guard:
+            lock = self._alias_table_locks.get(token)
+            if lock is None:
+                lock = threading.RLock()
+                self._alias_table_locks[token] = lock
+            return lock
+
+    def commit_alias_map(self, bucket_id: str, payload: dict[str, Any]) -> None:
+        """Atomically persist a completed alias transaction before publishing its cache."""
+        body = dict(payload)
+        body["bucket_id"] = bucket_id
+        body["updated_at"] = utc_now_iso()
+        self._atomic_save_json(body, self._bucket_alias_map_path(bucket_id))
+        self._alias_map_cache[bucket_id] = body
+        self._alias_map_dirty.discard(bucket_id)
 
     def begin_alias_session(self) -> None:
         self._alias_session_depth += 1

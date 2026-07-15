@@ -73,9 +73,10 @@ class OptimizeService:
             )
 
         try:
-            alias_payload = eng.build_llm_view(target_bucket, payload)
-            map_ver = eng.alias_map_version(target_bucket)
-            eng.assert_alias_only_payload(target_bucket, alias_payload)
+            alias_table = eng._alias_table(target_bucket)
+            alias_payload = await eng.prepare_alias_payload(target_bucket, payload)
+            map_ver = alias_table.map_version()
+            alias_table.assert_safe(alias_payload)
             llm_alias = await eng.pipeline.optimize(
                 bucket_context=None,
                 reason=reason,
@@ -88,7 +89,7 @@ class OptimizeService:
                 alias_input=alias_payload,
                 alias_output=llm_alias,
             )
-            llm_out = eng.resolve_llm_output(target_bucket, llm_alias, map_version=map_ver)
+            llm_out = await alias_table.restore(llm_alias, map_version=map_ver)
         except AliasPayloadError as exc:
             return OptimizeResult(
                 success=False,
@@ -578,6 +579,7 @@ class OptimizeService:
         child_expansions: list[dict[str, Any]],
     ) -> dict[str, Any]:
         eng = self.runtime.engine
+        alias_table = eng._alias_table(target_bucket)
         candidate_keys = set(candidate_records.keys())
         skipped_invalid_count = 0
         child_expand_map: dict[str, list[str]] = {}
@@ -601,7 +603,7 @@ class OptimizeService:
             if node_key and node_key in candidate_keys:
                 return node_key
             try:
-                resolved = str(eng.resolve_alias(target_bucket, token, None)).strip()
+                resolved = str(alias_table.to_real(token)).strip()
             except Exception:
                 resolved = ""
             if resolved in candidate_keys:
@@ -961,7 +963,7 @@ class OptimizeService:
         info.updated_at = utc_now_iso()
         eng.storage.update_bucket_info(info)
         try:
-            eng.freeze_alias_map(child_bucket)
+            eng._alias_table(child_bucket).freeze()
         except Exception:
             pass
 

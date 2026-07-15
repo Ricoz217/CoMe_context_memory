@@ -286,6 +286,7 @@ await engine.advance_query(
    - `enable_aliasing=True` 时，子树统一使用目标桶（顶层桶）的 alias map。
    - 不回写子桶 alias map，避免多映射源混乱。
    - `await bucket.resolve_alias(alias)` 可使用当前句柄桶的 alias map 手动取得真实 ID。
+   - `await bucket.resolve_aliases(aliases)` 可在一次 successor 刷新和一次映射锁内批量反解，返回 `alias -> real_id` 的成功映射。
    - `memory_xx` 返回真实 `mem_...`；`bucket_xx` 返回真实 `bucket_...`；`revision_xx` 与 `ref_xx` 同理。
    - 桶节点本身也是一条 memory 记录：其 `memory_xx` 可交给 `get_memory()`，记录中的 `child_bucket_id` 指向桶实体。
 
@@ -297,9 +298,12 @@ memory_or_bucket_node = await bucket.get_memory(real_mem_id)
 
 real_bucket_id = await bucket.resolve_alias("bucket_3")
 child_bucket = bucket.get_bucket(real_bucket_id)
+
+resolved = await bucket.resolve_aliases(["memory_12", "bucket_3", "memory_999"])
+# 未知 alias 默认跳过：{"memory_12": "mem_...", "bucket_3": "bucket_..."}
 ```
 
-必须使用生成该 alias 的目标桶句柄反解；alias map 按桶隔离。需要严格限制类型时可传 `expected_type="memory"` 等参数。
+必须使用生成该 alias 的目标桶句柄反解；alias map 按桶隔离。需要严格限制类型时可传 `expected_type="memory"` 等参数。批量接口默认跳过未知 alias 和类型不匹配项；传 `strict=True` 时恢复单条接口的 fail-fast `KeyError`/`TypeError` 行为。映射损坏不会被跳过。
 
 8. BucketHandle 透传
    - `await bucket.advance_query(...)` 与 engine 行为一致。

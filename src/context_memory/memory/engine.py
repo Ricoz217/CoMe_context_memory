@@ -10,6 +10,7 @@ import random
 import shutil
 import traceback
 import yaml
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
@@ -20,7 +21,7 @@ from typing import Any, AsyncIterator, Callable, Literal, TypeVar
 from uuid import uuid4
 
 from .llm_pipeline import LLMPipelineV3
-from .aliasing import AliasCodec, AliasPayloadError, stable_payload_hash
+from .aliasing import AliasCodec, AliasPayloadError, AliasTable, stable_payload_hash
 from .memory_manager import MemoryManager
 from .services import (
     ADVANCE_QUERY_MODE_BEST_EFFORT,
@@ -414,6 +415,22 @@ class BucketHandle:
         """
         bucket_id = await self._refresh_bucket_id()
         return self._engine.resolve_alias(bucket_id, alias, expected_type=expected_type)
+
+    async def resolve_aliases(
+        self,
+        aliases: Iterable[str],
+        *,
+        expected_type: str | None = None,
+        strict: bool = False,
+    ) -> dict[str, str]:
+        """批量反解当前桶的 alias，一次刷新 successor 后返回成功映射。"""
+        bucket_id = await self._refresh_bucket_id()
+        return await self._engine._resolve_aliases_from_resolved_bucket(
+            bucket_id,
+            aliases,
+            expected_type=expected_type,
+            strict=strict,
+        )
 
     def list_buckets(self) -> list[BucketInfo]:
         """列出所有桶信息。"""
@@ -1857,6 +1874,13 @@ class ContextMemoryEngineV3:
         return self._bucket_topology_service.list_buckets()
 
     # Alias-First internal APIs (forced mode in this branch)
+    def _alias_table(self, bucket_id: str, *, resolve_successor: bool = True) -> AliasTable:
+        token = str(bucket_id or "").strip()
+        if not token:
+            raise ValueError("bucket_id is empty")
+        resolved = self._resolve_bucket_id(token) if resolve_successor else token
+        return self.alias_codec.store.open(resolved)
+
     def get_or_create_alias(self, bucket_id: str, real_key: str, key_type: str) -> str:
         """获取或创建 alias。
 
@@ -1868,8 +1892,7 @@ class ContextMemoryEngineV3:
         Returns:
             str: alias key。
         """
-        resolved = self._resolve_bucket_id(bucket_id)
-        return self.alias_codec.get_or_create_alias(resolved, real_key, key_type)
+        return self._alias_table(bucket_id).to_alias(real_key, key_type=key_type)
 
     def resolve_alias(self, bucket_id: str, alias: str, expected_type: str | None = None) -> str:
         """将 alias 解析为真实 key。
@@ -1882,8 +1905,39 @@ class ContextMemoryEngineV3:
         Returns:
             str: 真实 key。
         """
+        return self._alias_table(bucket_id).to_real(alias, expected_type=expected_type)
+
+    async def _resolve_aliases_from_resolved_bucket(
+        self,
+        bucket_id: str,
+        aliases: Iterable[str],
+        *,
+        expected_type: str | None = None,
+        strict: bool = False,
+    ) -> dict[str, str]:
+        table = self.alias_codec.store.open(bucket_id)
+        return await table.resolve_many(
+            aliases,
+            expected_type=expected_type,
+            strict=strict,
+        )
+
+    async def resolve_aliases(
+        self,
+        bucket_id: str,
+        aliases: Iterable[str],
+        *,
+        expected_type: str | None = None,
+        strict: bool = False,
+    ) -> dict[str, str]:
+        """批量反解 alias；默认跳过未知 alias 和类型不匹配项。"""
         resolved = self._resolve_bucket_id(bucket_id)
-        return self.alias_codec.resolve_alias(resolved, alias, expected_type)
+        return await self._resolve_aliases_from_resolved_bucket(
+            resolved,
+            aliases,
+            expected_type=expected_type,
+            strict=strict,
+        )
 
     def freeze_alias_map(self, bucket_id: str) -> None:
         """冻结桶的 alias 映射版本。
@@ -1891,8 +1945,7 @@ class ContextMemoryEngineV3:
         Args:
             bucket_id: 桶 ID。
         """
-        resolved = self._resolve_bucket_id(bucket_id)
-        self.alias_codec.freeze_alias_map(resolved)
+        self._alias_table(bucket_id).freeze()
 
     def alias_map_version(self, bucket_id: str) -> int:
         """查询桶 alias 映射版本号。
@@ -1903,8 +1956,7 @@ class ContextMemoryEngineV3:
         Returns:
             int: 版本号。
         """
-        resolved = self._resolve_bucket_id(bucket_id)
-        return self.alias_codec.alias_map_version(resolved)
+        return self._alias_table(bucket_id).map_version()
 
     def build_llm_view(
         self,
@@ -1931,6 +1983,36 @@ class ContextMemoryEngineV3:
             real_payload,
             map_version=map_version,
             allow_create=allow_create,
+        )
+
+    async def prepare_alias_payload(
+        self,
+        bucket_id: str,
+        real_payload: Any,
+        map_version: int | None = None,
+        *,
+        allow_create: bool = True,
+    ) -> Any:
+        """Build and persist an alias-only payload without blocking the event loop."""
+        return await self._alias_table(bucket_id).prepare(
+            real_payload,
+            allow_create=allow_create,
+            map_version=map_version,
+        )
+
+    async def restore_alias_payload(
+        self,
+        bucket_id: str,
+        alias_payload: Any,
+        map_version: int | None = None,
+        *,
+        strict_unknown: bool = True,
+    ) -> Any:
+        """Restore a structured LLM response through the bucket's AliasTable."""
+        return await self._alias_table(bucket_id).restore(
+            alias_payload,
+            map_version=map_version,
+            strict_unknown=strict_unknown,
         )
 
     def resolve_llm_output(self, bucket_id: str, alias_output: Any, map_version: int | None = None) -> Any:
@@ -2064,7 +2146,7 @@ class ContextMemoryEngineV3:
                 "tool": tool,
                 "input_hash": stable_payload_hash(alias_input),
                 "output_hash": stable_payload_hash(alias_output),
-                "alias_map_hash": stable_payload_hash(self.storage.load_alias_map(bucket_id)),
+                "alias_map_hash": self._alias_table(bucket_id).snapshot_hash(),
             }
         )
 
@@ -2245,7 +2327,7 @@ class ContextMemoryEngineV3:
         ingest_kwargs: dict[str, Any],
         allow_retry: bool = True,
     ) -> tuple[dict[str, Any], bool, bool]:
-        def _aliasize_ingest_call() -> tuple[dict[str, Any], dict[str, Any], int]:
+        async def _aliasize_ingest_call() -> tuple[dict[str, Any], dict[str, Any], int]:
             raw_payload = {
                 "event": ingest_kwargs.get("event", "ADD"),
                 "input_type": ingest_kwargs.get("input_type", ""),
@@ -2262,9 +2344,10 @@ class ContextMemoryEngineV3:
                 "split_index": ingest_kwargs.get("split_index"),
                 "raw_text": ingest_kwargs.get("raw_text", ""),
             }
-            alias_payload = self.build_llm_view(bucket_id, raw_payload)
-            map_ver = self.alias_map_version(bucket_id)
-            self.assert_alias_only_payload(bucket_id, alias_payload)
+            alias_payload = await self.prepare_alias_payload(bucket_id, raw_payload)
+            alias_table = self._alias_table(bucket_id)
+            map_ver = alias_table.map_version()
+            alias_table.assert_safe(alias_payload)
             kwargs = dict(ingest_kwargs)
             for name in (
                 "event",
@@ -2285,7 +2368,7 @@ class ContextMemoryEngineV3:
                 kwargs[name] = alias_payload.get(name)
             return kwargs, alias_payload, map_ver
 
-        alias_kwargs, alias_input, map_ver = _aliasize_ingest_call()
+        alias_kwargs, alias_input, map_ver = await _aliasize_ingest_call()
         result_alias = await pipeline.ingest(**alias_kwargs)
         self._audit_alias_llm_call(
             tool="ingest",
@@ -2294,7 +2377,7 @@ class ContextMemoryEngineV3:
             alias_input=alias_input,
             alias_output=result_alias,
         )
-        result = self.resolve_llm_output(bucket_id, result_alias, map_version=map_ver)
+        result = await self.restore_alias_payload(bucket_id, result_alias, map_version=map_ver)
         self._record_llm_usage_values(pipeline.last_usage)
         self._record_llm_diag_values(pipeline.last_diagnostics)
         overflow_seen = self._is_context_overflow_diag(pipeline.last_diagnostics)
@@ -2309,7 +2392,7 @@ class ContextMemoryEngineV3:
         except Exception:
             pass
 
-        alias_kwargs_retry, alias_input_retry, map_ver_retry = _aliasize_ingest_call()
+        alias_kwargs_retry, alias_input_retry, map_ver_retry = await _aliasize_ingest_call()
         retry_alias = await pipeline.ingest(**alias_kwargs_retry)
         self._audit_alias_llm_call(
             tool="ingest",
@@ -2318,7 +2401,7 @@ class ContextMemoryEngineV3:
             alias_input=alias_input_retry,
             alias_output=retry_alias,
         )
-        retry = self.resolve_llm_output(bucket_id, retry_alias, map_version=map_ver_retry)
+        retry = await self.restore_alias_payload(bucket_id, retry_alias, map_version=map_ver_retry)
         self._record_llm_usage_values(pipeline.last_usage)
         self._record_llm_diag_values(pipeline.last_diagnostics)
         overflow_still = self._is_context_overflow_diag(pipeline.last_diagnostics)
@@ -2418,8 +2501,9 @@ class ContextMemoryEngineV3:
                 "child_bucket_id": record.child_bucket_id,
                 "payload": payload,
             }
-        alias_event = self.build_llm_view(bucket_id, event)
-        self.assert_alias_only_payload(bucket_id, alias_event)
+        alias_table = self._alias_table(bucket_id)
+        alias_event = alias_table.encode_tree(event)
+        alias_table.assert_safe(alias_event)
         self.storage.append_bucket_event(bucket_id, alias_event)
         self.storage.append_event(
             event_type=event_type,
@@ -2894,7 +2978,8 @@ class ContextMemoryEngineV3:
         return (now - last_at).total_seconds() >= self._auto_split_cooldown_sec
 
     def _seal_bucket_unlocked(self, *, source_bucket_id: str, successor_bucket_id: str) -> None:
-        old_map_hash = stable_payload_hash(self.storage.load_alias_map(source_bucket_id))
+        source_alias_table = self._alias_table(source_bucket_id, resolve_successor=False)
+        old_map_hash = source_alias_table.snapshot_hash()
         source = self.storage.get_bucket_info(source_bucket_id)
         if source is None:
             return
@@ -2903,8 +2988,8 @@ class ContextMemoryEngineV3:
         source.archived = True
         self.storage.update_bucket_info(source)
         # Freeze the source map by exact id; do not resolve redirects to successor here.
-        self.storage.freeze_alias_map(source_bucket_id)
-        new_map_hash = stable_payload_hash(self.storage.load_alias_map(successor_bucket_id))
+        source_alias_table.freeze()
+        new_map_hash = self._alias_table(successor_bucket_id).snapshot_hash()
         self.storage.append_alias_audit(
             {
                 "request_id": self._next_alias_request_id("seal_switch"),
@@ -3111,13 +3196,14 @@ class ContextMemoryEngineV3:
                 "summary_status": info.summary_status,
             }
 
-        alias_records = self.build_llm_view(
+        alias_records = (await self.prepare_alias_payload(
             bucket_id,
             {"records": [r.to_dict() for r in records]},
-        ).get("records", [])
-        map_ver = self.alias_map_version(bucket_id)
+        )).get("records", [])
+        alias_table = self._alias_table(bucket_id)
+        map_ver = alias_table.map_version()
         summary_alias_payload = {"records": alias_records, "reason": reason}
-        self.assert_alias_only_payload(bucket_id, summary_alias_payload)
+        alias_table.assert_safe(summary_alias_payload)
         summary_out_alias = await self.pipeline.summarize_bucket(records=alias_records, reason=reason)
         self._audit_alias_llm_call(
             tool="bucket_summary",
@@ -3126,7 +3212,7 @@ class ContextMemoryEngineV3:
             alias_input=summary_alias_payload,
             alias_output=summary_out_alias,
         )
-        summary_out = self.resolve_llm_output(bucket_id, summary_out_alias, map_version=map_ver)
+        summary_out = await self.restore_alias_payload(bucket_id, summary_out_alias, map_version=map_ver)
         self._record_llm_usage()
         self._record_llm_diag()
         if self._is_context_overflow_diag(self.pipeline.last_diagnostics):
@@ -4994,8 +5080,9 @@ class ContextMemoryEngineV3:
             return CompressResult(success=True, message="bucket is empty")
 
         records = [r.to_dict() for r in latest_all]
-        alias_records = self.build_llm_view(bucket_id, {"records": records}).get("records", [])
-        map_ver = self.alias_map_version(bucket_id)
+        alias_records = (await self.prepare_alias_payload(bucket_id, {"records": records})).get("records", [])
+        alias_table = self._alias_table(bucket_id)
+        map_ver = alias_table.map_version()
         estimated = self.storage.estimate_bucket_tokens(bucket_id, include_gray=True)
         compress_alias_payload = {
             "reason": reason,
@@ -5003,7 +5090,7 @@ class ContextMemoryEngineV3:
             "max_estimated_tokens": self.max_context_window,
             "records": alias_records,
         }
-        self.assert_alias_only_payload(bucket_id, compress_alias_payload)
+        alias_table.assert_safe(compress_alias_payload)
         plan_alias = await self.pipeline.compress(
             bucket_context=self._bucket_context(bucket_id),
             records=alias_records,
@@ -5018,7 +5105,7 @@ class ContextMemoryEngineV3:
             alias_input=compress_alias_payload,
             alias_output=plan_alias,
         )
-        plan = self.resolve_llm_output(bucket_id, plan_alias, map_version=map_ver)
+        plan = await self.restore_alias_payload(bucket_id, plan_alias, map_version=map_ver)
         self._record_llm_usage()
         self._record_llm_diag()
         if self._is_context_overflow_diag(self.pipeline.last_diagnostics):
@@ -5339,11 +5426,12 @@ class ContextMemoryEngineV3:
             return {"success": True, "created_buckets": 0, "moved_memories": 0, "message": "not enough records to split"}
 
         pressure_before, _ = self._bucket_pressure(bucket_id)
-        alias_records = self.build_llm_view(
+        alias_records = (await self.prepare_alias_payload(
             bucket_id,
             {"records": [r.to_dict() for r in records]},
-        ).get("records", [])
-        map_ver = self.alias_map_version(bucket_id)
+        )).get("records", [])
+        alias_table = self._alias_table(bucket_id)
+        map_ver = alias_table.map_version()
         split_alias_payload = {
             "reason": reason,
             "split_plan_target_items": self._split_plan_target_items,
@@ -5352,7 +5440,7 @@ class ContextMemoryEngineV3:
             "target_groups_max": target_groups_max,
             "records": alias_records,
         }
-        self.assert_alias_only_payload(bucket_id, split_alias_payload)
+        alias_table.assert_safe(split_alias_payload)
         split_plan_alias = await self.pipeline.bucket_split(
             bucket_context=self._bucket_context(bucket_id),
             records=alias_records,
@@ -5369,7 +5457,7 @@ class ContextMemoryEngineV3:
             alias_input=split_alias_payload,
             alias_output=split_plan_alias,
         )
-        split_plan = self.resolve_llm_output(bucket_id, split_plan_alias, map_version=map_ver)
+        split_plan = await self.restore_alias_payload(bucket_id, split_plan_alias, map_version=map_ver)
         self._record_llm_usage()
         self._record_llm_diag()
 
@@ -5459,13 +5547,14 @@ class ContextMemoryEngineV3:
                 if not g:
                     continue
                 keys = [r.key for r in g]
-                alias_records = self.build_llm_view(
+                alias_records = (await self.prepare_alias_payload(
                     bucket_id,
                     {"records": [x.to_dict() for x in g]},
-                ).get("records", [])
-                map_ver = self.alias_map_version(bucket_id)
+                )).get("records", [])
+                alias_table = self._alias_table(bucket_id)
+                map_ver = alias_table.map_version()
                 summary_alias_payload = {"records": alias_records, "reason": "louvain_split"}
-                self.assert_alias_only_payload(bucket_id, summary_alias_payload)
+                alias_table.assert_safe(summary_alias_payload)
                 summary_alias = await self.pipeline.summarize_bucket(records=alias_records, reason="louvain_split")
                 self._audit_alias_llm_call(
                     tool="bucket_summary",
@@ -5474,7 +5563,7 @@ class ContextMemoryEngineV3:
                     alias_input=summary_alias_payload,
                     alias_output=summary_alias,
                 )
-                summary = self.resolve_llm_output(bucket_id, summary_alias, map_version=map_ver)
+                summary = await self.restore_alias_payload(bucket_id, summary_alias, map_version=map_ver)
                 self._record_llm_usage()
                 self._record_llm_diag()
                 merge_groups.append(

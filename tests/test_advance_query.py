@@ -104,7 +104,7 @@ class AdvanceQueryTests(unittest.TestCase):
             with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
                 eng = _create_engine(td)
             threshold = int(eng.max_context_window * 0.8)
-            with patch.object(eng._advance_query_service, "_advance_payload_tokens", return_value=threshold + 1):
+            with patch.object(eng._advance_query_service, "_advance_count_tokens_exact", return_value=threshold + 1):
                 with self.assertRaises(RuntimeError):
                     asyncio.run(
                         eng.advance_query(
