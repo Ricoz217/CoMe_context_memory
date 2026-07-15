@@ -249,6 +249,21 @@ await engine.advance_query(
 7. Aliasing
    - With `enable_aliasing=True`, the expanded subtree uses the top target bucket alias map.
    - Child bucket alias maps are not written back.
+   - `await bucket.resolve_alias(alias)` manually resolves an alias through the current handle's bucket alias map.
+   - `memory_xx` resolves to a real `mem_...`; `bucket_xx` resolves to a real `bucket_...`; revision and ref aliases work the same way.
+   - A bucket node is also a memory record: resolve its `memory_xx`, pass the result to `get_memory()`, and use `child_bucket_id` for the bucket entity.
+
+```python
+response = await bucket.advance_query(command="Find the relevant memories")
+
+real_mem_id = await bucket.resolve_alias("memory_12")
+memory_or_bucket_node = await bucket.get_memory(real_mem_id)
+
+real_bucket_id = await bucket.resolve_alias("bucket_3")
+child_bucket = bucket.get_bucket(real_bucket_id)
+```
+
+Resolve an alias through the same target bucket handle that generated it because alias maps are bucket-scoped. Pass `expected_type="memory"` (or another supported type) when strict validation is required.
 
 8. BucketHandle passthrough
    - `await bucket.advance_query(...)` matches engine behavior.

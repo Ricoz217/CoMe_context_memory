@@ -402,6 +402,19 @@ class BucketHandle:
         """
         return self._engine.get_bucket(bucket_id)
 
+    async def resolve_alias(self, alias: str, *, expected_type: str | None = None) -> str:
+        """使用当前桶的 alias map 将 alias 解析为真实 ID。
+
+        Args:
+            alias: `memory_xx`、`bucket_xx`、`revision_xx` 或 `ref_xx`。
+            expected_type: 可选的严格类型约束；为空时按 alias map 自动处理。
+
+        Returns:
+            str: alias 对应的真实 memory key、bucket ID、revision ID 或 ref。
+        """
+        bucket_id = await self._refresh_bucket_id()
+        return self._engine.resolve_alias(bucket_id, alias, expected_type=expected_type)
+
     def list_buckets(self) -> list[BucketInfo]:
         """列出所有桶信息。"""
         return self._engine.list_buckets()
