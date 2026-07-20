@@ -95,16 +95,21 @@ def _parse_query_mode(mode_raw: Any) -> str:
     return mode
 
 
+def _list_memories(engine: ContextMemoryEngineV3, params: dict[str, Any]) -> Any:
+    if "include_content" in params:
+        raise RpcError(-32602, "invalid params: include_content was removed; list_memories returns index metadata only")
+    return engine.list_memories(
+        include_gray=bool(params.get("include_gray", True)),
+        bucket_id=params.get("bucket_id"),
+    )
+
+
 def _handlers(engine: ContextMemoryEngineV3) -> dict[str, Callable[[dict[str, Any]], Any]]:
     return {
         "ping": lambda _p: {"pong": True},
         "stats": lambda _p: engine.stats(),
         "list_buckets": lambda _p: engine.list_buckets(),
-        "list_memories": lambda p: engine.list_memories(
-            include_gray=bool(p.get("include_gray", True)),
-            include_content=bool(p.get("include_content", False)),
-            bucket_id=p.get("bucket_id"),
-        ),
+        "list_memories": lambda p: _list_memories(engine, p),
         "set_active_bucket": lambda p: engine.set_active_bucket(str(p.get("bucket_id", ""))),
         "latest_bucket_id": lambda p: engine.latest_bucket_id(p.get("bucket_id")),
         "add_memory": lambda p: engine.add_memory(

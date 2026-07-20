@@ -50,7 +50,8 @@ asyncio.run(main())
 
 2. Query and read
    - `query(query_text, top_k=None, mode="auto", ...)`
-   - `list_memories(include_gray=False, include_content=False, ...)`
+   - `list_memories(include_gray=False, ...)`: returns a `ListMemoriesResult` index snapshot without reading memory bodies
+   - `get_bucket_context_usage(...)`: returns `BucketContextUsage` counted from persisted `context.json` prompts
    - `get_memory(key, with_evidence=False, revision=None)`
    - `get_evidence_content(key, revision=None)`
    - `export_memory_to_markdown(memory_id)`
@@ -149,7 +150,7 @@ This releases internal resources such as query CPU thread pools.
 2. `create_child_bucket(...)` when not parse in `parent_bucket_id`, use active bucket by default.
 ## 11. Schema Migration (Brief)
 
-Release build now includes a built-in schema migration system (current `__data_version__ = 2`) to upgrade old stores before runtime operations.
+Release build now includes a built-in schema migration system (current `__data_version__ = 3`) to upgrade old stores before runtime operations.
 
 1. Auto trigger point
    - After storage binding, `ContextMemoryEngineV3` runs migration checks before exposing normal operations.
@@ -272,3 +273,12 @@ Resolve aliases through the same target bucket handle that generated them becaus
 8. BucketHandle passthrough
    - `await bucket.advance_query(...)` matches engine behavior.
    - On `BucketHandle`, target bucket defaults to the handle bucket; no manual `bucket_id` is required in normal use.
+
+## 13. Parent-Scoped Title Mapping (Schema v3)
+
+- `set_bucket(title)` looks up only the calling parent's title map, so different parents may safely use the same title.
+- `BucketHandle.set_bucket(title)` always returns a direct child of the handle's current canonical bucket.
+- `create_bucket()` and `create_child_bucket()` remain explicit-create operations and do not register a setdefault title mapping; explicit duplicate titles remain allowed.
+- Recreating a deleted parent with the same title creates a new parent and subtree instead of restoring children from the old parent's historical mapping.
+- Schema v3 migrates legacy `bucket_mapping.json` into `bucket_tree.json.child_title_maps`. The live legacy file is removed only after success, while the pre-upgrade backup retains it.
+- The `alias_map.json` format is unchanged. Valid aliases are never renumbered; only safe metadata is normalized, and mapping corruption or topology errors abort and roll back migration.

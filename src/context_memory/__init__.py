@@ -12,9 +12,18 @@
 - `ContextMemoryEngineV3` / `BucketHandle`：直接调用引擎与桶级接口
 """
 
-__version__ = "0.3.5"
+__version__ = "0.4.0"
 
-from .memory import BucketHandle, ContextMemoryConfig, ContextMemoryEngineV3, ContextMemorySystem, LLMPresetConfigError
+from .memory import (
+    BucketContextUsage,
+    BucketHandle,
+    ContextMemoryConfig,
+    ContextMemoryEngineV3,
+    ContextMemorySystem,
+    LLMPresetConfigError,
+    ListMemoriesResult,
+    MemoryIndexItem,
+)
 from .memory.engine import get_context_memory_engine, __version__
 
 __all__ = [
@@ -23,5 +32,8 @@ __all__ = [
     "ContextMemoryConfig",
     "BucketHandle",
     "LLMPresetConfigError",
-    "get_context_memory_engine"
+    "get_context_memory_engine",
+    "MemoryIndexItem",
+    "ListMemoriesResult",
+    "BucketContextUsage",
 ]

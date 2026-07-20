@@ -33,8 +33,6 @@ class MaintenanceService:
     async def stats(self) -> EngineStats:
         eng = self.runtime.engine
         raw = eng.storage.get_stats()
-        root_bucket = eng.root_bucket_id()
-        estimated = eng.storage.estimate_bucket_tokens(root_bucket, include_gray=False)
         llm_input = int(raw.get("llm_input_tokens_total", 0))
         llm_cached_input = int(raw.get("llm_cached_input_tokens_total", 0))
         llm_hit_rate = (llm_cached_input / llm_input) if llm_input > 0 else 0.0
@@ -50,7 +48,6 @@ class MaintenanceService:
             cache_entries=int(raw.get("cache_entries", 0)),
             dirty=bool(raw.get("dirty", False)),
             context_version=int(raw.get("context_version", 0)),
-            estimated_tokens=estimated,
             latest_snapshot=str(raw.get("latest_snapshot", "")),
             llm_calls_total=int(raw.get("llm_calls_total", 0)),
             llm_input_tokens_total=llm_input,

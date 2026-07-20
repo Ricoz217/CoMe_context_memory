@@ -50,10 +50,10 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 {
                     "round": i + 1,
                     "before": {
-                        "memory_count": before.get("memory_count", 0),
-                        "bucket_count": before.get("bucket_count", 0),
-                        "total_memory_count": before.get("total_memory_count", before.get("memory_count", 0)),
-                        "bucket_id": before.get("bucket_id", ""),
+                        "memory_count": before.memory_count,
+                        "bucket_count": before.bucket_count,
+                        "total_memory_count": before.total_memory_count,
+                        "bucket_id": before.bucket_id,
                     },
                     "optimize": {
                         "success": bool(getattr(opt, "success", False)),
@@ -63,10 +63,10 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                         "created_buckets": list(getattr(opt, "created_buckets", []) or []),
                     },
                     "after": {
-                        "memory_count": after.get("memory_count", 0),
-                        "bucket_count": after.get("bucket_count", 0),
-                        "total_memory_count": after.get("total_memory_count", after.get("memory_count", 0)),
-                        "bucket_id": after.get("bucket_id", ""),
+                        "memory_count": after.memory_count,
+                        "bucket_count": after.bucket_count,
+                        "total_memory_count": after.total_memory_count,
+                        "bucket_id": after.bucket_id,
                     },
                 }
             )
@@ -78,18 +78,18 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             "use_mock_llm": args.use_mock_llm,
             "optimize_rounds": args.optimize_rounds,
             "pre": {
-                "memory_count": pre.get("memory_count", 0),
-                "bucket_count": pre.get("bucket_count", 0),
-                "total_memory_count": pre.get("total_memory_count", pre.get("memory_count", 0)),
-                "bucket_id": pre.get("bucket_id", ""),
+                "memory_count": pre.memory_count,
+                "bucket_count": pre.bucket_count,
+                "total_memory_count": pre.total_memory_count,
+                "bucket_id": pre.bucket_id,
             },
             "add_result": _normalize_result(add_result),
             "rounds": rounds,
             "post": {
-                "memory_count": post.get("memory_count", 0),
-                "bucket_count": post.get("bucket_count", 0),
-                "total_memory_count": post.get("total_memory_count", post.get("memory_count", 0)),
-                "bucket_id": post.get("bucket_id", ""),
+                "memory_count": post.memory_count,
+                "bucket_count": post.bucket_count,
+                "total_memory_count": post.total_memory_count,
+                "bucket_id": post.bucket_id,
             },
         }
 

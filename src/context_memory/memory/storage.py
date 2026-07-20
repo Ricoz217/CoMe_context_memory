@@ -120,6 +120,7 @@ class MemoryStorageV3:
                 "root_bucket_id": root_bucket_id,
                 "active_bucket_id": root_bucket_id,
                 "buckets": {root_bucket_id: root_info.to_dict()},
+                "child_title_maps": {},
                 "updated_at": utc_now_iso(),
             }
             self._atomic_save_json(tree, self.bucket_tree_file)
@@ -245,6 +246,7 @@ class MemoryStorageV3:
             ("index/bucket_tree.json", False),
             ("index/schema_version.json", False),
             ("index/migration_journal.json", False),
+            ("bucket_mapping.json", False),
         ]
 
     @staticmethod
@@ -409,6 +411,49 @@ class MemoryStorageV3:
                 errors.append("bucket_tree:root_bucket_not_found")
             elif active_bucket and active_bucket not in buckets:
                 errors.append("bucket_tree:active_bucket_not_found")
+            title_maps = tree.get("child_title_maps", {})
+            if not isinstance(title_maps, dict):
+                errors.append("bucket_tree:child_title_maps_not_dict")
+            elif isinstance(buckets, dict):
+                for parent_id, parent_map in title_maps.items():
+                    parent_raw = buckets.get(str(parent_id))
+                    if not isinstance(parent_raw, dict) or not isinstance(parent_map, dict):
+                        errors.append(f"bucket_tree:invalid_title_map_parent:{parent_id}")
+                        continue
+                    parent = BucketInfo.from_dict(parent_raw)
+                    successor_id = str(parent_id)
+                    successor = parent
+                    visited = {successor_id}
+                    while successor.sealed and str(successor.sealed_to or "").strip():
+                        next_id = str(successor.sealed_to).strip()
+                        if next_id in visited:
+                            successor = None
+                            break
+                        visited.add(next_id)
+                        next_raw = buckets.get(next_id)
+                        if not isinstance(next_raw, dict):
+                            successor = None
+                            break
+                        successor_id = next_id
+                        successor = BucketInfo.from_dict(next_raw)
+                    successor_map = title_maps.get(successor_id, {}) if successor_id != str(parent_id) else {}
+                    for title, child_id in parent_map.items():
+                        child_raw = buckets.get(str(child_id))
+                        if not isinstance(child_raw, dict):
+                            errors.append(f"bucket_tree:title_target_not_found:{parent_id}:{title}")
+                            continue
+                        child = BucketInfo.from_dict(child_raw)
+                        direct = child.parent_bucket_id == str(parent_id) and str(child_id) in parent.children
+                        historical = (
+                            successor is not None
+                            and successor_id != str(parent_id)
+                            and child.parent_bucket_id == successor_id
+                            and str(child_id) in successor.children
+                            and isinstance(successor_map, dict)
+                            and str(successor_map.get(title, "")) == str(child_id)
+                        )
+                        if not direct and not historical:
+                            errors.append(f"bucket_tree:title_topology_mismatch:{parent_id}:{title}")
         else:
             errors.append("bucket_tree:not_dict")
 
@@ -423,8 +468,17 @@ class MemoryStorageV3:
         return {"success": len(errors) == 0, "errors": errors}
 
     def load_bucket_tree(self) -> dict:
-        default = {"root_bucket_id": "", "active_bucket_id": "", "buckets": {}, "updated_at": utc_now_iso()}
-        return self._load_json(self.bucket_tree_file, default)
+        default = {
+            "root_bucket_id": "",
+            "active_bucket_id": "",
+            "buckets": {},
+            "child_title_maps": {},
+            "updated_at": utc_now_iso(),
+        }
+        tree = self._load_json(self.bucket_tree_file, default)
+        if "child_title_maps" not in tree:
+            tree["child_title_maps"] = {}
+        return tree
 
     def save_bucket_tree(self, tree: dict) -> None:
         tree["updated_at"] = utc_now_iso()
@@ -477,6 +531,57 @@ class MemoryStorageV3:
         if not isinstance(raw, dict):
             return None
         return BucketInfo.from_dict(raw)
+
+    @staticmethod
+    def _child_title_maps(tree: dict[str, Any]) -> dict[str, dict[str, str]]:
+        raw = tree.get("child_title_maps", {})
+        if not isinstance(raw, dict):
+            raise ValueError("bucket tree child_title_maps is invalid")
+        return raw
+
+    def get_child_title_target(self, parent_bucket_id: str, title: str) -> str:
+        tree = self.load_bucket_tree()
+        parent_map = self._child_title_maps(tree).get(parent_bucket_id, {})
+        if not isinstance(parent_map, dict):
+            return ""
+        return str(parent_map.get(title, "")).strip()
+
+    def set_child_title_target(self, *, parent_bucket_id: str, title: str, child_bucket_id: str) -> None:
+        tree = self.load_bucket_tree()
+        buckets = tree.get("buckets", {})
+        parent_raw = buckets.get(parent_bucket_id) if isinstance(buckets, dict) else None
+        child_raw = buckets.get(child_bucket_id) if isinstance(buckets, dict) else None
+        if not isinstance(parent_raw, dict) or not isinstance(child_raw, dict):
+            raise ValueError("parent or child bucket not found")
+        parent = BucketInfo.from_dict(parent_raw)
+        child = BucketInfo.from_dict(child_raw)
+        if child.parent_bucket_id != parent_bucket_id or child_bucket_id not in parent.children:
+            raise ValueError("child title target must be a direct child")
+        title_maps = self._child_title_maps(tree)
+        parent_map = title_maps.get(parent_bucket_id, {})
+        if not isinstance(parent_map, dict):
+            parent_map = {}
+        parent_map[title] = child_bucket_id
+        title_maps[parent_bucket_id] = parent_map
+        tree["child_title_maps"] = title_maps
+        self.save_bucket_tree(tree)
+
+    def remove_child_title_refs(self, *, parent_bucket_id: str, child_bucket_id: str) -> int:
+        tree = self.load_bucket_tree()
+        title_maps = self._child_title_maps(tree)
+        parent_map = title_maps.get(parent_bucket_id, {})
+        if not isinstance(parent_map, dict):
+            return 0
+        updated = {title: target for title, target in parent_map.items() if str(target) != child_bucket_id}
+        removed = len(parent_map) - len(updated)
+        if removed:
+            if updated:
+                title_maps[parent_bucket_id] = updated
+            else:
+                title_maps.pop(parent_bucket_id, None)
+            tree["child_title_maps"] = title_maps
+            self.save_bucket_tree(tree)
+        return removed
 
     def ensure_bucket_files(self, bucket_id: str) -> None:
         bdir = self.buckets_dir / bucket_id
@@ -711,6 +816,7 @@ class MemoryStorageV3:
         node_key: str,
         summary_status: str = "ready",
         summary_locked: bool = False,
+        mapping_title: str | None = None,
     ) -> BucketInfo:
         bucket_id = self.generate_bucket_id()
         self.ensure_bucket_files(bucket_id)
@@ -740,6 +846,15 @@ class MemoryStorageV3:
                     parent.children.append(bucket_id)
                 parent.updated_at = utc_now_iso()
                 buckets[parent_bucket_id] = parent.to_dict()
+
+            if mapping_title is not None:
+                title_maps = self._child_title_maps(tree)
+                parent_map = title_maps.get(parent_bucket_id, {})
+                if not isinstance(parent_map, dict):
+                    parent_map = {}
+                parent_map[mapping_title] = bucket_id
+                title_maps[parent_bucket_id] = parent_map
+                tree["child_title_maps"] = title_maps
 
         tree["buckets"] = buckets
         self.save_bucket_tree(tree)
@@ -785,7 +900,13 @@ class MemoryStorageV3:
         tree["buckets"] = buckets
         self.save_bucket_tree(tree)
 
-    def reparent_bucket(self, *, bucket_id: str, new_parent_bucket_id: str | None) -> None:
+    def reparent_bucket(
+        self,
+        *,
+        bucket_id: str,
+        new_parent_bucket_id: str | None,
+        preserve_old_title_map: bool = False,
+    ) -> None:
         tree = self.load_bucket_tree()
         buckets = tree.get("buckets", {})
         if not isinstance(buckets, dict):
@@ -795,6 +916,26 @@ class MemoryStorageV3:
             return
         child = BucketInfo.from_dict(raw)
         old_parent = child.parent_bucket_id
+        if new_parent_bucket_id and not isinstance(buckets.get(new_parent_bucket_id), dict):
+            raise ValueError(f"new parent bucket not found: {new_parent_bucket_id}")
+        title_maps = self._child_title_maps(tree)
+        moving_titles: list[str] = []
+        if old_parent:
+            old_map = title_maps.get(old_parent, {})
+            if isinstance(old_map, dict):
+                moving_titles = [title for title, target in old_map.items() if str(target) == bucket_id]
+        if new_parent_bucket_id and moving_titles:
+            new_map = title_maps.get(new_parent_bucket_id, {})
+            if not isinstance(new_map, dict):
+                new_map = {}
+            conflicts = [
+                title for title in moving_titles
+                if title in new_map and str(new_map.get(title)) != bucket_id
+            ]
+            if conflicts:
+                raise ValueError(
+                    f"child title mapping conflict in parent={new_parent_bucket_id}: {sorted(conflicts)}"
+                )
         child.parent_bucket_id = new_parent_bucket_id
         child.updated_at = utc_now_iso()
         buckets[bucket_id] = child.to_dict()
@@ -805,6 +946,15 @@ class MemoryStorageV3:
                 p.children = [c for c in p.children if c != bucket_id]
                 p.updated_at = utc_now_iso()
                 buckets[old_parent] = p.to_dict()
+            if moving_titles and not preserve_old_title_map:
+                old_map = title_maps.get(old_parent, {})
+                if isinstance(old_map, dict):
+                    for title in moving_titles:
+                        old_map.pop(title, None)
+                    if old_map:
+                        title_maps[old_parent] = old_map
+                    else:
+                        title_maps.pop(old_parent, None)
         if new_parent_bucket_id:
             new_raw = buckets.get(new_parent_bucket_id)
             if isinstance(new_raw, dict):
@@ -813,7 +963,85 @@ class MemoryStorageV3:
                     p2.children.append(bucket_id)
                 p2.updated_at = utc_now_iso()
                 buckets[new_parent_bucket_id] = p2.to_dict()
+            if moving_titles:
+                new_map = title_maps.get(new_parent_bucket_id, {})
+                if not isinstance(new_map, dict):
+                    new_map = {}
+                for title in moving_titles:
+                    new_map[title] = bucket_id
+                title_maps[new_parent_bucket_id] = new_map
         tree["buckets"] = buckets
+        tree["child_title_maps"] = title_maps
+        self.save_bucket_tree(tree)
+
+    def seal_bucket_successor(
+        self,
+        *,
+        source_bucket_id: str,
+        successor_bucket_id: str,
+    ) -> None:
+        tree = self.load_bucket_tree()
+        buckets = tree.get("buckets", {})
+        if not isinstance(buckets, dict):
+            raise ValueError("bucket tree buckets is invalid")
+        source_raw = buckets.get(source_bucket_id)
+        successor_raw = buckets.get(successor_bucket_id)
+        if not isinstance(source_raw, dict) or not isinstance(successor_raw, dict):
+            raise ValueError("source or successor bucket not found")
+        source = BucketInfo.from_dict(source_raw)
+        successor = BucketInfo.from_dict(successor_raw)
+        if source.parent_bucket_id != successor.parent_bucket_id:
+            raise ValueError("source and successor parent mismatch")
+
+        title_maps = self._child_title_maps(tree)
+        source_map = title_maps.get(source_bucket_id, {})
+        if not isinstance(source_map, dict):
+            source_map = {}
+        successor_map = title_maps.get(successor_bucket_id, {})
+        if not isinstance(successor_map, dict):
+            successor_map = {}
+        for title, target in source_map.items():
+            child_raw = buckets.get(str(target))
+            if not isinstance(child_raw, dict):
+                continue
+            child = BucketInfo.from_dict(child_raw)
+            if child.parent_bucket_id != successor_bucket_id:
+                continue
+            existing = str(successor_map.get(title, "")).strip()
+            if existing and existing != str(target):
+                raise ValueError(
+                    f"child title mapping conflict in successor={successor_bucket_id}: {title}"
+                )
+            successor_map[title] = str(target)
+        if successor_map:
+            title_maps[successor_bucket_id] = successor_map
+
+        parent_id = str(source.parent_bucket_id or "").strip()
+        if parent_id:
+            parent_raw = buckets.get(parent_id)
+            if not isinstance(parent_raw, dict):
+                raise ValueError(f"parent bucket not found: {parent_id}")
+            parent = BucketInfo.from_dict(parent_raw)
+            parent.children = [child for child in parent.children if child != source_bucket_id]
+            if successor_bucket_id not in parent.children:
+                parent.children.append(successor_bucket_id)
+            parent.updated_at = utc_now_iso()
+            buckets[parent_id] = parent.to_dict()
+            parent_map = title_maps.get(parent_id, {})
+            if isinstance(parent_map, dict):
+                for title, target in list(parent_map.items()):
+                    if str(target) == source_bucket_id:
+                        parent_map[title] = successor_bucket_id
+                if parent_map:
+                    title_maps[parent_id] = parent_map
+
+        source.sealed = True
+        source.sealed_to = successor_bucket_id
+        source.archived = True
+        source.updated_at = utc_now_iso()
+        buckets[source_bucket_id] = source.to_dict()
+        tree["buckets"] = buckets
+        tree["child_title_maps"] = title_maps
         self.save_bucket_tree(tree)
 
     def _empty_context_dict(self) -> dict[str, Any]:
@@ -950,6 +1178,13 @@ class MemoryStorageV3:
         node = state.get("keys", {}).get(key)
         if not isinstance(node, dict):
             return None
+        path_text = node.get("latest_path")
+        if not isinstance(path_text, str):
+            return None
+        return self._json_to_memory_record(self._resolve_root_path(path_text))
+
+    def load_record_from_index_node(self, node: dict[str, Any]) -> MemoryRecord | None:
+        """Load one record using a node from an already loaded state snapshot."""
         path_text = node.get("latest_path")
         if not isinstance(path_text, str):
             return None
@@ -1360,16 +1595,6 @@ class MemoryStorageV3:
             for k in keys:
                 cache.pop(k, None)
         self.save_cache(cache)
-
-    def estimate_bucket_tokens(self, bucket_id: str, *, include_gray: bool = True) -> int:
-        total_chars = 0
-        for rec in self.list_bucket_records(bucket_id, include_gray=include_gray):
-            total_chars += len(rec.title) + len(rec.summary) + len(rec.content)
-            for rel_name, rel_items in rec.relations.items():
-                total_chars += len(rel_name)
-                for item in rel_items:
-                    total_chars += len(json.dumps(item, ensure_ascii=False))
-        return max(1, total_chars // 3)
 
     def create_snapshot(self, *, summary: str, bucket_id: str, reason: str, keep_keys: list[str], drop_keys: list[str]) -> str:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")

@@ -9,11 +9,6 @@ from context_memory.LLM_connect import Chat, Prompts, SystemPrompt, TextPrompt, 
 from ..models import BUCKET_KIND_BUCKET, BUCKET_KIND_MEMORY, BucketInfo, MemoryRecord
 from .runtime import ServiceRuntime
 
-try:
-    import tiktoken  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    tiktoken = None  # type: ignore
-
 
 ADVANCE_QUERY_MODE_SINGLE_SHOT = "single_shot"
 ADVANCE_QUERY_MODE_BEST_EFFORT = "best_effort_full_view"
@@ -82,7 +77,7 @@ class AdvanceQueryService:
                 system_text=prepared_system,
                 user_markdown=prepared_user_markdown,
             )
-            token_count = self._advance_count_tokens_exact(
+            token_count = await self._advance_count_tokens_exact(
                 self._advance_combine_request_markdown(
                     system_text=prepared_system,
                     user_markdown=prepared_user_markdown,
@@ -333,14 +328,8 @@ class AdvanceQueryService:
                 {"system_text": system_text, "user_markdown": user_markdown}
             )
 
-    def _advance_count_tokens_exact(self, text: str) -> int:
-        if tiktoken is None:
-            raise RuntimeError("advance_query requires tiktoken for exact token estimation")
-        try:
-            enc = tiktoken.get_encoding("o200k_base")
-            return max(1, int(len(enc.encode(str(text)))))
-        except Exception as exc:
-            raise RuntimeError("advance_query failed to estimate tokens via tiktoken") from exc
+    async def _advance_count_tokens_exact(self, text: str) -> int:
+        return await asyncio.to_thread(self.runtime.engine.token_counter.count_text, text)
 
     def _advance_prepare_payload_for_llm(
         self,
@@ -357,7 +346,7 @@ class AdvanceQueryService:
         alias_table.assert_safe(alias_payload)
         return alias_payload
 
-    def _advance_payload_tokens(
+    async def _advance_payload_tokens(
         self,
         *,
         raw_payload: dict[str, Any],
@@ -376,7 +365,7 @@ class AdvanceQueryService:
             command=command,
             payload=request_payload,
         )
-        return self._advance_count_tokens_exact(full_markdown)
+        return await self._advance_count_tokens_exact(full_markdown)
 
     async def _advance_llm_request(
         self,
@@ -485,7 +474,7 @@ class AdvanceQueryService:
                 merged.update(content)
         return merged
 
-    def _advance_pack_boxes_first_fit(
+    async def _advance_pack_boxes_first_fit(
         self,
         *,
         bucket_id: str,
@@ -510,7 +499,7 @@ class AdvanceQueryService:
                     source=[str(x) for part in candidate for x in part.get("source", [])],
                     content=self._advance_merge_box_contents(candidate),
                 )
-                tok = self._advance_payload_tokens(
+                tok = await self._advance_payload_tokens(
                     raw_payload=probe_payload,
                     alias_bucket_id=alias_bucket_id,
                     enable_aliasing=enable_aliasing,
@@ -647,7 +636,7 @@ class AdvanceQueryService:
                     "content": dict(current_items),
                 }
             }
-            tok = self._advance_payload_tokens(
+            tok = await self._advance_payload_tokens(
                 raw_payload=payload,
                 alias_bucket_id=alias_bucket_id,
                 enable_aliasing=enable_aliasing,
@@ -691,7 +680,7 @@ class AdvanceQueryService:
                         },
                     }
                 )
-            chunk_specs = self._advance_pack_boxes_first_fit(
+            chunk_specs = await self._advance_pack_boxes_first_fit(
                 bucket_id=bucket_id,
                 bucket_metadata=bucket_metadata,
                 boxes=result_boxes,
@@ -734,7 +723,7 @@ class AdvanceQueryService:
         bucket_id = str(node.get("bucket_id", "")).strip()
         bucket_metadata = dict(node.get("metadata", {}))
         raw_payload = self._advance_render_top_payload(node)
-        tok = self._advance_payload_tokens(
+        tok = await self._advance_payload_tokens(
             raw_payload=raw_payload,
             alias_bucket_id=alias_bucket_id,
             enable_aliasing=enable_aliasing,
@@ -782,7 +771,7 @@ class AdvanceQueryService:
                 source=list(mem_box["source"]),
                 content=dict(mem_box["content"]),
             )
-            mem_tok = self._advance_payload_tokens(
+            mem_tok = await self._advance_payload_tokens(
                 raw_payload=mem_probe,
                 alias_bucket_id=alias_bucket_id,
                 enable_aliasing=enable_aliasing,
@@ -809,7 +798,7 @@ class AdvanceQueryService:
                 source=list(child_box["source"]),
                 content=dict(child_box["content"]),
             )
-            child_tok = self._advance_payload_tokens(
+            child_tok = await self._advance_payload_tokens(
                 raw_payload=child_probe,
                 alias_bucket_id=alias_bucket_id,
                 enable_aliasing=enable_aliasing,
@@ -842,7 +831,7 @@ class AdvanceQueryService:
                     source=list(child_box["source"]),
                     content=dict(child_box["content"]),
                 )
-                child_tok = self._advance_payload_tokens(
+                child_tok = await self._advance_payload_tokens(
                     raw_payload=child_probe,
                     alias_bucket_id=alias_bucket_id,
                     enable_aliasing=enable_aliasing,
@@ -855,7 +844,7 @@ class AdvanceQueryService:
                     )
             boxes.append(child_box)
 
-        chunk_specs = self._advance_pack_boxes_first_fit(
+        chunk_specs = await self._advance_pack_boxes_first_fit(
             bucket_id=bucket_id,
             bucket_metadata=bucket_metadata,
             boxes=boxes,

@@ -28,7 +28,7 @@ async def test_bucket_handle_resolve_alias_handles_memory_bucket_and_bucket_node
     child = await handle.create_bucket(title="child")
 
     listed = await handle.list_memories()
-    bucket_node = next(record for record in listed["buckets"] if record.child_bucket_id == child.bucket_id)
+    bucket_node = next(record for record in listed.buckets if record.child_bucket_id == child.bucket_id)
 
     memory_alias = engine.get_or_create_alias(handle.bucket_id, added.key, "memory")
     bucket_alias = engine.get_or_create_alias(handle.bucket_id, child.bucket_id, "bucket")

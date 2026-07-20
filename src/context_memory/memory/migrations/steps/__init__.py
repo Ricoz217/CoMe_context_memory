@@ -6,3 +6,4 @@ from __future__ import annotations
 #
 # Keep imports explicit in migrations.__init__ when steps are added.
 from . import v1_to_v2  # noqa: F401
+from . import v2_to_v3  # noqa: F401

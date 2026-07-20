@@ -50,7 +50,8 @@ asyncio.run(main())
 
 2. 查询与读取
    - `query(query_text, top_k=5, mode="auto", ...)`
-   - `list_memories(include_gray=False, include_content=False, ...)`
+   - `list_memories(include_gray=False, ...)`：返回 `ListMemoriesResult` 索引快照，不读取记忆正文
+   - `get_bucket_context_usage(...)`：返回 `BucketContextUsage`，按真实 `context.json` prompts 统计 token
    - `get_memory(key, with_evidence=False, revision=None)`
    - `get_evidence_content(key, revision=None)`
    - `export_memory_to_markdown(memory_id)`
@@ -185,7 +186,7 @@ engine.shutdown(wait=False)
    - `mode="semantic"`，小 `top_k`，对关键 bucket 或 key 做复查。
 ## 11. Schema Migration（简要）
 
-发布版已内置 schema 迁移系统（当前 `__data_version__ = 2`），用于在启动阶段自动将旧数据升级到当前代码可用版本。
+发布版已内置 schema 迁移系统（当前 `__data_version__ = 3`），用于在启动阶段自动将旧数据升级到当前代码可用版本。
 
 1. 自动触发时机
    - `ContextMemoryEngineV3` 完成存储绑定后会先执行迁移检查。
@@ -308,3 +309,12 @@ resolved = await bucket.resolve_aliases(["memory_12", "bucket_3", "memory_999"])
 8. BucketHandle 透传
    - `await bucket.advance_query(...)` 与 engine 行为一致。
    - `BucketHandle` 场景下默认作用于当前句柄桶，不需要额外传 `bucket_id`。
+
+## 13. 父桶级 Title Mapping（Schema v3）
+
+- `set_bucket(title)` 只在调用父桶自己的 title 映射表中查找；不同父桶可安全使用相同 title。
+- `BucketHandle.set_bucket(title)` 始终返回该句柄当前 canonical 桶的直接子桶。
+- `create_bucket()` / `create_child_bucket()` 仍表示明确新建，不登记 setdefault title 映射，因此同一父桶下仍允许显式创建同名桶。
+- 删除父桶后再次按同名创建，会生成新的父桶及子树，不会从旧父桶的历史映射中恢复成员子桶。
+- schema v3 会把旧 `bucket_mapping.json` 迁移到 `bucket_tree.json.child_title_maps`；迁移成功后 live 旧文件删除，升级前备份保留。
+- `alias_map.json` 格式不变。合法映射不重编号；仅允许补齐安全元数据，映射冲突、损坏或拓扑异常会中止并回滚迁移。

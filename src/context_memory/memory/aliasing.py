@@ -24,6 +24,7 @@ KEY_TYPES = {
 }
 
 _ALIAS_RE = re.compile(r"^(memory|bucket|revision|ref)_[1-9]\d*$")
+_ALIAS_TOKEN_RE = re.compile(r"^(memory|bucket|revision|ref)_([1-9]\d*)$")
 _REAL_MEMORY_RE = re.compile(r"^mem_[0-9]{14}_[0-9a-f]{32}$")
 _REAL_BUCKET_RE = re.compile(r"^bucket_[0-9]{14}_[0-9a-f]{32}$")
 _REAL_REVISION_RE = re.compile(r"^rev_[0-9]{14}_[0-9a-f]{32}$")
@@ -72,6 +73,123 @@ _LIST_FIELD_TYPES: dict[str, str] = {
 
 class AliasPayloadError(RuntimeError):
     pass
+
+
+def validate_alias_map_payload(
+    payload: dict[str, Any],
+    *,
+    bucket_id: str | None = None,
+    normalize_metadata: bool = False,
+) -> tuple[dict[str, Any], bool]:
+    """Validate an alias map and optionally repair metadata without changing mappings."""
+    if not isinstance(payload, dict):
+        raise AliasPayloadError("invalid alias map structure")
+
+    normalized = copy.deepcopy(payload)
+    changed = False
+    real_to_alias = normalized.get("real_to_alias")
+    alias_to_real = normalized.get("alias_to_real")
+    counters = normalized.get("counters")
+    if not isinstance(real_to_alias, dict) or not isinstance(alias_to_real, dict):
+        raise AliasPayloadError("invalid alias map structure")
+    if not isinstance(counters, dict):
+        if not normalize_metadata:
+            raise AliasPayloadError("invalid alias map structure")
+        counters = {}
+        normalized["counters"] = counters
+        changed = True
+
+    maxima = {"memory": 0, "bucket": 0, "revision": 0, "ref": 0}
+    for typed_key, alias_raw in real_to_alias.items():
+        key_type, separator, real_id = str(typed_key).partition(":")
+        alias = str(alias_raw)
+        reverse = alias_to_real.get(alias)
+        match = _ALIAS_TOKEN_RE.fullmatch(alias)
+        if key_type not in maxima or not separator or not real_id or match is None or match.group(1) != key_type:
+            raise AliasPayloadError(f"invalid alias mapping: {typed_key}")
+        if key_type != KEY_TYPE_REF:
+            try:
+                inferred_type = infer_real_key_type(real_id)
+            except ValueError as exc:
+                raise AliasPayloadError(f"invalid real id for alias mapping: {typed_key}") from exc
+            if inferred_type != key_type:
+                raise AliasPayloadError(f"invalid real id for alias mapping: {typed_key}")
+        if not isinstance(reverse, dict):
+            raise AliasPayloadError(f"invalid alias mapping: {typed_key}")
+        if str(reverse.get("key_type", "")) != key_type or str(reverse.get("real_key", "")) != real_id:
+            raise AliasPayloadError(f"inconsistent alias mapping: {typed_key}")
+        maxima[key_type] = max(maxima[key_type], int(match.group(2)))
+
+    for alias, reverse in alias_to_real.items():
+        if not isinstance(reverse, dict):
+            raise AliasPayloadError(f"invalid reverse alias mapping: {alias}")
+        key_type = str(reverse.get("key_type", ""))
+        real_id = str(reverse.get("real_key", ""))
+        match = _ALIAS_TOKEN_RE.fullmatch(str(alias))
+        if key_type not in maxima or not real_id or match is None or match.group(1) != key_type:
+            raise AliasPayloadError(f"invalid reverse alias mapping: {alias}")
+        if key_type != KEY_TYPE_REF:
+            try:
+                inferred_type = infer_real_key_type(real_id)
+            except ValueError as exc:
+                raise AliasPayloadError(f"invalid reverse alias real id: {alias}") from exc
+            if inferred_type != key_type:
+                raise AliasPayloadError(f"invalid reverse alias real id: {alias}")
+        typed_key = f"{key_type}:{real_id}"
+        if str(real_to_alias.get(typed_key, "")) != str(alias):
+            raise AliasPayloadError(f"orphan reverse alias mapping: {alias}")
+        maxima[key_type] = max(maxima[key_type], int(match.group(2)))
+
+    for key_type, maximum in maxima.items():
+        try:
+            current = max(0, int(counters.get(key_type, 0)))
+        except Exception as exc:
+            raise AliasPayloadError(f"invalid alias counter: {key_type}") from exc
+        if current < maximum:
+            if not normalize_metadata:
+                raise AliasPayloadError(f"alias counter behind mappings: {key_type}")
+            current = maximum
+        if counters.get(key_type) != current:
+            if not normalize_metadata:
+                raise AliasPayloadError(f"invalid alias counter: {key_type}")
+            counters[key_type] = current
+            changed = True
+
+    expected_bucket = str(bucket_id or "").strip()
+    current_bucket = str(normalized.get("bucket_id", "")).strip()
+    if expected_bucket and current_bucket != expected_bucket:
+        if not normalize_metadata or current_bucket:
+            raise AliasPayloadError(f"alias map bucket mismatch: expect={expected_bucket}, got={current_bucket}")
+        normalized["bucket_id"] = expected_bucket
+        changed = True
+
+    if "map_version" not in normalized:
+        if not normalize_metadata:
+            raise AliasPayloadError("invalid alias map version")
+        normalized["map_version"] = 1
+        changed = True
+    else:
+        try:
+            map_version = int(normalized["map_version"])
+        except Exception as exc:
+            raise AliasPayloadError("invalid alias map version") from exc
+        if map_version < 1:
+            raise AliasPayloadError("invalid alias map version")
+        if normalized["map_version"] != map_version:
+            if not normalize_metadata:
+                raise AliasPayloadError("invalid alias map version")
+            normalized["map_version"] = map_version
+            changed = True
+
+    if "sealed" not in normalized:
+        if not normalize_metadata:
+            raise AliasPayloadError("invalid alias sealed flag")
+        normalized["sealed"] = False
+        changed = True
+    elif not isinstance(normalized["sealed"], bool):
+        raise AliasPayloadError("invalid alias sealed flag")
+
+    return normalized, changed
 
 
 class AliasTable:
@@ -421,24 +539,7 @@ class AliasTable:
 
     @staticmethod
     def _validate_map(amap: dict[str, Any]) -> None:
-        real_to_alias = amap.get("real_to_alias")
-        alias_to_real = amap.get("alias_to_real")
-        counters = amap.get("counters")
-        if not isinstance(real_to_alias, dict) or not isinstance(alias_to_real, dict) or not isinstance(counters, dict):
-            raise AliasPayloadError("invalid alias map structure")
-        for typed_key, alias in real_to_alias.items():
-            key_type, separator, real_id = str(typed_key).partition(":")
-            reverse = alias_to_real.get(str(alias))
-            if not separator or not isinstance(reverse, dict):
-                raise AliasPayloadError(f"invalid alias mapping: {typed_key}")
-            if str(reverse.get("key_type", "")) != key_type or str(reverse.get("real_key", "")) != real_id:
-                raise AliasPayloadError(f"inconsistent alias mapping: {typed_key}")
-        for alias, reverse in alias_to_real.items():
-            if not isinstance(reverse, dict):
-                raise AliasPayloadError(f"invalid reverse alias mapping: {alias}")
-            typed_key = f"{reverse.get('key_type', '')}:{reverse.get('real_key', '')}"
-            if str(real_to_alias.get(typed_key, "")) != str(alias):
-                raise AliasPayloadError(f"orphan reverse alias mapping: {alias}")
+        validate_alias_map_payload(amap)
 
     def _find_leak(self, value: Any, path: str) -> str:
         if isinstance(value, dict):

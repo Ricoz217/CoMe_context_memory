@@ -44,7 +44,7 @@ python -m context_memory.cli --base-dir <Your Memory Base Dir>
 
 3. Query and read
    - `query <text> [--top-k N] [--branch-expand-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]`
-   - `list [--gray] [--bucket <bucket_id>] [--with-content]`
+   - `list [--gray] [--bucket <bucket_id>]`
    - `get <key> [--evidence]`
    - `evidence <key>`
    - `export <memory_id>`
@@ -87,7 +87,7 @@ Notes:
 add_file D:\codeile_cache.py file_cache
 query How is cache written --top-k 3 --mode auto
 optimize
-list --with-content
+list
 ```
 
 ## 6. Notes

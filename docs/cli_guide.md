@@ -43,7 +43,7 @@ python -m context_memory.cli --base-dir <Your Memory Base Dir>
 
 3. 查询与读取
    - `query <text> [--top-k N] [--branch-expand-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]`
-   - `list [--gray] [--bucket <bucket_id>] [--with-content]`
+   - `list [--gray] [--bucket <bucket_id>]`
    - `get <key> [--evidence]`
    - `evidence <key>`
    - `export <memory_id>`
@@ -85,7 +85,7 @@ CLI 仅支持：
 add_file D:\code\file_cache.py file_cache
 query 如何写入缓存 --top-k 3 --mode auto
 optimize
-list --with-content
+list
 ```
 
 ## 6. 注意事项

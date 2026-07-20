@@ -109,8 +109,8 @@ async def test_release_smoke_python_api(smoke_runtime_dir: Path, smoke_text_file
     assert add_file.success is True
     assert add_file.added_keys
 
-    listed = await root.list_memories(include_gray=False, include_content=False)
-    assert int(listed.get("total_memory_count", 0)) >= 1
+    listed = await root.list_memories(include_gray=False)
+    assert listed.total_memory_count >= 1
 
     query = await root.query("cache write metadata", top_k=3, mode="auto")
     assert query.success is True
@@ -132,6 +132,7 @@ def test_release_smoke_cli(smoke_runtime_dir: Path) -> None:
 
     commands = [
         "add cli smoke memory for cache write",
+        "list",
         "query cache write --top-k 1 --mode auto",
         "optimize",
         "stats",
@@ -170,6 +171,7 @@ def test_release_smoke_cli(smoke_runtime_dir: Path) -> None:
 
     out = proc.stdout.decode("utf-8", errors="ignore")
     assert '"success": true' in out.lower()
+    assert '"total_memory_count"' in out
     assert '"bucket_total"' in out
 
 
@@ -234,15 +236,20 @@ def test_release_smoke_jsonrpc(smoke_runtime_dir: Path) -> None:
         add_res = add.get("result", {})
         assert bool(add_res.get("success")) is True
 
-        query = call(3, "query", {"query_text": "cache write", "top_k": 1, "mode": "auto"})
+        listed = call(3, "list_memories", {"include_gray": False})
+        listed_res = listed.get("result", {})
+        assert int(listed_res.get("total_memory_count", 0)) >= 1
+        assert isinstance(listed_res.get("memories", []), list)
+
+        query = call(4, "query", {"query_text": "cache write", "top_k": 1, "mode": "auto"})
         query_res = query.get("result", {})
         assert bool(query_res.get("success")) is True
         assert isinstance(query_res.get("matches", []), list)
 
-        optimize = call(4, "optimize", {"reason": "release_smoke_rpc"})
+        optimize = call(5, "optimize", {"reason": "release_smoke_rpc"})
         assert "result" in optimize
 
-        stats = call(5, "stats", {})
+        stats = call(6, "stats", {})
         stats_res = stats.get("result", {})
         assert int(stats_res.get("bucket_total", 0)) >= 1
     finally:

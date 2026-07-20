@@ -40,7 +40,7 @@ Commands:
   gray <key> <set|clear> [reason]
   delete <key> [reason]
   query <text> [--top-k N] [--branch-expand-k N] [--gray] [--bucket <bucket_id>] [--mode auto|semantic|hybrid]
-  list [--gray] [--bucket <bucket_id>] [--with-content]
+  list [--gray] [--bucket <bucket_id>]
   buckets
   create_bucket <parent_bucket_id> <title> [summary] [--lock-summary]
   create_child_bucket <title> [summary] [--lock-summary]
@@ -359,13 +359,15 @@ async def run_cli(args: argparse.Namespace) -> None:
 
             elif cmd == "list":
                 include_gray = "--gray" in parts[1:]
-                include_content = "--with-content" in parts[1:]
+                if "--with-content" in parts[1:]:
+                    print("usage: --with-content was removed; list now returns index metadata only")
+                    continue
                 bucket_id = None
                 if "--bucket" in parts:
                     idx = parts.index("--bucket")
                     if idx + 1 < len(parts):
                         bucket_id = parts[idx + 1]
-                _print_json(await engine.list_memories(include_gray=include_gray, include_content=include_content, bucket_id=bucket_id))
+                _print_json(await engine.list_memories(include_gray=include_gray, bucket_id=bucket_id))
 
             elif cmd == "buckets":
                 _print_json(engine.list_buckets())

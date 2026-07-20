@@ -65,14 +65,14 @@ def _create_engine(base_dir: str | Path):
 
 
 class SchemaMigrationTests(unittest.TestCase):
-    def test_missing_schema_file_defaults_to_v1_and_upgrades_to_v2(self) -> None:
+    def test_missing_schema_file_defaults_to_v1_and_upgrades_to_v3(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
                 _create_engine(td)
             st = MemoryStorageV3(td)
             info = st.read_schema_version(default_schema_version=1)
             self.assertTrue(st.schema_version_file.exists())
-            self.assertEqual(int(info.get("schema_version", -1)), 2)
+            self.assertEqual(int(info.get("schema_version", -1)), 3)
 
     def test_data_newer_than_code_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:
