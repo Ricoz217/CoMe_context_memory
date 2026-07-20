@@ -1,7 +1,7 @@
 ﻿from __future__ import annotations
 
-__version__ = "0.3.5"
-__data_version__ = 2
+__version__ = "0.4.0"
+__data_version__ = 3
 import json
 import asyncio
 import hashlib
@@ -32,6 +32,7 @@ from .services import (
     CompressSplitService,
     IngestService,
     MaintenanceService,
+    MemoryReadService,
     OptimizeService,
     QueryService,
     ServiceRuntime,
@@ -41,6 +42,7 @@ from .models import (
     BUCKET_KIND_BUCKET,
     BUCKET_KIND_MEMORY,
     AddResult,
+    BucketContextUsage,
     BucketInfo,
     CleanupResult,
     CompressResult,
@@ -48,6 +50,7 @@ from .models import (
     EngineStats,
     GCResult,
     MemoryRecord,
+    ListMemoriesResult,
     MoveResult,
     OptimizeResult,
     QueryMatch,
@@ -57,6 +60,7 @@ from .models import (
     parse_iso_or_none,
     utc_now_iso,
 )
+from .token_counter import TokenCounter
 from .multimodal import ImageTextExtractor
 from .rerank import BM25IndexCache, louvain_split_groups
 from .storage import MemoryStorageV3
@@ -68,16 +72,11 @@ from context_memory.LLM_usage import LLMUsage
 from context_memory.time_id import configure_global_time_id_state_file
 from context_memory.utils import AutoMapping, atomic_save_json
 
-try:
-    import tiktoken  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    tiktoken = None  # type: ignore
-
 """ContextMemory 解耦引擎（Python API）。
 
 包信息:
 - 模块路径: `context_memory.memory.engine`
-- 当前版本: `0.3.1`（见 `__version__`）
+- 当前版本: `0.4.0`（见 `__version__`）
 - 主要入口:
   - `ContextMemoryConfig`: 引擎配置对象
   - `get_context_memory_engine(...)`: 获取全局单例引擎
@@ -818,39 +817,40 @@ class BucketHandle:
             self,
             *,
             include_gray: bool = False,
-            include_content: bool = False,
             bucket_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> ListMemoriesResult:
         """列出当前桶记录（可选包含子桶节点）。
 
         Args:
             include_gray: 是否包含灰化记录。
-            include_content: 是否返回完整 `content` 字段。
             bucket_id: 指定桶 ID；为空使用当前句柄桶。
 
         Returns:
-            dict[str, Any]: 包含 memories/buckets/count 等统计信息。
+            ListMemoriesResult: 索引记录与桶上下文统计。
         """
-        resolved_current = await self._refresh_bucket_id()
-        bucket_id = bucket_id or resolved_current
-        return await self._engine.list_memories(
+        target_bucket = bucket_id or self.bucket_id
+        result = await self._engine.list_memories(
             include_gray=include_gray,
-            include_content=include_content,
-            bucket_id=bucket_id,
+            bucket_id=target_bucket,
         )
+        if bucket_id is None:
+            self.bucket_id = result.bucket_id
+        return result
 
-    async def get_bucket_context_usage(self, *, bucket_id: str | None = None) -> dict[str, Any]:
+    async def get_bucket_context_usage(self, *, bucket_id: str | None = None) -> BucketContextUsage:
         """获取桶上下文占用信息。
 
         Args:
             bucket_id: 目标桶 ID；为空使用当前句柄桶。
 
         Returns:
-            dict[str, Any]: `estimated_tokens/max_context_window/usage_ratio` 等信息。
+            BucketContextUsage: 真实 context token 与占用率。
         """
-        resolved_current = await self._refresh_bucket_id()
-        bucket_id = bucket_id or resolved_current
-        return await self._engine.get_bucket_context_usage(bucket_id=bucket_id)
+        target_bucket = bucket_id or self.bucket_id
+        result = await self._engine.get_bucket_context_usage(bucket_id=target_bucket)
+        if bucket_id is None:
+            self.bucket_id = result.bucket_id
+        return result
 
     async def migrate_storage_paths_to_relative(self) -> dict[str, int]:
         """将存储中的绝对路径迁移为相对路径。
@@ -964,11 +964,12 @@ class BucketHandle:
 
     async def __aiter__(self) -> AsyncIterator[MemoryRecord]:
         """Iterate direct bucket records (memories + bucket nodes), excluding gray by default."""
-        payload = await self.list_memories(include_gray=False)
-        for rec in payload.get("memories", []):
-            yield rec
-        for rec in payload.get("buckets", []):
-            yield rec
+        bucket_id = await self._refresh_bucket_id()
+        async for record in self._engine._memory_read_service.iter_direct_records(
+            bucket_id,
+            include_gray=False,
+        ):
+            yield record
 
     def __contains__(self, item: object) -> bool:
         """Membership over direct bucket records, excluding gray by default.
@@ -994,24 +995,11 @@ class BucketHandle:
         if not key_targets and not bucket_targets:
             return False
 
-        records = eng.storage.list_bucket_records(bucket_id, include_gray=False)
-        for rec in records:
-            if rec.key in key_targets:
-                return True
-
-            if rec.kind != BUCKET_KIND_BUCKET or not bucket_targets:
-                continue
-
-            child_raw = str(rec.child_bucket_id or "").strip()
-            if not child_raw:
-                continue
-            try:
-                child_bucket = eng._resolve_bucket_id(child_raw)
-            except Exception:
-                child_bucket = child_raw
-            if child_bucket in bucket_targets:
-                return True
-        return False
+        return eng._memory_read_service.contains_direct_record(
+            bucket_id,
+            key_targets=key_targets,
+            bucket_targets=bucket_targets,
+        )
 
     @staticmethod
     def _contains_targets(item: object, eng: "ContextMemoryEngineV3") -> dict[str, set[str]]:
@@ -1194,7 +1182,6 @@ class ContextMemoryEngineV3:
         self._evidence_versions = max(1, int(evidence_versions))
 
         self.base_dir: Path | None = None
-        self.bucket_mapping: dict[str, str] = {}  # 存储人工创建的桶名与实际 bucket_id 的映射
         self.storage: MemoryStorageV3 | _UnconfiguredStorageProxy = _UnconfiguredStorageProxy()
         self._llm_usage_store: LLMUsage | None = None
         self._image_name_mapping_store: AutoMapping[list[str]] | None = None
@@ -1218,6 +1205,7 @@ class ContextMemoryEngineV3:
         self.max_context_window = _resolve_effective_max_context_window(self.llm_preset)
         self.bm25_cache = BM25IndexCache(max_buckets=64)
         self.memory_manager = MemoryManager(max_bytes=max_memory_bytes)
+        self.token_counter = TokenCounter()
         self.image_extractor = ImageTextExtractor(
             llm_preset=self.image_llm_preset,
             init_config=init_config,
@@ -1289,6 +1277,7 @@ class ContextMemoryEngineV3:
         self._compress_split_service = CompressSplitService(self._runtime)
         self._bucket_summary_service = BucketSummaryService(self._runtime)
         self._maintenance_service = MaintenanceService(self._runtime)
+        self._memory_read_service = MemoryReadService(self._runtime)
         self._optimize_service = OptimizeService(self._runtime)
         self._advance_query_service = AdvanceQueryService(self._runtime)
         self._auto_resume_pending_jobs = bool(auto_resume_pending_jobs)
@@ -1299,7 +1288,6 @@ class ContextMemoryEngineV3:
     def _bind_storage(self, base_dir: str | Path, *, evidence_versions: int) -> None:
         self._evidence_versions = max(1, int(evidence_versions))
         self.base_dir = Path(base_dir)
-        self.bucket_mapping.clear()
         self.storage = MemoryStorageV3(self.base_dir, evidence_versions=self._evidence_versions)
         self.alias_codec = AliasCodec(self.storage)
         self._migrate_if_needed(force=False, dry_run=False)
@@ -1780,19 +1768,6 @@ class ContextMemoryEngineV3:
         """`set_active_bucket` 的别名。"""
         return await self.set_active_bucket(bucket_id)
 
-    def _sync_bucket_mapping_redirect(self, *, old_ids: set[str], new_id: str) -> None:
-        if not old_ids or not new_id:
-            return
-        if not self.bucket_mapping:
-            self._load_bucket_mapping()
-        changed = False
-        for title, mapped in list(self.bucket_mapping.items()):
-            if mapped in old_ids and mapped != new_id:
-                self.bucket_mapping[title] = new_id
-                changed = True
-        if changed and self.base_dir is not None:
-            atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
-
     def _resolve_bucket_redirect_chain(self, bucket_id: str) -> tuple[str, list[str]]:
         current = str(bucket_id or "").strip()
         if not current:
@@ -2150,20 +2125,6 @@ class ContextMemoryEngineV3:
             }
         )
 
-    def _load_bucket_mapping(self):
-        if not self.bucket_mapping and self.base_dir is not None:
-            mapping_file = self.base_dir / "bucket_mapping.json"
-            if not mapping_file.is_file():
-                return
-
-            try:
-                load_content: dict = json.loads(mapping_file.read_text(encoding="utf-8"))
-                exist_bucket = {k: v for k, v in load_content.items() if self.storage.get_bucket_info(v)}
-                self.bucket_mapping.update(exist_bucket)
-
-            except:
-                return
-
     def _bucket_context(self, bucket_id: str):
         cache_key = f"ctx:{bucket_id}"
         cached = self.memory_manager.get(cache_key)
@@ -2184,54 +2145,13 @@ class ContextMemoryEngineV3:
         keep_version = self.storage.get_bucket_version(bucket_id)
         self.bm25_cache.clear_old_versions(bucket_id=bucket_id, keep_version=keep_version)
 
-    def _bucket_context_tokens_real(self, bucket_id: str) -> int:
-        cache_key = f"ctx_tokens:{bucket_id}"
-        bucket_ver = int(self.storage.get_bucket_version(bucket_id))
-        cached = self.memory_manager.get(cache_key)
-        if isinstance(cached, dict):
-            try:
-                cached_ver = int(cached.get("version", -1))
-                cached_tokens = int(cached.get("tokens", 0))
-            except Exception:
-                cached_ver = -1
-                cached_tokens = 0
-            if cached_ver == bucket_ver and cached_tokens > 0:
-                return cached_tokens
-
-        ctx = self._bucket_context(bucket_id)
-        if ctx is None:
-            return 1
-
-        try:
-            prompts = ctx.to_prompts()
-        except Exception:
-            prompts = []
-
-        text_parts: list[str] = []
-        for prompt in prompts or []:
-            text = getattr(prompt, "text", None)
-            if isinstance(text, str) and text:
-                text_parts.append(text)
-
-        raw_text = "\n".join(text_parts)
-        if not raw_text:
-            tokens = 1
-        elif tiktoken is not None:
-            try:
-                enc = tiktoken.get_encoding("o200k_base")
-                tokens = max(1, int(len(enc.encode(raw_text))))
-            except Exception:
-                tokens = max(1, int(len(raw_text) / 3))
-        else:
-            tokens = max(1, int(len(raw_text) / 3))
-
-        self.memory_manager.set(
-            cache_key,
-            {"version": bucket_ver, "tokens": int(tokens)},
-            bytes_estimate=128,
-            dirty=False,
+    async def _bucket_context_tokens_real(self, bucket_id: str) -> int:
+        usage = await self._memory_read_service.get_context_usage(
+            bucket_id,
+            allow_fallback=False,
+            resolve_bucket=False,
         )
-        return int(tokens)
+        return usage.context_tokens
 
     def _record_llm_usage(self) -> None:
         self._record_llm_usage_values(self.pipeline.last_usage)
@@ -2667,9 +2587,7 @@ class ContextMemoryEngineV3:
             resolved = self.root_bucket_id()
         else:
             resolved = raw or self.active_bucket_id()
-        final_id, lineage = self._resolve_bucket_redirect_chain(resolved)
-        if len(lineage) > 1 and final_id:
-            self._sync_bucket_mapping_redirect(old_ids=set(lineage[:-1]), new_id=final_id)
+        final_id, _ = self._resolve_bucket_redirect_chain(resolved)
         resolved = final_id or resolved
         info = self.storage.get_bucket_info(resolved)
         if info is None:
@@ -2684,6 +2602,7 @@ class ContextMemoryEngineV3:
         summary: str = "",
         content: str = "",
         summary_locked: bool = False,
+        mapping_title: str | None = None,
     ) -> BucketInfo:
         parent_id = self._resolve_bucket_id(parent_bucket_id)
         parent = self.storage.get_bucket_info(parent_id)
@@ -2705,6 +2624,7 @@ class ContextMemoryEngineV3:
             node_key=node_key,
             summary_status=summary_status,
             summary_locked=bool(summary_locked),
+            mapping_title=mapping_title,
         )
 
         node_ingested = {
@@ -2757,25 +2677,32 @@ class ContextMemoryEngineV3:
         """
         async with self._bucket_write_lock(parent_bucket_id) as resolved_parent:
             async with self._global_meta_lock:
-                if not self.bucket_mapping:
-                    self._load_bucket_mapping()
-
-                exist_bucket_id = self.bucket_mapping.get(title, "")
+                exist_bucket_id = self.storage.get_child_title_target(resolved_parent, title)
                 if exist_bucket_id:
                     try:
                         resolved_existing = self._resolve_bucket_id(exist_bucket_id)
                     except ValueError:
                         resolved_existing = ""
-                    if resolved_existing:
-                        if self.bucket_mapping.get(title) != resolved_existing:
-                            self.bucket_mapping[title] = resolved_existing
-                            if self.base_dir is not None:
-                                atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
+                    existing_info = self.storage.get_bucket_info(resolved_existing) if resolved_existing else None
+                    parent_info = self.storage.get_bucket_info(resolved_parent)
+                    if (
+                        existing_info is not None
+                        and existing_info.parent_bucket_id == resolved_parent
+                        and parent_info is not None
+                        and resolved_existing in parent_info.children
+                    ):
+                        if exist_bucket_id != resolved_existing:
+                            self.storage.set_child_title_target(
+                                parent_bucket_id=resolved_parent,
+                                title=title,
+                                child_bucket_id=resolved_existing,
+                            )
                         await self._run_memory_gc()
                         return BucketHandle(self, resolved_existing)
-                    self.bucket_mapping.pop(title, None)
-                    if self.base_dir is not None:
-                        atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
+                    self.storage.remove_child_title_refs(
+                        parent_bucket_id=resolved_parent,
+                        child_bucket_id=exist_bucket_id,
+                    )
 
                 # Create bucket under lock to keep setdefault semantics under concurrency.
                 child = self._create_bucket_unlocked(
@@ -2784,10 +2711,8 @@ class ContextMemoryEngineV3:
                     summary=summary,
                     content=content,
                     summary_locked=summary_locked,
+                    mapping_title=title,
                 )
-                self.bucket_mapping[title] = child.bucket_id
-                if self.base_dir is not None:
-                    atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
 
                 await self._run_memory_gc()
                 return BucketHandle(self, child.bucket_id)
@@ -2983,10 +2908,10 @@ class ContextMemoryEngineV3:
         source = self.storage.get_bucket_info(source_bucket_id)
         if source is None:
             return
-        source.sealed = True
-        source.sealed_to = successor_bucket_id
-        source.archived = True
-        self.storage.update_bucket_info(source)
+        self.storage.seal_bucket_successor(
+            source_bucket_id=source_bucket_id,
+            successor_bucket_id=successor_bucket_id,
+        )
         # Freeze the source map by exact id; do not resolve redirects to successor here.
         source_alias_table.freeze()
         new_map_hash = self._alias_table(successor_bucket_id).snapshot_hash()
@@ -3001,7 +2926,6 @@ class ContextMemoryEngineV3:
                 "switched_at": utc_now_iso(),
             }
         )
-        self._sync_bucket_mapping_redirect(old_ids={source_bucket_id}, new_id=successor_bucket_id)
 
     async def _rebuild_source_successor_unlocked(
         self,
@@ -3026,17 +2950,16 @@ class ContextMemoryEngineV3:
             summary_locked=False,
         )
 
-        # If source has parent, remove source from parent children and add successor.
-        if source.parent_bucket_id:
-            self.storage.remove_child_link(parent_bucket_id=source.parent_bucket_id, child_bucket_id=source_bucket_id)
-            self.storage.add_child_link(parent_bucket_id=source.parent_bucket_id, child_bucket_id=successor.bucket_id)
-
         # Reparent newly created buckets to successor.
         for bid in created_bucket_ids:
             binfo = self.storage.get_bucket_info(bid)
             if binfo is None:
                 continue
-            self.storage.reparent_bucket(bucket_id=bid, new_parent_bucket_id=successor.bucket_id)
+            self.storage.reparent_bucket(
+                bucket_id=bid,
+                new_parent_bucket_id=successor.bucket_id,
+                preserve_old_title_map=True,
+            )
 
         # Move retained records into successor.
         dedup_keep = []
@@ -3055,7 +2978,11 @@ class ContextMemoryEngineV3:
             if rec.bucket_id != source_bucket_id:
                 continue
             if rec.kind == BUCKET_KIND_BUCKET and rec.child_bucket_id:
-                self.storage.reparent_bucket(bucket_id=rec.child_bucket_id, new_parent_bucket_id=successor.bucket_id)
+                self.storage.reparent_bucket(
+                    bucket_id=rec.child_bucket_id,
+                    new_parent_bucket_id=successor.bucket_id,
+                    preserve_old_title_map=True,
+                )
 
             rel_old = normalize_relations(rec.relations)
             self._append_relation_once(
@@ -4462,94 +4389,29 @@ class ContextMemoryEngineV3:
         self,
         *,
         include_gray: bool = False,
-        include_content: bool = False,
         bucket_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> ListMemoriesResult:
         """列出桶内记录与统计。
         
         Args:
             include_gray: 是否包含灰化记录。
-            include_content: 是否返回完整内容。
             bucket_id: 目标桶 ID；为空使用当前活跃桶。
-        
+
         Returns:
-            dict[str, Any]: 记录列表与计数统计。
+            ListMemoriesResult: 索引记录与桶上下文统计。
         """
-        resolved = self._resolve_bucket_id(bucket_id)
-        records = self.storage.list_bucket_records(resolved, include_gray=include_gray)
-        memories: list[MemoryRecord] = []
-        buckets: list[MemoryRecord] = []
-        for rec in records:
-            out_rec = rec if include_content else replace(rec, content="")
-            if rec.kind == BUCKET_KIND_BUCKET:
-                buckets.append(out_rec)
-            elif rec.kind == BUCKET_KIND_MEMORY:
-                memories.append(out_rec)
-        total_memory_count = self._count_subtree_memories(resolved, include_gray=include_gray)
-        usage = await self.get_bucket_context_usage(bucket_id=resolved)
-        return {
-            "memories": memories,
-            "buckets": buckets,
-            "memory_count": len(memories),
-            "total_memory_count": total_memory_count,
-            "bucket_count": len(buckets),
-            "estimated_tokens": int(usage.get("estimated_tokens", 0)),
-            "max_context_window": int(usage.get("max_context_window", self.max_context_window)),
-            "usage_ratio": float(usage.get("usage_ratio", 0.0)),
-            "bucket_id": resolved,
-            "include_gray": include_gray,
-        }
+        return await self._memory_read_service.list_memories(bucket_id, include_gray=include_gray)
 
-    def _count_subtree_memories(self, root_bucket_id: str, *, include_gray: bool) -> int:
-        """Count memory shards in the target bucket and all descendant child buckets."""
-        all_records = self.storage.list_latest_records(include_gray=include_gray)
-        records_by_bucket: dict[str, list[MemoryRecord]] = {}
-        for rec in all_records:
-            records_by_bucket.setdefault(rec.bucket_id, []).append(rec)
-
-        total = 0
-        visited: set[str] = set()
-        stack: list[str] = [root_bucket_id]
-        while stack:
-            current_bucket_id = stack.pop()
-            if current_bucket_id in visited:
-                continue
-            visited.add(current_bucket_id)
-            for rec in records_by_bucket.get(current_bucket_id, []):
-                if rec.kind == BUCKET_KIND_MEMORY:
-                    total += 1
-                    continue
-                if rec.kind != BUCKET_KIND_BUCKET:
-                    continue
-                raw_child = str(rec.child_bucket_id or "").strip()
-                if not raw_child:
-                    continue
-                try:
-                    child_bucket_id = self._resolve_bucket_id(raw_child)
-                except Exception:
-                    child_bucket_id = raw_child
-                if child_bucket_id and child_bucket_id not in visited:
-                    stack.append(child_bucket_id)
-        return total
-
-    async def get_bucket_context_usage(self, bucket_id: str | None = None) -> dict[str, Any]:
+    async def get_bucket_context_usage(self, bucket_id: str | None = None) -> BucketContextUsage:
         """获取桶上下文占用。
         
         Args:
             bucket_id: 目标桶 ID；为空使用当前活跃桶。
         
         Returns:
-            dict[str, Any]: 估算 token 与占用率。
+            BucketContextUsage: 真实 context token 与占用率。
         """
-        resolved = self._resolve_bucket_id(bucket_id)
-        estimated = int(self.storage.estimate_bucket_tokens(resolved, include_gray=False))
-        max_window = max(1, int(self.max_context_window))
-        return {
-            "bucket_id": resolved,
-            "estimated_tokens": estimated,
-            "max_context_window": max_window,
-            "usage_ratio": max(0.0, min(1.0, float(estimated) / float(max_window))),
-        }
+        return await self._memory_read_service.get_context_usage(bucket_id, allow_fallback=True)
 
     async def update_memory(
         self,
@@ -4789,16 +4651,12 @@ class ContextMemoryEngineV3:
         if info is None:
             info = self.storage.get_bucket_info(target_key)
 
-        if info is not None:
-            if not self.bucket_mapping:
-                self._load_bucket_mapping()
-
-            remapping = {v: k for k, v in self.bucket_mapping.items()}
-            if info.bucket_id in remapping:
-                self.bucket_mapping.pop(remapping[info.bucket_id], None)
-                atomic_save_json(self.bucket_mapping, self.base_dir / "bucket_mapping.json")
-
         res = await self.set_gray(target_key, gray=True, reason=reason or "delete")
+        if res.success and info is not None and info.parent_bucket_id:
+            self.storage.remove_child_title_refs(
+                parent_bucket_id=info.parent_bucket_id,
+                child_bucket_id=info.bucket_id,
+            )
         return DeleteResult(
             success=res.success,
             key=res.key,
@@ -5083,11 +4941,19 @@ class ContextMemoryEngineV3:
         alias_records = (await self.prepare_alias_payload(bucket_id, {"records": records})).get("records", [])
         alias_table = self._alias_table(bucket_id)
         map_ver = alias_table.map_version()
-        estimated = self.storage.estimate_bucket_tokens(bucket_id, include_gray=True)
+        payload_base = {
+            "reason": reason,
+            "max_context_window": self.max_context_window,
+            "records": alias_records,
+        }
+        payload_tokens = await asyncio.to_thread(
+            self.token_counter.count_json_with_token_field,
+            payload_base,
+        )
         compress_alias_payload = {
             "reason": reason,
-            "estimated_tokens": estimated,
-            "max_estimated_tokens": self.max_context_window,
+            "payload_tokens": payload_tokens,
+            "max_context_window": self.max_context_window,
             "records": alias_records,
         }
         alias_table.assert_safe(compress_alias_payload)
@@ -5095,8 +4961,8 @@ class ContextMemoryEngineV3:
             bucket_context=self._bucket_context(bucket_id),
             records=alias_records,
             reason=reason,
-            estimated_tokens=estimated,
-            max_estimated_tokens=self.max_context_window,
+            payload_tokens=payload_tokens,
+            max_context_window=self.max_context_window,
         )
         self._audit_alias_llm_call(
             tool="compress",
@@ -5185,14 +5051,10 @@ class ContextMemoryEngineV3:
             drop_keys=sorted(set(all_keys) - set(survivors.keys())),
         )
 
-        est_after_chars = 0
-        for rec in survivors.values():
-            est_after_chars += len(rec.title) + len(rec.summary) + len(rec.content)
-            for rel_name, rel_items in normalize_relations(rec.relations).items():
-                est_after_chars += len(rel_name)
-                for item in rel_items:
-                    est_after_chars += len(json.dumps(item, ensure_ascii=False))
-        est_after_tokens = max(1, est_after_chars // 3)
+        est_after_tokens = await asyncio.to_thread(
+            self.token_counter.count_json,
+            [rec.to_dict() for rec in survivors.values()],
+        )
         if (est_after_tokens / max(1, self.max_context_window)) > self._auto_split_trigger_ratio:
             split_res = await self._split_bucket_unlocked(bucket_id=bucket_id, reason="compress_over_threshold_split")
             return CompressResult(
@@ -5425,7 +5287,7 @@ class ContextMemoryEngineV3:
         if len(records) < 2:
             return {"success": True, "created_buckets": 0, "moved_memories": 0, "message": "not enough records to split"}
 
-        pressure_before, _ = self._bucket_pressure(bucket_id)
+        pressure_before, _ = await self._bucket_pressure(bucket_id)
         alias_records = (await self.prepare_alias_payload(
             bucket_id,
             {"records": [r.to_dict() for r in records]},
@@ -5614,13 +5476,10 @@ class ContextMemoryEngineV3:
             if rec.bucket_id != source.bucket_id:
                 continue
             if rec.kind == BUCKET_KIND_BUCKET and str(rec.child_bucket_id or "").strip():
-                try:
-                    self.storage.reparent_bucket(
-                        bucket_id=str(rec.child_bucket_id).strip(),
-                        new_parent_bucket_id=dst_bucket,
-                    )
-                except Exception:
-                    pass
+                self.storage.reparent_bucket(
+                    bucket_id=str(rec.child_bucket_id).strip(),
+                    new_parent_bucket_id=dst_bucket,
+                )
 
             # Source tombstone event.
             rel_old = normalize_relations(rec.relations)
@@ -5737,7 +5596,7 @@ class ContextMemoryEngineV3:
                 reason="auto_after_split_successor",
             )
 
-        pressure_after, _ = self._bucket_pressure(successor_bucket_id)
+        pressure_after, _ = await self._bucket_pressure(successor_bucket_id)
         drop_abs = pressure_before - pressure_after
         if self._is_auto_split_reason(reason) and drop_abs < self._auto_split_min_drop_abs:
             self.storage.record_auto_split_no_progress()
@@ -5809,9 +5668,6 @@ class ContextMemoryEngineV3:
             summary_status="ready",
             summary_locked=False,
         )
-        if source.parent_bucket_id:
-            self.storage.remove_child_link(parent_bucket_id=source.parent_bucket_id, child_bucket_id=source.bucket_id)
-            self.storage.add_child_link(parent_bucket_id=source.parent_bucket_id, child_bucket_id=successor.bucket_id)
         return successor
 
     def _seal_and_switch_bucket_unlocked(
@@ -5840,13 +5696,11 @@ class ContextMemoryEngineV3:
         reason: str,
     ) -> MemoryRecord:
         if source_record.kind == BUCKET_KIND_BUCKET and str(source_record.child_bucket_id or "").strip():
-            try:
-                self.storage.reparent_bucket(
-                    bucket_id=str(source_record.child_bucket_id).strip(),
-                    new_parent_bucket_id=dst_bucket_id,
-                )
-            except Exception:
-                pass
+            self.storage.reparent_bucket(
+                bucket_id=str(source_record.child_bucket_id).strip(),
+                new_parent_bucket_id=dst_bucket_id,
+                preserve_old_title_map=True,
+            )
         rel = normalize_relations(source_record.relations)
         self._append_relation_once(
             rel["lifecycle_links"],
@@ -6128,6 +5982,9 @@ class ContextMemoryEngineV3:
             buckets_raw = {}
         root_bucket_id = str(tree.get("root_bucket_id", "")).strip()
         active_bucket_id = str(tree.get("active_bucket_id", "")).strip()
+        title_maps = tree.get("child_title_maps", {})
+        if not isinstance(title_maps, dict):
+            title_maps = {}
         protected_buckets = {root_bucket_id, active_bucket_id}
         sealed_successors: set[str] = set()
         for raw in buckets_raw.values():
@@ -6167,6 +6024,20 @@ class ContextMemoryEngineV3:
                     if bdir.exists():
                         shutil.rmtree(bdir, ignore_errors=True)
                     buckets_raw.pop(bucket_id, None)
+                    title_maps.pop(bucket_id, None)
+                    for parent_id, parent_map in list(title_maps.items()):
+                        if not isinstance(parent_map, dict):
+                            title_maps.pop(parent_id, None)
+                            continue
+                        cleaned = {
+                            title: target
+                            for title, target in parent_map.items()
+                            if str(target) != bucket_id
+                        }
+                        if cleaned:
+                            title_maps[parent_id] = cleaned
+                        else:
+                            title_maps.pop(parent_id, None)
                     for p_raw in buckets_raw.values():
                         if isinstance(p_raw, dict):
                             children = p_raw.get("children", [])
@@ -6205,6 +6076,7 @@ class ContextMemoryEngineV3:
             state["keys"] = keys
             self.storage.save_state(state)
             tree["buckets"] = buckets_raw
+            tree["child_title_maps"] = title_maps
             self.storage.save_bucket_tree(tree)
 
         self.storage.append_event(
@@ -6243,7 +6115,7 @@ class ContextMemoryEngineV3:
             info = self.storage.get_bucket_info(locked_bucket)
             if info is None or info.sealed:
                 return
-            pressure, count = self._bucket_pressure(locked_bucket)
+            pressure, count = await self._bucket_pressure(locked_bucket)
             did_compress = False
             did_split = False
             split_round = 0
@@ -6264,7 +6136,7 @@ class ContextMemoryEngineV3:
                         bucket_id=locked_bucket,
                         payload={"reason": "auto_threshold", "error": repr(exc)},
                     )
-                pressure, count = self._bucket_pressure(locked_bucket)
+                pressure, count = await self._bucket_pressure(locked_bucket)
 
             if did_compress and (pressure > self._auto_split_trigger_ratio or count > 1000):
                 if did_split:
@@ -6286,9 +6158,11 @@ class ContextMemoryEngineV3:
             if did_compress and did_split:
                 return
 
-    def _bucket_pressure(self, bucket_id: str) -> tuple[float, int]:
-        est = self._bucket_context_tokens_real(bucket_id)
-        count = len(self.storage.list_bucket_records(bucket_id, include_gray=False))
+    async def _bucket_pressure(self, bucket_id: str) -> tuple[float, int]:
+        est, count = await asyncio.gather(
+            self._bucket_context_tokens_real(bucket_id),
+            self._memory_read_service.count_direct_records(bucket_id, include_gray=False),
+        )
         return est / max(1, self.max_context_window), count
 
     async def _apply_forgetting(self, bucket_id: str, *, from_compress: bool) -> None:

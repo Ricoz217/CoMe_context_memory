@@ -185,10 +185,10 @@ async def test_real_llm_ci_full_interface_smoke(
     assert add_dir_tree.get("success") is True
     assert int(add_dir_tree.get("success_count", 0)) >= 1
 
-    listed = await root.list_memories(include_gray=False, include_content=False)
-    assert listed.get("bucket_id")
-    assert int(listed.get("memory_count", 0)) >= 1
-    assert int(listed.get("total_memory_count", 0)) >= int(listed.get("memory_count", 0))
+    listed = await root.list_memories(include_gray=False)
+    assert listed.bucket_id
+    assert listed.memory_count >= 1
+    assert listed.total_memory_count >= listed.memory_count
 
     iter_records = [rec async for rec in root]
     assert len(iter_records) >= 1
@@ -198,7 +198,8 @@ async def test_real_llm_ci_full_interface_smoke(
     assert primary_latest.key == primary_key
 
     bucket_usage = await root.get_bucket_context_usage()
-    assert "estimated_tokens" in bucket_usage
+    assert bucket_usage.context_tokens >= 1
+    assert bucket_usage.token_count_method in {"tiktoken", "char_estimate"}
 
     summary_refresh = await root.refresh_bucket_summary(force=True)
     assert isinstance(summary_refresh, dict)

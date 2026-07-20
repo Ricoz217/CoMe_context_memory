@@ -123,6 +123,8 @@ if __name__ == '__main__':
     asyncio.run(main())
 ```
 
+`list_memories()` 返回 `ListMemoriesResult` 索引快照，不读取 revision 正文；需要完整记忆时使用 `get_memory()`。上下文占用按持久化 prompts 使用 `o200k_base` 统计。
+
 详细说明: [docs/python_api_guide.md](docs/python_api_guide.md)
 
 ### CLI

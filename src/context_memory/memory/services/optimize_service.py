@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -60,23 +61,23 @@ class OptimizeService:
             leaf_nodes=leaf_node_keys,
             reason=reason,
         )
-        est_tokens = max(1, len(json.dumps(payload, ensure_ascii=False)) // 3)
-        if est_tokens > int(eng.max_context_window * 0.70):
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message="optimize payload too large for current context window",
-                reason_code="payload_over_70pct",
-                coverage_ratio=0.0,
-                skipped_invalid_count=0,
-                sealed_redirects=sealed_redirects,
-            )
-
         try:
             alias_table = eng._alias_table(target_bucket)
             alias_payload = await eng.prepare_alias_payload(target_bucket, payload)
             map_ver = alias_table.map_version()
             alias_table.assert_safe(alias_payload)
+            outbound_payload = {"reason": reason, "payload": alias_payload}
+            payload_tokens = await asyncio.to_thread(eng.token_counter.count_json, outbound_payload)
+            if payload_tokens > int(eng.max_context_window * 0.70):
+                return OptimizeResult(
+                    success=False,
+                    bucket_id=target_bucket,
+                    message="optimize payload too large for current context window",
+                    reason_code="payload_over_70pct",
+                    coverage_ratio=0.0,
+                    skipped_invalid_count=0,
+                    sealed_redirects=sealed_redirects,
+                )
             llm_alias = await eng.pipeline.optimize(
                 bucket_context=None,
                 reason=reason,
@@ -188,7 +189,8 @@ class OptimizeService:
             )
 
         bucket_plan = self._build_bucket_assignment_plan(target_bucket=target_bucket, prepared=prepared)
-        pressure_check = self._validate_bucket_pressure(
+        pressure_check = await asyncio.to_thread(
+            self._validate_bucket_pressure,
             max_context_window=eng.max_context_window,
             candidate_records=candidate_records,
             bucket_plan=bucket_plan,
@@ -852,7 +854,7 @@ class OptimizeService:
         mid_buckets: list[str] = []
         max_window = max(1, int(max_context_window))
         for bid, records in sim.items():
-            est = self._estimate_records_tokens(records)
+            est = eng.token_counter.count_json([record.to_dict() for record in records])
             ratio = est / float(max_window)
             if ratio > 0.80:
                 return {"ok": False, "reason_code": "bucket_over_80pct", "message": f"bucket pressure too high: {bid}"}
@@ -966,14 +968,3 @@ class OptimizeService:
             eng._alias_table(child_bucket).freeze()
         except Exception:
             pass
-
-    @staticmethod
-    def _estimate_records_tokens(records: list[MemoryRecord]) -> int:
-        total_chars = 0
-        for rec in records:
-            total_chars += len(rec.title) + len(rec.summary) + len(rec.content)
-            for rel_name, rel_items in rec.relations.items():
-                total_chars += len(rel_name)
-                for item in rel_items:
-                    total_chars += len(json.dumps(item, ensure_ascii=False))
-        return max(1, total_chars // 3)

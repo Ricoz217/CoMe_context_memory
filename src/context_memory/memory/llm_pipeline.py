@@ -238,13 +238,13 @@ class LLMPipelineV3:
         bucket_context: Any,
         records: list[dict[str, Any]],
         reason: str,
-        estimated_tokens: int,
-        max_estimated_tokens: int,
+        payload_tokens: int,
+        max_context_window: int,
     ) -> dict[str, Any]:
         payload = {
             "reason": reason,
-            "estimated_tokens": estimated_tokens,
-            "max_estimated_tokens": max_estimated_tokens,
+            "payload_tokens": payload_tokens,
+            "max_context_window": max_context_window,
             "records": records,
         }
         if self.use_mock_llm:

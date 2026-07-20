@@ -1,4 +1,4 @@
-__data_version__ = 2
+__data_version__ = 3
 
 from .engine import (
     BucketHandle,
@@ -9,6 +9,7 @@ from .engine import (
     get_context_memory_engine,
 )
 from .llm_pipeline import LLMPresetConfigError
+from .models import BucketContextUsage, ListMemoriesResult, MemoryIndexItem
 
 if int(engine_data_version) != int(__data_version__):
     raise RuntimeError(
@@ -23,4 +24,7 @@ __all__ = [
     "BucketHandle",
     "get_context_memory_engine",
     "LLMPresetConfigError",
+    "MemoryIndexItem",
+    "ListMemoriesResult",
+    "BucketContextUsage",
 ]

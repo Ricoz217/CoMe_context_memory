@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 
 RELATION_ALLOWED_TYPES: dict[str, set[str]] = {
@@ -164,6 +164,50 @@ class MemoryRecord:
             evidence_content=str(data.get("evidence_content", "")),
             confidence_type=str(data.get("confidence_type", "common") or "common"),
         )
+
+
+@dataclass(slots=True, frozen=True)
+class MemoryIndexItem:
+    key: str
+    revision_id: str
+    kind: Literal["memory", "bucket"]
+    bucket_id: str
+    child_bucket_id: str = ""
+    gray: bool = False
+    updated_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class BucketContextUsage:
+    bucket_id: str
+    context_tokens: int
+    max_context_window: int
+    usage_ratio: float
+    token_count_method: Literal["tiktoken", "char_estimate"]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ListMemoriesResult:
+    bucket_id: str
+    memories: list[MemoryIndexItem]
+    buckets: list[MemoryIndexItem]
+    memory_count: int
+    total_memory_count: int
+    bucket_count: int
+    context_tokens: int
+    max_context_window: int
+    usage_ratio: float
+    include_gray: bool
+    token_count_method: Literal["tiktoken", "char_estimate"]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(slots=True)
@@ -392,7 +436,6 @@ class EngineStats:
     cache_entries: int
     dirty: bool
     context_version: int
-    estimated_tokens: int
     latest_snapshot: str
     llm_calls_total: int
     llm_input_tokens_total: int

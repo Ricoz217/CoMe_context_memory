@@ -150,7 +150,8 @@
 |---|---|---|---|---|
 | `bucket_id` | 否 | `str` | `null` | 目标桶，不传走 active bucket |
 | `include_gray` | 否 | `bool` | `true` | 是否包含灰记录 |
-| `include_content` | 否 | `bool` | `false` | 是否返回 content 正文 |
+
+返回值为索引快照，包含直属 `memories`、直属 `buckets`、子树记忆计数和真实 context token 占用；接口不会读取 revision 正文。传入已移除的 `include_content` 会返回 `-32602`。
 
 ### 6.5 `set_active_bucket`
 

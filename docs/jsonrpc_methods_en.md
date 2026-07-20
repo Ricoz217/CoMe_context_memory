@@ -150,7 +150,8 @@ No business params.
 |---|---|---|---|---|
 | `bucket_id` | No | `str` | `null` | Target bucket; active bucket when omitted |
 | `include_gray` | No | `bool` | `true` | Include gray records |
-| `include_content` | No | `bool` | `false` | Include content text in list output |
+
+The result is an index snapshot containing direct `memories`, direct `buckets`, subtree memory counts, and real context token usage. Revision bodies are not read. Passing the removed `include_content` parameter returns `-32602`.
 
 ### 6.5 `set_active_bucket`
 
