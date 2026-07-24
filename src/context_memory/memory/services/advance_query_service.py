@@ -40,7 +40,7 @@ class AdvanceQueryService:
     ) -> Any:
         eng = self.runtime.engine
         mode_value = self._normalize_advance_query_mode(mode)
-        target_bucket_id = eng._resolve_bucket_id(bucket_id)
+        target_bucket_id = str(bucket_id or "").strip()
         system_text = self._advance_resolve_system_prompt_text(system_prompt)
         threshold_tokens = max(1, int(eng.max_context_window * ADVANCE_QUERY_OVERFLOW_RATIO))
         parallel_limit = max(
@@ -52,14 +52,11 @@ class AdvanceQueryService:
 
         eng._begin_alias_session()
         try:
-            root_node = self._advance_collect_bucket_tree(
+            target_bucket_id, root_node, full_payload = await self._advance_collect_bucket_snapshot(
                 bucket_id=target_bucket_id,
                 include_gray=bool(include_gray),
                 max_expand_depth=(None if max_expand_depth is None else int(max_expand_depth)),
-                depth=0,
-                visited=set(),
             )
-            full_payload = self._advance_render_top_payload(root_node)
             prepared_system, prepared_command, prepared_full_payload = await self._advance_prepare_components_for_llm(
                 raw_payload=full_payload,
                 alias_bucket_id=target_bucket_id,
@@ -196,16 +193,134 @@ class AdvanceQueryService:
         depth: int,
         visited: set[str],
     ) -> dict[str, Any]:
+        """Compatibility facade for callers that still need the synchronous collector."""
         eng = self.runtime.engine
-        info = eng.storage.get_bucket_info(bucket_id)
-        if info is None:
+        tree = eng.storage.load_bucket_tree()
+        state = eng.storage.load_state()
+        resolved_bucket_id = self._advance_resolve_bucket_from_tree(bucket_id, tree)
+        records_by_bucket = self._advance_group_index_nodes_by_bucket(state)
+        return self._advance_collect_bucket_tree_from_snapshot(
+            bucket_id=resolved_bucket_id,
+            include_gray=include_gray,
+            max_expand_depth=max_expand_depth,
+            depth=depth,
+            visited=visited,
+            tree=tree,
+            records_by_bucket=records_by_bucket,
+        )
+
+    async def _advance_collect_bucket_snapshot(
+        self,
+        *,
+        bucket_id: str | None,
+        include_gray: bool,
+        max_expand_depth: int | None,
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+        return await asyncio.to_thread(
+            self._advance_collect_bucket_snapshot_sync,
+            bucket_id=bucket_id,
+            include_gray=include_gray,
+            max_expand_depth=max_expand_depth,
+        )
+
+    def _advance_collect_bucket_snapshot_sync(
+        self,
+        *,
+        bucket_id: str | None,
+        include_gray: bool,
+        max_expand_depth: int | None,
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+        eng = self.runtime.engine
+        tree = eng.storage.load_bucket_tree()
+        state = eng.storage.load_state()
+        resolved_bucket_id = self._advance_resolve_bucket_from_tree(bucket_id, tree)
+        records_by_bucket = self._advance_group_index_nodes_by_bucket(state)
+        root_node = self._advance_collect_bucket_tree_from_snapshot(
+            bucket_id=resolved_bucket_id,
+            include_gray=include_gray,
+            max_expand_depth=max_expand_depth,
+            depth=0,
+            visited=set(),
+            tree=tree,
+            records_by_bucket=records_by_bucket,
+        )
+        return resolved_bucket_id, root_node, self._advance_render_top_payload(root_node)
+
+    @staticmethod
+    def _advance_resolve_bucket_from_tree(bucket_id: str | None, tree: dict[str, Any]) -> str:
+        buckets = tree.get("buckets", {})
+        if not isinstance(buckets, dict):
+            buckets = {}
+        raw = str(bucket_id or "").strip()
+        if raw.upper() == "ROOT":
+            resolved = str(tree.get("root_bucket_id", "")).strip()
+        else:
+            active = str(tree.get("active_bucket_id", "")).strip()
+            root = str(tree.get("root_bucket_id", "")).strip()
+            resolved = raw or active or root
+
+        visited: set[str] = {resolved}
+        while True:
+            current_raw = buckets.get(resolved)
+            if not isinstance(current_raw, dict):
+                raise ValueError(f"bucket not found: {resolved}")
+            current = BucketInfo.from_dict(current_raw)
+            next_id = str(current.sealed_to or "").strip() if current.sealed else ""
+            if not next_id or next_id in visited or not isinstance(buckets.get(next_id), dict):
+                return resolved
+            resolved = next_id
+            visited.add(resolved)
+
+    @staticmethod
+    def _advance_group_index_nodes_by_bucket(state: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        keys = state.get("keys", {})
+        if not isinstance(keys, dict):
+            return grouped
+        for node in keys.values():
+            if not isinstance(node, dict):
+                continue
+            owner_bucket_id = str(node.get("bucket_id", "")).strip()
+            if owner_bucket_id:
+                grouped.setdefault(owner_bucket_id, []).append(node)
+        return grouped
+
+    def _advance_collect_bucket_tree_from_snapshot(
+        self,
+        *,
+        bucket_id: str,
+        include_gray: bool,
+        max_expand_depth: int | None,
+        depth: int,
+        visited: set[str],
+        tree: dict[str, Any],
+        records_by_bucket: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        eng = self.runtime.engine
+        buckets = tree.get("buckets", {})
+        if not isinstance(buckets, dict):
+            buckets = {}
+        info_raw = buckets.get(bucket_id)
+        if not isinstance(info_raw, dict):
             raise ValueError(f"bucket not found: {bucket_id}")
+        info = BucketInfo.from_dict(info_raw)
         if bucket_id in visited:
             return {"bucket_id": bucket_id, "metadata": self._advance_bucket_metadata(info), "memories": [], "children": []}
         visited.add(bucket_id)
         try:
-            records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
-            memories = [x for x in records if x.kind == BUCKET_KIND_MEMORY]
+            index_nodes = records_by_bucket.get(bucket_id, [])
+            memories: list[MemoryRecord] = []
+            for index_node in index_nodes:
+                if str(index_node.get("kind", BUCKET_KIND_MEMORY)) != BUCKET_KIND_MEMORY:
+                    continue
+                if not include_gray and bool(index_node.get("gray", False)):
+                    continue
+                rec = eng.storage.load_record_from_index_node(index_node)
+                if rec is None or rec.kind != BUCKET_KIND_MEMORY or rec.bucket_id != bucket_id:
+                    continue
+                if not include_gray and rec.gray:
+                    continue
+                memories.append(rec)
             memories.sort(key=lambda r: str(r.key))
             memory_items = [
                 {"key": rec.key, "metadata": self._advance_memory_metadata(rec), "content": rec.content}
@@ -215,23 +330,30 @@ class AdvanceQueryService:
             children: list[dict[str, Any]] = []
             if max_expand_depth is None or depth < max_expand_depth:
                 child_ids: set[str] = set()
-                for rec in records:
-                    if rec.kind == BUCKET_KIND_BUCKET and str(rec.child_bucket_id or "").strip():
-                        child_ids.add(str(rec.child_bucket_id).strip())
+                for index_node in index_nodes:
+                    if str(index_node.get("kind", "")) != BUCKET_KIND_BUCKET:
+                        continue
+                    if not include_gray and bool(index_node.get("gray", False)):
+                        continue
+                    child_id = str(index_node.get("child_bucket_id", "")).strip()
+                    if child_id:
+                        child_ids.add(child_id)
                 child_infos: list[BucketInfo] = []
                 for cid in child_ids:
-                    cinfo = eng.storage.get_bucket_info(cid)
-                    if cinfo is not None:
-                        child_infos.append(cinfo)
+                    child_raw = buckets.get(cid)
+                    if isinstance(child_raw, dict):
+                        child_infos.append(BucketInfo.from_dict(child_raw))
                 child_infos.sort(key=lambda c: (float(c.last_event_at or 0.0), str(c.bucket_id)))
                 for cinfo in child_infos:
                     children.append(
-                        self._advance_collect_bucket_tree(
+                        self._advance_collect_bucket_tree_from_snapshot(
                             bucket_id=cinfo.bucket_id,
                             include_gray=include_gray,
                             max_expand_depth=max_expand_depth,
                             depth=depth + 1,
                             visited=visited,
+                            tree=tree,
+                            records_by_bucket=records_by_bucket,
                         )
                     )
 
