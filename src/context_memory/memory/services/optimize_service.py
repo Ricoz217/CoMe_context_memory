@@ -48,7 +48,7 @@ class OptimizeService:
             leaf_node_keys,
             leaf_bucket_keys,
             bucket_id_to_node_key,
-        ) = self._collect_candidates(target_bucket)
+        ) = await self._collect_candidates(target_bucket)
         if not candidate_records:
             return OptimizeResult(success=False, bucket_id=target_bucket, message="no candidates in target bucket", reason_code="empty_bucket")
 
@@ -62,10 +62,10 @@ class OptimizeService:
             reason=reason,
         )
         try:
-            alias_table = eng._alias_table(target_bucket)
-            alias_payload = await eng.prepare_alias_payload(target_bucket, payload)
-            map_ver = alias_table.map_version()
-            alias_table.assert_safe(alias_payload)
+            alias_payload, map_ver = await eng._prepare_alias_payload_with_version(
+                target_bucket,
+                payload,
+            )
             outbound_payload = {"reason": reason, "payload": alias_payload}
             payload_tokens = await asyncio.to_thread(eng.token_counter.count_json, outbound_payload)
             if payload_tokens > int(eng.max_context_window * 0.70):
@@ -83,14 +83,18 @@ class OptimizeService:
                 reason=reason,
                 payload=alias_payload,
             )
-            eng._audit_alias_llm_call(
+            await eng._audit_alias_llm_call(
                 tool="optimize",
                 bucket_id=target_bucket,
                 map_version=map_ver,
                 alias_input=alias_payload,
                 alias_output=llm_alias,
             )
-            llm_out = await alias_table.restore(llm_alias, map_version=map_ver)
+            llm_out = await eng.restore_alias_payload(
+                target_bucket,
+                llm_alias,
+                map_version=map_ver,
+            )
         except AliasPayloadError as exc:
             return OptimizeResult(
                 success=False,
@@ -100,13 +104,14 @@ class OptimizeService:
                 sealed_redirects=sealed_redirects,
             )
 
-        eng._record_llm_usage()
-        eng._record_llm_diag()
+        await eng._record_llm_usage()
+        await eng._record_llm_diag()
         llm_path_source = "LOCAL" if bool(eng.pipeline.last_diagnostics.get("degraded", False)) else "LLM"
 
         if bool(llm_out.get("skip_optimize", False)):
             skip_reason = str(llm_out.get("skip_reason", "")).strip() or "model judged current structure as reasonable"
-            eng.storage.append_event(
+            await eng._run_storage_task(
+                eng.storage.append_event,
                 event_type="OPTIMIZE_SKIP",
                 bucket_id=target_bucket,
                 payload={
@@ -126,7 +131,8 @@ class OptimizeService:
                 sealed_redirects=sealed_redirects,
             )
 
-        prepared = self._prepare_plan(
+        prepared = await eng._run_storage_task(
+            self._prepare_plan,
             target_bucket=target_bucket,
             llm_out=llm_out,
             parent_keys=parent_keys,
@@ -189,7 +195,7 @@ class OptimizeService:
             )
 
         bucket_plan = self._build_bucket_assignment_plan(target_bucket=target_bucket, prepared=prepared)
-        pressure_check = await asyncio.to_thread(
+        pressure_check = await eng._run_storage_task(
             self._validate_bucket_pressure,
             max_context_window=eng.max_context_window,
             candidate_records=candidate_records,
@@ -213,7 +219,7 @@ class OptimizeService:
         post_actions: list[dict[str, Any]] = []
 
         try:
-            successor = eng._create_successor_bucket_shallow_unlocked(
+            successor = await eng._create_successor_bucket_shallow_unlocked(
                 source_bucket_id=target_bucket,
                 title=f"{info.title}_optimized",
                 summary=(str(prepared.get("parent_summary", "")).strip() or info.summary),
@@ -237,7 +243,7 @@ class OptimizeService:
                     title = str(g.get("title", "")).strip() or f"optimized_group_{gid}"
                     summary = str(g.get("summary", "")).strip() or "optimized group"
                     content = str(g.get("content", "")).strip() or summary
-                    created = eng._create_bucket_unlocked(
+                    created = await eng._create_bucket_unlocked(
                         successor.bucket_id,
                         title=title[:80],
                         summary=summary[:140],
@@ -265,7 +271,7 @@ class OptimizeService:
             metadata_update = prepared.get("metadata_update", {})
 
             for key, dst_bucket in assignment.items():
-                current = eng.storage.get_record(key)
+                current = await eng._run_storage_task(eng.storage.get_record, key)
                 if current is None or current.gray:
                     continue
                 dst_bucket_resolved = eng._resolve_bucket_id(dst_bucket)
@@ -280,7 +286,7 @@ class OptimizeService:
                             source_record.summary = str(row.get("summary", "")).strip()[:140]
                         if "content" in row:
                             source_record.content = str(row.get("content", "")).strip()[:1000]
-                eng._write_rebuilt_record_unlocked(
+                await eng._write_rebuilt_record_unlocked(
                     source_record=source_record,
                     dst_bucket_id=dst_bucket_resolved,
                     event="OPTIMIZE_REBUILD",
@@ -290,12 +296,12 @@ class OptimizeService:
                     moved_items += 1
 
             for key in omitted_keys:
-                current = eng.storage.get_record(key)
+                current = await eng._run_storage_task(eng.storage.get_record, key)
                 if current is None or current.gray:
                     continue
-                self._gray_out_record_unlocked(current=current, reason="optimize_plan_omitted")
+                await self._gray_out_record_unlocked(current=current, reason="optimize_plan_omitted")
                 if current.kind == BUCKET_KIND_BUCKET:
-                    self._seal_archive_child_bucket_unlocked(current)
+                    await self._seal_archive_child_bucket_unlocked(current)
 
             parent_summary = str(prepared.get("parent_summary", "")).strip()
             parent_content = str(prepared.get("parent_content", "")).strip()
@@ -304,21 +310,22 @@ class OptimizeService:
                 if parent_summary:
                     successor_info.summary = parent_summary[:140]
                 successor_info.summary_status = "ready"
-                eng.storage.update_bucket_info(successor_info)
-                eng._append_bucket_summary_update_event_unlocked(
+                await eng._run_storage_task(eng.storage.update_bucket_info, successor_info)
+                await eng._append_bucket_summary_update_event_unlocked(
                     info=successor_info,
                     summary=successor_info.summary,
                     content=(parent_content or successor_info.summary)[:1000],
                     reason=f"optimize:{reason}",
                 )
 
-            eng._seal_and_switch_bucket_unlocked(
+            await eng._seal_and_switch_bucket_unlocked(
                 source_bucket_id=target_bucket,
                 successor_bucket_id=successor.bucket_id,
                 reason=reason,
             )
 
-            eng.storage.append_alias_audit(
+            await eng._run_storage_task(
+                eng.storage.append_alias_audit,
                 {
                     "request_id": req_id,
                     "tool": "optimize_apply",
@@ -335,7 +342,8 @@ class OptimizeService:
                     "switched_at": utc_now_iso(),
                 }
             )
-            eng.storage.append_event(
+            await eng._run_storage_task(
+                eng.storage.append_event,
                 event_type="OPTIMIZE_APPLY",
                 bucket_id=target_bucket,
                 payload={
@@ -389,7 +397,7 @@ class OptimizeService:
                 post_actions=post_actions,
             )
 
-    def _collect_candidates(
+    async def _collect_candidates(
         self,
         target_bucket: str,
     ) -> tuple[
@@ -408,7 +416,11 @@ class OptimizeService:
         sealed_redirects: dict[str, str] = {}
         bucket_id_to_node_key: dict[str, str] = {}
 
-        direct_records = eng.storage.list_bucket_records(target_bucket, include_gray=False)
+        direct_records = await eng._run_storage_task(
+            eng.storage.load_bucket_snapshot,
+            target_bucket,
+            include_gray=False,
+        )
         for rec in direct_records:
             if rec.key not in candidate_records:
                 candidate_records[rec.key] = rec
@@ -423,7 +435,15 @@ class OptimizeService:
                     sealed_redirects[raw_child] = child_bucket
                 if child_bucket:
                     bucket_id_to_node_key[child_bucket] = rec.key
-                child_records = eng.storage.list_bucket_records(child_bucket, include_gray=False) if child_bucket else []
+                child_records = (
+                    await eng._run_storage_task(
+                        eng.storage.load_bucket_snapshot,
+                        child_bucket,
+                        include_gray=False,
+                    )
+                    if child_bucket
+                    else []
+                )
                 expanded_keys: list[str] = []
                 for c in child_records:
                     if c.key not in candidate_records:
@@ -580,8 +600,6 @@ class OptimizeService:
         bucket_id_to_node_key: dict[str, str],
         child_expansions: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        eng = self.runtime.engine
-        alias_table = eng._alias_table(target_bucket)
         candidate_keys = set(candidate_records.keys())
         skipped_invalid_count = 0
         child_expand_map: dict[str, list[str]] = {}
@@ -602,15 +620,6 @@ class OptimizeService:
             if token in candidate_keys:
                 return token
             node_key = str(bucket_id_to_node_key.get(token, "")).strip()
-            if node_key and node_key in candidate_keys:
-                return node_key
-            try:
-                resolved = str(alias_table.to_real(token)).strip()
-            except Exception:
-                resolved = ""
-            if resolved in candidate_keys:
-                return resolved
-            node_key = str(bucket_id_to_node_key.get(resolved, "")).strip()
             if node_key and node_key in candidate_keys:
                 return node_key
             return ""
@@ -823,7 +832,7 @@ class OptimizeService:
                 rb = eng._resolve_bucket_id(bid)
             except Exception:
                 rb = bid
-            sim[rb] = eng.storage.list_bucket_records(rb, include_gray=False)
+            sim[rb] = eng.storage.load_bucket_snapshot(rb, include_gray=False)
 
         candidate_keys = set(candidate_records.keys())
         for bid, items in list(sim.items()):
@@ -910,7 +919,7 @@ class OptimizeService:
             }
         return {"ok": True}
 
-    def _gray_out_record_unlocked(self, *, current: MemoryRecord, reason: str) -> None:
+    async def _gray_out_record_unlocked(self, *, current: MemoryRecord, reason: str) -> None:
         eng = self.runtime.engine
         rel = normalize_relations(current.relations)
         eng._append_relation_once(
@@ -938,15 +947,15 @@ class OptimizeService:
             child_bucket_id=current.child_bucket_id,
             confidence_type=current.confidence_type,
         )
-        eng.storage.write_memory_record(out_rec)
-        eng._append_context_event(
+        await eng._run_storage_task(eng.storage.write_memory_record, out_rec)
+        await eng._append_context_event(
             bucket_id=current.bucket_id,
             event_type="GRAY_SET",
             record=out_rec,
             payload={"from_revision": current.revision_id, "reason": reason},
         )
 
-    def _seal_archive_child_bucket_unlocked(self, bucket_node: MemoryRecord) -> None:
+    async def _seal_archive_child_bucket_unlocked(self, bucket_node: MemoryRecord) -> None:
         eng = self.runtime.engine
         child_raw = str(bucket_node.child_bucket_id or "").strip()
         if not child_raw:
@@ -963,8 +972,8 @@ class OptimizeService:
         info.sealed = True
         info.archived = True
         info.updated_at = utc_now_iso()
-        eng.storage.update_bucket_info(info)
+        await eng._run_storage_task(eng.storage.update_bucket_info, info)
         try:
-            eng._alias_table(child_bucket).freeze()
+            await eng._run_storage_task(eng._alias_table(child_bucket).freeze)
         except Exception:
             pass

@@ -186,7 +186,7 @@ engine.shutdown(wait=False)
    - `mode="semantic"`，小 `top_k`，对关键 bucket 或 key 做复查。
 ## 11. Schema Migration（简要）
 
-发布版已内置 schema 迁移系统（当前 `__data_version__ = 3`），用于在启动阶段自动将旧数据升级到当前代码可用版本。
+发布版已内置 schema 迁移系统（当前 `__data_version__ = 4`），用于在启动阶段自动将旧数据升级到当前代码可用版本。
 
 1. 自动触发时机
    - `ContextMemoryEngineV3` 完成存储绑定后会先执行迁移检查。
@@ -318,3 +318,13 @@ resolved = await bucket.resolve_aliases(["memory_12", "bucket_3", "memory_999"])
 - 删除父桶后再次按同名创建，会生成新的父桶及子树，不会从旧父桶的历史映射中恢复成员子桶。
 - schema v3 会把旧 `bucket_mapping.json` 迁移到 `bucket_tree.json.child_title_maps`；迁移成功后 live 旧文件删除，升级前备份保留。
 - `alias_map.json` 格式不变。合法映射不重编号；仅允许补齐安全元数据，映射冲突、损坏或拓扑异常会中止并回滚迁移。
+
+## 14. SQLite 索引（Schema v4）
+
+- v0.5.0 起，`index/memory_index.sqlite3` 是记录索引、桶 topology、元数据和 query cache 的唯一运行期真相。
+- `state.json`、`bucket_tree.json`、`meta.json` 和 `query_cache.json` 在 v3 -> v4 成功迁移后退出 live 运行目录；原文件保留在 `index/migration_backups/pre_upgrade_latest/`。
+- revision JSON、桶 `context.json`、evidence、Markdown、`alias_map.json` 和 events NDJSON 仍保持文件存储，正文不会整体写入 SQLite 或常驻内存。
+- 引擎只常驻最小 `RecordLocator` 与桶 topology；`list_memories()`、`BucketHandle.__contains__` 和 topology 查询不需要读取 revision 文件。
+- 所有 SQLite 与记忆文件 I/O 由专用单线程 storage worker 执行，不占用调用方事件循环。
+- 当前仍采用单进程、单写者模型。同一个 `base_dir` 不支持多个进程同时写入。
+- 迁移失败会保留 live v3 数据并记录失败 journal；成功迁移后的数据不能由旧版代码降级打开，只能恢复升级前完整备份。

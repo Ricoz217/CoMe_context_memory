@@ -29,14 +29,17 @@ class IngestService:
         eng = self.runtime.engine
         effective_image_hint = str(image_extract_hint or "").strip() or str(query_hint or "").strip()
         path = Path(file_path)
-        if not path.exists() or not path.is_file():
+        exists, kind, text = await eng._run_storage_task(
+            self._inspect_file,
+            path,
+            eng._max_memory_chars * 2,
+        )
+        if not exists:
             return AddResult(success=False, message=f"file not found: {file_path}")
         target_bucket = eng._resolve_bucket_id(bucket_id)
         before_bucket_count = len(eng.storage.list_buckets())
-        kind = detect_file_kind(path)
         result: AddResult
         if kind == "text":
-            text = read_text_file(path, max_chars=eng._max_memory_chars * 2)
             if not text.strip():
                 return AddResult(success=False, message="text file is empty or unreadable")
             result = await eng.add_memory(
@@ -53,7 +56,7 @@ class IngestService:
         elif kind == "image":
             extracted = await eng.image_extractor.extract(path, query=effective_image_hint)
             if not extracted.strip():
-                eng.storage.record_file_import_reject()
+                await eng._run_storage_task(eng.storage.record_file_import_reject)
                 return AddResult(success=False, message="image extraction returned empty text")
             result = await eng.add_memory(
                 extracted,
@@ -67,7 +70,7 @@ class IngestService:
                 dedup_in_bucket=dedup_in_bucket,
             )
         else:
-            eng.storage.record_file_import_reject()
+            await eng._run_storage_task(eng.storage.record_file_import_reject)
             suffix = path.suffix or "(no suffix)"
             return AddResult(success=False, message=f"unsupported file kind: {suffix}; detect_file_kind=unknown")
 
@@ -86,3 +89,11 @@ class IngestService:
         if auto_optimize_after_split and split_rebuild_detected and result.added_keys:
             await eng.optimize(bucket_id=after_bucket, reason="auto_post_file_split")
         return result
+
+    @staticmethod
+    def _inspect_file(path: Path, max_chars: int) -> tuple[bool, str, str]:
+        if not path.exists() or not path.is_file():
+            return False, "unknown", ""
+        kind = detect_file_kind(path)
+        text = read_text_file(path, max_chars=max_chars) if kind == "text" else ""
+        return True, kind, text

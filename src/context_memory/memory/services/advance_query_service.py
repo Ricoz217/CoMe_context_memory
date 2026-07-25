@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import json
@@ -37,7 +37,7 @@ class AdvanceQueryService:
         enable_aliasing: bool = True,
         audit: bool = False,
         max_parallel_chunks: int | None = None,
-    ) -> Any:
+    ) -> Prompts:
         eng = self.runtime.engine
         mode_value = self._normalize_advance_query_mode(mode)
         target_bucket_id = str(bucket_id or "").strip()
@@ -68,7 +68,7 @@ class AdvanceQueryService:
                 command=prepared_command,
                 payload=prepared_full_payload,
             )
-            self._advance_assert_request_safe(
+            await self._advance_assert_request_safe(
                 alias_bucket_id=target_bucket_id,
                 enable_aliasing=bool(enable_aliasing),
                 system_text=prepared_system,
@@ -80,7 +80,7 @@ class AdvanceQueryService:
                     user_markdown=prepared_user_markdown,
                 )
             )
-            self._advance_audit_event(
+            await self._advance_audit_event(
                 enabled=bool(audit),
                 event_type="ADVANCE_QUERY_START",
                 bucket_id=target_bucket_id,
@@ -122,7 +122,7 @@ class AdvanceQueryService:
                 allow_tools_on_final=True,
                 final_tool_input=tool_input,
             )
-            self._advance_audit_event(
+            await self._advance_audit_event(
                 enabled=bool(audit),
                 event_type="ADVANCE_QUERY_SUCCESS",
                 bucket_id=target_bucket_id,
@@ -130,7 +130,7 @@ class AdvanceQueryService:
             )
             return response
         except Exception as exc:
-            self._advance_audit_event(
+            await self._advance_audit_event(
                 enabled=bool(audit),
                 event_type="ADVANCE_QUERY_FAIL",
                 bucket_id=target_bucket_id,
@@ -195,10 +195,14 @@ class AdvanceQueryService:
     ) -> dict[str, Any]:
         """Compatibility facade for callers that still need the synchronous collector."""
         eng = self.runtime.engine
-        tree = eng.storage.load_bucket_tree()
-        state = eng.storage.load_state()
+        tree = eng.storage.topology_snapshot()
         resolved_bucket_id = self._advance_resolve_bucket_from_tree(bucket_id, tree)
-        records_by_bucket = self._advance_group_index_nodes_by_bucket(state)
+        records_by_bucket = self._advance_collect_subtree_index_nodes(
+            bucket_id=resolved_bucket_id,
+            include_gray=include_gray,
+            max_expand_depth=max_expand_depth,
+            tree=tree,
+        )
         return self._advance_collect_bucket_tree_from_snapshot(
             bucket_id=resolved_bucket_id,
             include_gray=include_gray,
@@ -216,7 +220,7 @@ class AdvanceQueryService:
         include_gray: bool,
         max_expand_depth: int | None,
     ) -> tuple[str, dict[str, Any], dict[str, Any]]:
-        return await asyncio.to_thread(
+        return await self.runtime.engine._run_storage_task(
             self._advance_collect_bucket_snapshot_sync,
             bucket_id=bucket_id,
             include_gray=include_gray,
@@ -231,10 +235,14 @@ class AdvanceQueryService:
         max_expand_depth: int | None,
     ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         eng = self.runtime.engine
-        tree = eng.storage.load_bucket_tree()
-        state = eng.storage.load_state()
+        tree = eng.storage.topology_snapshot()
         resolved_bucket_id = self._advance_resolve_bucket_from_tree(bucket_id, tree)
-        records_by_bucket = self._advance_group_index_nodes_by_bucket(state)
+        records_by_bucket = self._advance_collect_subtree_index_nodes(
+            bucket_id=resolved_bucket_id,
+            include_gray=include_gray,
+            max_expand_depth=max_expand_depth,
+            tree=tree,
+        )
         root_node = self._advance_collect_bucket_tree_from_snapshot(
             bucket_id=resolved_bucket_id,
             include_gray=include_gray,
@@ -245,6 +253,44 @@ class AdvanceQueryService:
             records_by_bucket=records_by_bucket,
         )
         return resolved_bucket_id, root_node, self._advance_render_top_payload(root_node)
+
+    def _advance_collect_subtree_index_nodes(
+        self,
+        *,
+        bucket_id: str,
+        include_gray: bool,
+        max_expand_depth: int | None,
+        tree: dict[str, Any],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Read only compact locator nodes belonging to the requested subtree."""
+        eng = self.runtime.engine
+        buckets = tree.get("buckets", {})
+        if not isinstance(buckets, dict):
+            buckets = {}
+        records_by_bucket: dict[str, list[dict[str, Any]]] = {}
+        pending: list[tuple[str, int]] = [(bucket_id, 0)]
+        visited: set[str] = set()
+        while pending:
+            current, depth = pending.pop()
+            if current in visited or current not in buckets:
+                continue
+            visited.add(current)
+            nodes = eng.storage.runtime_index_nodes_for_bucket(
+                current,
+                include_gray=include_gray,
+            )
+            records_by_bucket[current] = nodes
+            if max_expand_depth is not None and depth >= max_expand_depth:
+                continue
+            child_ids = [
+                str(node.get("child_bucket_id", "")).strip()
+                for node in nodes
+                if str(node.get("kind", "")) == BUCKET_KIND_BUCKET
+            ]
+            for child_id in reversed(child_ids):
+                if child_id and child_id not in visited:
+                    pending.append((child_id, depth + 1))
+        return records_by_bucket
 
     @staticmethod
     def _advance_resolve_bucket_from_tree(bucket_id: str | None, tree: dict[str, Any]) -> str:
@@ -437,7 +483,7 @@ class AdvanceQueryService:
             dict(prepared.get("payload", {})),
         )
 
-    def _advance_assert_request_safe(
+    async def _advance_assert_request_safe(
         self,
         *,
         alias_bucket_id: str,
@@ -446,14 +492,15 @@ class AdvanceQueryService:
         user_markdown: str,
     ) -> None:
         if enable_aliasing:
-            self.runtime.engine._alias_table(alias_bucket_id).assert_safe(
+            await self.runtime.engine._assert_alias_payload_safe(
+                alias_bucket_id,
                 {"system_text": system_text, "user_markdown": user_markdown}
             )
 
     async def _advance_count_tokens_exact(self, text: str) -> int:
         return await asyncio.to_thread(self.runtime.engine.token_counter.count_text, text)
 
-    def _advance_prepare_payload_for_llm(
+    async def _advance_prepare_payload_for_llm(
         self,
         *,
         raw_payload: dict[str, Any],
@@ -463,10 +510,7 @@ class AdvanceQueryService:
         eng = self.runtime.engine
         if not enable_aliasing:
             return raw_payload
-        alias_table = eng._alias_table(alias_bucket_id)
-        alias_payload = alias_table.encode_tree(raw_payload)
-        alias_table.assert_safe(alias_payload)
-        return alias_payload
+        return await eng.prepare_alias_payload(alias_bucket_id, raw_payload)
 
     async def _advance_payload_tokens(
         self,
@@ -477,7 +521,7 @@ class AdvanceQueryService:
         system_text: str,
         command: str,
     ) -> int:
-        request_payload = self._advance_prepare_payload_for_llm(
+        request_payload = await self._advance_prepare_payload_for_llm(
             raw_payload=raw_payload,
             alias_bucket_id=alias_bucket_id,
             enable_aliasing=enable_aliasing,
@@ -501,7 +545,8 @@ class AdvanceQueryService:
     ) -> Prompts:
         eng = self.runtime.engine
         if alias_bucket_id:
-            eng._alias_table(alias_bucket_id).assert_safe(
+            await eng._assert_alias_payload_safe(
+                alias_bucket_id,
                 {"system_text": system_text, "user_markdown": user_markdown}
             )
         preset = str(llm_preset or eng.llm_preset or "CONTEXT_MEMORY").strip()
@@ -682,7 +727,7 @@ class AdvanceQueryService:
                 command=command,
             )
             user_markdown = self._advance_build_user_markdown(command=request_command, payload=req_payload)
-            self._advance_assert_request_safe(
+            await self._advance_assert_request_safe(
                 alias_bucket_id=alias_bucket_id,
                 enable_aliasing=enable_aliasing,
                 system_text=request_system,
@@ -699,7 +744,7 @@ class AdvanceQueryService:
                         alias_bucket_id=alias_bucket_id if enable_aliasing else None,
                     )
                     content = self._advance_chunk_response_content(label=label, response=resp)
-                    self._advance_audit_event(
+                    await self._advance_audit_event(
                         enabled=audit,
                         event_type="ADVANCE_QUERY_CHUNK_DONE",
                         bucket_id=bucket_id,
@@ -707,7 +752,7 @@ class AdvanceQueryService:
                     )
                 except Exception as exc:
                     content = f"[{label}] [MISSING_AFTER_RETRY] {repr(exc)}"
-                    self._advance_audit_event(
+                    await self._advance_audit_event(
                         enabled=audit,
                         event_type="ADVANCE_QUERY_CHUNK_FAIL",
                         bucket_id=bucket_id,
@@ -774,7 +819,7 @@ class AdvanceQueryService:
                     command=command,
                 )
                 user_markdown = self._advance_build_user_markdown(command=request_command, payload=req_payload)
-                self._advance_assert_request_safe(
+                await self._advance_assert_request_safe(
                     alias_bucket_id=alias_bucket_id,
                     enable_aliasing=enable_aliasing,
                     system_text=request_system,
@@ -861,7 +906,7 @@ class AdvanceQueryService:
                 command=command,
             )
             user_markdown = self._advance_build_user_markdown(command=request_command, payload=req_payload)
-            self._advance_assert_request_safe(
+            await self._advance_assert_request_safe(
                 alias_bucket_id=alias_bucket_id,
                 enable_aliasing=enable_aliasing,
                 system_text=request_system,
@@ -1005,7 +1050,7 @@ class AdvanceQueryService:
             final_tool_input=final_tool_input,
         )
 
-    def _advance_audit_event(
+    async def _advance_audit_event(
         self,
         *,
         enabled: bool,
@@ -1017,11 +1062,11 @@ class AdvanceQueryService:
         if not enabled:
             return
         try:
-            eng.storage.append_event(
+            await eng._run_storage_task(
+                eng.storage.append_event,
                 event_type=event_type,
                 bucket_id=bucket_id,
                 payload=dict(payload),
             )
         except Exception:
             pass
-

@@ -62,6 +62,8 @@ python -m context_memory.rpc_server
 
 > 首次运行会在工作目录生成config文件夹，可配置你的 `LLM ApiKey` 后重启。详细说明: [docs/config_guide.md](docs/config_guide.md)
 
+> v0.5.0 首次打开旧记忆库时会自动将索引升级到 SQLite schema v4；记忆正文文件布局不变，升级前完整数据保留在 `index/migration_backups/pre_upgrade_latest/`。不要用旧版代码直接打开已升级的数据。
+
 ## 三种接口
 1. Python 调用（主接口）
 2. CLI

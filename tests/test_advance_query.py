@@ -1,8 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,13 +20,20 @@ def _create_engine(base_dir: str | Path):
         auto_resume_pending_jobs=False,
     )
 
+@contextmanager
+def _temporary_engine():
+    with tempfile.TemporaryDirectory() as td:
+        with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
+            engine = _create_engine(td)
+        try:
+            yield engine
+        finally:
+            engine.shutdown(wait=True)
+
 
 class AdvanceQueryTests(unittest.TestCase):
     def test_restructure_memory_is_stable_and_sorted(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
-
+        with _temporary_engine() as eng:
             root = eng.root_bucket_id()
             child_a = asyncio.run(eng.create_bucket(root, title="child_a", summary="a"))
             child_b = asyncio.run(eng.create_bucket(root, title="child_b", summary="b"))
@@ -100,9 +108,7 @@ class AdvanceQueryTests(unittest.TestCase):
             )
 
     def test_single_shot_overflow_raises(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine() as eng:
             threshold = int(eng.max_context_window * 0.8)
             with patch.object(eng._advance_query_service, "_advance_count_tokens_exact", return_value=threshold + 1):
                 with self.assertRaises(RuntimeError):
@@ -115,9 +121,7 @@ class AdvanceQueryTests(unittest.TestCase):
                     )
 
     def test_chunk_tools_disabled_and_final_tools_enabled(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine() as eng:
             root = eng.root_bucket_id()
             info = eng.storage.get_bucket_info(root)
             assert info is not None
@@ -174,9 +178,7 @@ class AdvanceQueryTests(unittest.TestCase):
             self.assertEqual(calls, [True])
 
     def test_aliasing_only_grows_target_bucket_map(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine() as eng:
             root = eng.root_bucket_id()
             child = asyncio.run(eng.create_bucket(root, title="child_x", summary="x"))
 

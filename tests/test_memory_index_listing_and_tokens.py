@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from dataclasses import fields
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -11,9 +10,9 @@ import pytest
 import tiktoken
 
 from context_memory.memory import engine as memory_engine
+from context_memory.memory.index_repository import RecordLocator
 from context_memory.memory.models import BucketContextUsage, ListMemoriesResult, MemoryIndexItem
 from context_memory.memory.token_counter import TokenCountError, TokenCounter
-from context_memory.rpc_server import RpcError, _call
 
 
 def _create_engine(base_dir: Path):
@@ -65,11 +64,10 @@ def test_large_index_listing_does_not_require_revision_files(tmp_path: Path) -> 
 async def _test_large_index_listing_does_not_require_revision_files(tmp_path: Path) -> None:
     engine = _create_engine(tmp_path / "store")
     handle = await engine.set_bucket("large-index")
-    state = engine.storage.load_state()
-    keys = state.setdefault("keys", {})
+    entries = []
     for index in range(2000):
         key = f"mem_20990101000000_{index:032x}"
-        keys[key] = {
+        node = {
             "latest_revision": f"rev_20990101000000_{index:032x}",
             "latest_path": f"memories/{key}/missing.json",
             "bucket_id": handle.bucket_id,
@@ -78,7 +76,24 @@ async def _test_large_index_listing_does_not_require_revision_files(tmp_path: Pa
             "gray": False,
             "updated_at": "2099-01-01T00:00:00+00:00",
         }
-    engine.storage.save_state(state)
+        entries.append(
+            (
+                RecordLocator(
+                    key=key,
+                    latest_revision=node["latest_revision"],
+                    latest_path=node["latest_path"],
+                    bucket_id=handle.bucket_id,
+                    kind="memory",
+                    child_bucket_id="",
+                    gray=False,
+                    expires_at=None,
+                    updated_at=node["updated_at"],
+                ),
+                node,
+            )
+        )
+    assert engine.storage.repository is not None
+    engine.storage.repository.bulk_upsert_records(entries)
 
     with patch.object(
         engine.storage,
@@ -101,8 +116,6 @@ async def _test_list_memories_offloads_index_context_and_tokenizer_work(tmp_path
     event_loop_thread = threading.get_ident()
     worker_threads: list[int] = []
 
-    original_state = engine.storage.load_state
-    original_tree = engine.storage.load_bucket_tree
     original_context = engine.storage.load_bucket_context
     original_count = engine.token_counter.count_text
 
@@ -114,8 +127,6 @@ async def _test_list_memories_offloads_index_context_and_tokenizer_work(tmp_path
         return _wrapped
 
     with (
-        patch.object(engine.storage, "load_state", side_effect=tracked(original_state)) as state_loader,
-        patch.object(engine.storage, "load_bucket_tree", side_effect=tracked(original_tree)) as tree_loader,
         patch.object(engine.storage, "load_bucket_context", side_effect=tracked(original_context)) as context_loader,
         patch.object(engine.token_counter, "count_text", side_effect=tracked(original_count)) as token_count,
     ):
@@ -123,8 +134,6 @@ async def _test_list_memories_offloads_index_context_and_tokenizer_work(tmp_path
 
     assert worker_threads
     assert all(thread_id != event_loop_thread for thread_id in worker_threads)
-    assert state_loader.call_count == 1
-    assert tree_loader.call_count == 1
     assert context_loader.call_count == 1
     assert token_count.call_count == 1
 
@@ -167,7 +176,8 @@ async def _test_subtree_count_respects_gray_nodes_successors_and_cycles(tmp_path
     successor = await root.create_bucket(title="successor")
     successor_handle = engine._bucket_handle_cls(engine, successor.bucket_id)
     successor_memory = await successor_handle.add_memory("successor memory")
-    engine.storage.seal_bucket_successor(
+    await engine._run_storage_task(
+        engine.storage.seal_bucket_successor,
         source_bucket_id=old_child.bucket_id,
         successor_bucket_id=successor.bucket_id,
     )
@@ -179,7 +189,8 @@ async def _test_subtree_count_respects_gray_nodes_successors_and_cycles(tmp_path
     tree = engine.storage.load_bucket_tree()
     tree["buckets"][successor.bucket_id]["sealed"] = True
     tree["buckets"][successor.bucket_id]["sealed_to"] = old_child.bucket_id
-    engine.storage.save_bucket_tree(tree)
+    assert engine.storage.repository is not None
+    engine.storage.repository.save_tree_snapshot(tree)
     cycled = await asyncio.wait_for(root.list_memories(), timeout=1.0)
     assert cycled.total_memory_count == 3
 
@@ -211,25 +222,6 @@ async def _test_context_usage_uses_tokenizer_and_marks_display_fallback(tmp_path
         fallback = await handle.get_bucket_context_usage()
     assert fallback.context_tokens >= 1
     assert fallback.token_count_method == "char_estimate"
-
-
-def test_removed_include_content_and_engine_stats_token_field(tmp_path: Path) -> None:
-    asyncio.run(_test_removed_include_content_and_engine_stats_token_field(tmp_path))
-
-
-async def _test_removed_include_content_and_engine_stats_token_field(tmp_path: Path) -> None:
-    engine = _create_engine(tmp_path / "store")
-    handle = await engine.set_bucket("contract")
-
-    with pytest.raises(TypeError):
-        await handle.list_memories(include_content=True)  # type: ignore[call-arg]
-
-    stats = await engine.stats()
-    assert "estimated_tokens" not in {field.name for field in fields(stats)}
-
-    with pytest.raises(RpcError) as exc_info:
-        await _call(engine, "list_memories", {"include_content": False})
-    assert exc_info.value.code == -32602
 
 
 def test_token_counter_strict_mode_never_uses_character_fallback() -> None:

@@ -47,8 +47,8 @@ async def _test_advance_snapshot_reads_indexes_once_and_only_target_revisions(tm
     event_loop_thread = threading.get_ident()
     worker_threads: list[int] = []
 
-    original_tree = engine.storage.load_bucket_tree
-    original_state = engine.storage.load_state
+    original_topology = engine.storage.topology_snapshot
+    original_nodes = engine.storage.runtime_index_nodes_for_bucket
     original_record = engine.storage.load_record_from_index_node
 
     def tracked(callable_):
@@ -59,9 +59,18 @@ async def _test_advance_snapshot_reads_indexes_once_and_only_target_revisions(tm
         return wrapped
 
     with (
-        patch.object(engine.storage, "load_bucket_tree", side_effect=tracked(original_tree)) as tree_loader,
-        patch.object(engine.storage, "load_state", side_effect=tracked(original_state)) as state_loader,
+        patch.object(engine.storage, "topology_snapshot", side_effect=tracked(original_topology)) as topology_loader,
+        patch.object(
+            engine.storage,
+            "runtime_index_nodes_for_bucket",
+            side_effect=tracked(original_nodes),
+        ) as node_loader,
         patch.object(engine.storage, "load_record_from_index_node", side_effect=tracked(original_record)) as record_loader,
+        patch.object(
+            engine.storage,
+            "load_runtime_index_snapshot",
+            side_effect=AssertionError("advance_query must not materialize the full locator index"),
+        ),
     ):
         resolved, node, payload = await service._advance_collect_bucket_snapshot(
             bucket_id=target_bucket,
@@ -72,11 +81,12 @@ async def _test_advance_snapshot_reads_indexes_once_and_only_target_revisions(tm
     assert resolved == target_bucket
     assert node["bucket_id"] == target_bucket
     assert payload == service._advance_render_top_payload(node)
-    assert tree_loader.call_count == 1
-    assert state_loader.call_count == 1
+    assert topology_loader.call_count == 1
+    assert node_loader.call_count == 2
     assert record_loader.call_count == 2
     assert worker_threads
     assert all(thread_id != event_loop_thread for thread_id in worker_threads)
+    await engine.close(wait=True)
 
 
 def test_advance_snapshot_slow_io_does_not_block_event_loop(tmp_path: Path) -> None:
@@ -87,11 +97,11 @@ async def _test_advance_snapshot_slow_io_does_not_block_event_loop(tmp_path: Pat
     engine = _create_engine(tmp_path / "store")
     target_bucket = await _build_tree(engine)
     service = engine._advance_query_service
-    original_state = engine.storage.load_state
+    original_record = engine.storage.load_record_from_index_node
 
-    def slow_state():
+    def slow_record(node):
         time.sleep(0.06)
-        return original_state()
+        return original_record(node)
 
     ticks = 0
 
@@ -101,7 +111,7 @@ async def _test_advance_snapshot_slow_io_does_not_block_event_loop(tmp_path: Pat
             await asyncio.sleep(0.01)
             ticks += 1
 
-    with patch.object(engine.storage, "load_state", side_effect=slow_state):
+    with patch.object(engine.storage, "load_record_from_index_node", side_effect=slow_record):
         await asyncio.gather(
             service._advance_collect_bucket_snapshot(
                 bucket_id=target_bucket,
@@ -112,6 +122,7 @@ async def _test_advance_snapshot_slow_io_does_not_block_event_loop(tmp_path: Pat
         )
 
     assert ticks == 5
+    await engine.close(wait=True)
 
 
 def test_advance_query_entrypoint_never_uses_global_record_scan(tmp_path: Path) -> None:
@@ -143,3 +154,4 @@ async def _test_advance_query_entrypoint_never_uses_global_record_scan(tmp_path:
         )
 
     assert isinstance(result, Prompts)
+    await engine.close(wait=True)

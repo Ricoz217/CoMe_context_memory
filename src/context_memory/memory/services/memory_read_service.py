@@ -35,13 +35,14 @@ class MemoryReadService:
         *,
         include_gray: bool,
     ) -> ListMemoriesResult:
-        tree = await asyncio.to_thread(self.engine.storage.load_bucket_tree)
+        tree = self.engine.storage.topology_snapshot()
         resolved_bucket_id = self._resolve_requested_bucket(bucket_id, tree)
-        index_task = asyncio.to_thread(
-            self._build_index_result,
-            resolved_bucket_id,
-            include_gray,
-            tree,
+        index_task = asyncio.create_task(
+            self._build_index_result_async(
+                resolved_bucket_id,
+                include_gray,
+                tree,
+            )
         )
         usage_task = self.get_context_usage(
             resolved_bucket_id,
@@ -64,6 +65,50 @@ class MemoryReadService:
             token_count_method=usage.token_count_method,
         )
 
+    async def _build_index_result_async(
+        self,
+        bucket_id: str,
+        include_gray: bool,
+        tree: dict[str, Any],
+    ) -> tuple[list[MemoryIndexItem], list[MemoryIndexItem], int]:
+        repository = self.engine.storage.repository
+        if repository is None:
+            return await self.engine._run_storage_task(
+                self._build_index_result,
+                bucket_id,
+                include_gray,
+                tree,
+            )
+        memory_keys = repository.memory_keys(bucket_id, include_gray=include_gray)
+        bucket_keys = repository.bucket_node_keys(bucket_id, include_gray=include_gray)
+        memories = [
+            self._locator_item(repository.get_locator(key))
+            for key in memory_keys
+            if repository.get_locator(key) is not None
+        ]
+        buckets = [
+            self._locator_item(repository.get_locator(key))
+            for key in bucket_keys
+            if repository.get_locator(key) is not None
+        ]
+        total = 0
+        visited: set[str] = set()
+        stack = [bucket_id]
+        while stack:
+            current = self._resolve_bucket_from_tree(stack.pop(), tree)
+            if not current or current in visited:
+                continue
+            visited.add(current)
+            total += len(repository.memory_keys(current, include_gray=include_gray))
+            for key in repository.bucket_node_keys(current, include_gray=include_gray):
+                locator = repository.get_locator(key)
+                if locator is None:
+                    continue
+                child = self._resolve_bucket_from_tree(locator.child_bucket_id, tree)
+                if child and child not in visited:
+                    stack.append(child)
+        return memories, buckets, total
+
     async def get_context_usage(
         self,
         bucket_id: str | None,
@@ -73,11 +118,11 @@ class MemoryReadService:
     ) -> BucketContextUsage:
         eng = self.engine
         if resolve_bucket:
-            tree = await asyncio.to_thread(eng.storage.load_bucket_tree)
+            tree = eng.storage.topology_snapshot()
             bucket_id = self._resolve_requested_bucket(bucket_id, tree)
         else:
             bucket_id = str(bucket_id or "").strip()
-        bucket_version = await asyncio.to_thread(eng.storage.get_bucket_version, bucket_id)
+        bucket_version = eng.storage.get_bucket_version(bucket_id)
         cache_key = f"ctx_tokens:{bucket_id}"
         cached = eng.memory_manager.get(cache_key)
         if isinstance(cached, dict) and int(cached.get("version", -1)) == bucket_version:
@@ -89,7 +134,7 @@ class MemoryReadService:
                     method,
                 )
 
-        token_count = await asyncio.to_thread(
+        token_count = await eng._run_storage_task(
             self._load_and_count_context,
             bucket_id,
             allow_fallback,
@@ -107,7 +152,14 @@ class MemoryReadService:
         return self._make_context_usage(bucket_id, token_count[0], token_count[1])
 
     async def count_direct_records(self, bucket_id: str, *, include_gray: bool) -> int:
-        return await asyncio.to_thread(self._count_direct_records, bucket_id, include_gray)
+        repository = self.engine.storage.repository
+        if repository is not None:
+            return len(repository.bucket_record_keys(bucket_id, include_gray=include_gray))
+        return await self.engine._run_storage_task(
+            self._count_direct_records,
+            bucket_id,
+            include_gray,
+        )
 
     def _build_index_result(
         self,
@@ -115,7 +167,7 @@ class MemoryReadService:
         include_gray: bool,
         tree: dict[str, Any],
     ) -> tuple[list[MemoryIndexItem], list[MemoryIndexItem], int]:
-        state = self.engine.storage.load_state()
+        _, state = self.engine.storage.load_runtime_index_snapshot()
         keys = state.get("keys", {})
         if not isinstance(keys, dict):
             return [], [], 0
@@ -164,7 +216,7 @@ class MemoryReadService:
         return resolved
 
     def _count_direct_records(self, bucket_id: str, include_gray: bool) -> int:
-        state = self.engine.storage.load_state()
+        _, state = self.engine.storage.load_runtime_index_snapshot()
         keys = state.get("keys", {})
         if not isinstance(keys, dict):
             return 0
@@ -242,7 +294,19 @@ class MemoryReadService:
         include_gray: bool = False,
     ) -> AsyncIterator[MemoryRecord]:
         storage = self.engine.storage
-        state = await asyncio.to_thread(storage.load_state)
+        repository = storage.repository
+        if repository is not None:
+            keys = repository.memory_keys(bucket_id, include_gray=include_gray) + repository.bucket_node_keys(
+                bucket_id,
+                include_gray=include_gray,
+            )
+            for key in keys:
+                record = await self.engine._run_storage_task(storage.get_record, key)
+                if record is not None:
+                    yield record
+            return
+
+        state = await self.engine._run_storage_task(storage.load_state)
         keys = state.get("keys", {})
         if not isinstance(keys, dict):
             return
@@ -257,7 +321,7 @@ class MemoryReadService:
                     include_gray=include_gray,
                 ):
                     continue
-                record = await asyncio.to_thread(storage.load_record_from_index_node, node)
+                record = await self.engine._run_storage_task(storage.load_record_from_index_node, node)
                 if record is not None:
                     yield record
 
@@ -268,7 +332,26 @@ class MemoryReadService:
         key_targets: set[str],
         bucket_targets: set[str],
     ) -> bool:
-        keys = self.engine.storage.load_state().get("keys", {})
+        repository = self.engine.storage.repository
+        if repository is not None:
+            for key in repository.bucket_record_keys(bucket_id, include_gray=False):
+                locator = repository.get_locator(key)
+                if locator is None:
+                    continue
+                if key in key_targets:
+                    return True
+                if locator.kind != BUCKET_KIND_BUCKET or not bucket_targets:
+                    continue
+                try:
+                    child_bucket = self.engine._resolve_bucket_id(locator.child_bucket_id)
+                except Exception:
+                    child_bucket = locator.child_bucket_id
+                if child_bucket in bucket_targets:
+                    return True
+            return False
+
+        _, state = self.engine.storage.load_runtime_index_snapshot()
+        keys = state.get("keys", {})
         if not isinstance(keys, dict):
             return False
 
@@ -310,3 +393,15 @@ class MemoryReadService:
         if expected_kind is not None and node.get("kind") != expected_kind:
             return False
         return include_gray or not bool(node.get("gray", False))
+
+    @staticmethod
+    def _locator_item(locator: Any) -> MemoryIndexItem:
+        return MemoryIndexItem(
+            key=str(locator.key),
+            revision_id=str(locator.latest_revision),
+            kind=locator.kind,
+            bucket_id=str(locator.bucket_id),
+            child_bucket_id=str(locator.child_bucket_id),
+            gray=bool(locator.gray),
+            updated_at=str(locator.updated_at),
+        )

@@ -10,14 +10,18 @@ class SplitIngestJobService:
 
     async def resume_pending_jobs(self) -> dict[str, object]:
         eng = self.runtime.engine
-        jobs = eng.storage.list_job_journals(statuses={"running", "paused"})
+        jobs = await eng._run_storage_task(
+            eng.storage.list_job_journals,
+            statuses={"running", "paused"},
+        )
         results: list[dict[str, object]] = []
         for job in jobs:
             try:
                 result = await eng._resume_split_job_unlocked(job)
             except Exception as exc:
                 batch_id = str(job.get("batch_id", "")).strip()
-                eng.storage.save_job_journal(
+                await eng._run_storage_task(
+                    eng.storage.save_job_journal,
                     {
                         **job,
                         "batch_id": batch_id,

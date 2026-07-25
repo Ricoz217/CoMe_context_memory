@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from ..models import CleanupResult, EngineStats, parse_iso_or_none
+from ..models import CleanupResult, EngineStats
 from .runtime import ServiceRuntime
 
 
@@ -13,26 +13,17 @@ class MaintenanceService:
     async def cleanup_expired(self) -> CleanupResult:
         eng = self.runtime.engine
         changed = 0
-        records = eng.storage.list_latest_records(include_gray=True)
         now = datetime.now(timezone.utc)
-        for rec in records:
-            if rec.gray:
-                continue
-            expiry = parse_iso_or_none(rec.expires_at)
-            if expiry is None:
-                continue
-            if expiry.tzinfo is None:
-                expiry = expiry.replace(tzinfo=timezone.utc)
-            if expiry > now:
-                continue
-            result = await eng.set_gray(rec.key, gray=True, reason="expire")
+        expired_keys = await eng._run_storage_task(eng.storage.list_expired_active_keys, now)
+        for key in expired_keys:
+            result = await eng.set_gray(key, gray=True, reason="expire")
             if result.success:
                 changed += 1
         return CleanupResult(success=True, expired_marked=changed, message="cleanup done")
 
     async def stats(self) -> EngineStats:
         eng = self.runtime.engine
-        raw = eng.storage.get_stats()
+        raw = await eng._run_storage_task(eng.storage.get_stats)
         llm_input = int(raw.get("llm_input_tokens_total", 0))
         llm_cached_input = int(raw.get("llm_cached_input_tokens_total", 0))
         llm_hit_rate = (llm_cached_input / llm_input) if llm_input > 0 else 0.0

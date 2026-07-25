@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import threading
@@ -12,11 +13,19 @@ from uuid import uuid4
 
 from context_memory.LLM_connect import Context, TextPrompt
 
+from .index_repository import IndexRepository, RecordLocator, RepositoryWriteError
 from .models import BucketInfo, MemoryRecord, normalize_relations, utc_now_iso
 
 
 class MemoryStorageV3:
-    def __init__(self, root_dir: str | Path, *, prompt_version: str = "v3", evidence_versions: int = 5) -> None:
+    def __init__(
+        self,
+        root_dir: str | Path,
+        *,
+        prompt_version: str = "v3",
+        evidence_versions: int = 5,
+        prefer_v4: bool = False,
+    ) -> None:
         self.root_dir = Path(root_dir)
         self.memories_dir = self.root_dir / "memories"
         self.evidence_dir = self.root_dir / "evidence"
@@ -30,6 +39,7 @@ class MemoryStorageV3:
         self.meta_file = self.index_dir / "meta.json"
         self.cache_file = self.index_dir / "query_cache.json"
         self.bucket_tree_file = self.index_dir / "bucket_tree.json"
+        self.sqlite_index_file = self.index_dir / "memory_index.sqlite3"
         self.schema_version_file = self.index_dir / "schema_version.json"
         self.migration_journal_file = self.index_dir / "migration_journal.json"
         self.migration_lock_file = self.index_dir / "migration.lock"
@@ -43,7 +53,73 @@ class MemoryStorageV3:
         self._alias_session_depth: int = 0
         self._alias_table_locks: dict[str, threading.RLock] = {}
         self._alias_table_locks_guard = threading.RLock()
-        self._ensure_layout()
+        self.repository: IndexRepository | None = None
+        if self.sqlite_index_file.exists():
+            self._ensure_v4_file_layout()
+            self.activate_v4()
+        elif prefer_v4 and self._is_truly_empty_dataset():
+            self._ensure_v4_file_layout()
+            self.repository = IndexRepository.create_empty(
+                self.sqlite_index_file,
+                prompt_version=self._prompt_version,
+            )
+            self.ensure_bucket_files(self.repository.root_bucket_id())
+            self.write_schema_version(schema_version=4, engine_version="")
+        else:
+            self._ensure_layout()
+
+    def _is_truly_empty_dataset(self) -> bool:
+        legacy_files = (
+            self.state_file,
+            self.meta_file,
+            self.cache_file,
+            self.bucket_tree_file,
+            self.schema_version_file,
+        )
+        if any(path.exists() for path in legacy_files):
+            return False
+        for directory in (self.memories_dir, self.buckets_dir):
+            if directory.exists() and any(directory.iterdir()):
+                return False
+        return True
+
+    def _ensure_v4_file_layout(self) -> None:
+        for path in (
+            self.memories_dir,
+            self.evidence_dir,
+            self.buckets_dir,
+            self.snapshots_dir,
+            self.index_dir,
+            self.jobs_dir,
+            self.migration_tmp_dir,
+            self.migration_backups_dir,
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+        if not self.events_file.exists():
+            self.events_file.write_text("", encoding="utf-8")
+        if not self.alias_audit_file.exists():
+            self.alias_audit_file.write_text("", encoding="utf-8")
+
+    def activate_v4(self) -> None:
+        if self.schema_version_file.exists():
+            schema = self.read_schema_version(default_schema_version=4)
+            if int(schema.get("schema_version", 0)) != 4:
+                raise RuntimeError(
+                    "schema_version.json and SQLite user_version disagree: "
+                    f"control={schema.get('schema_version')}, sqlite=4"
+                )
+        if self.repository is not None:
+            self.repository.close()
+        self.repository = IndexRepository(self.sqlite_index_file)
+
+    @property
+    def is_v4(self) -> bool:
+        return self.repository is not None
+
+    def close(self) -> None:
+        if self.repository is not None:
+            self.repository.close()
+            self.repository = None
 
     def _ensure_layout(self) -> None:
         for p in (
@@ -173,12 +249,18 @@ class MemoryStorageV3:
         return f"bucket_{stamp}_{uuid4().hex}"
 
     def load_state(self) -> dict:
+        if self.repository is not None:
+            return self.repository.load_state_snapshot()
         return self._load_json(self.state_file, {"keys": {}, "revision_total": 0})
 
     def save_state(self, state: dict) -> None:
+        if self.repository is not None:
+            raise RepositoryWriteError("whole-snapshot state writes are forbidden in schema v4")
         self._atomic_save_json(state, self.state_file)
 
     def load_meta(self) -> dict:
+        if self.repository is not None:
+            return self.repository.load_meta()
         return self._load_json(
             self.meta_file,
             {
@@ -221,13 +303,25 @@ class MemoryStorageV3:
         )
 
     def save_meta(self, meta: dict) -> None:
+        if self.repository is not None:
+            raise RepositoryWriteError("whole-snapshot meta writes are forbidden in schema v4")
         self._atomic_save_json(meta, self.meta_file)
 
     def load_cache(self) -> dict:
+        if self.repository is not None:
+            return self.repository.load_query_cache_snapshot()
         return self._load_json(self.cache_file, {})
 
     def save_cache(self, cache: dict) -> None:
+        if self.repository is not None:
+            raise RepositoryWriteError("whole-snapshot query cache writes are forbidden in schema v4")
         self._atomic_save_json(cache, self.cache_file)
+
+    def _commit_meta(self, meta: dict[str, Any]) -> None:
+        if self.repository is not None:
+            self.repository.apply_meta_snapshot(meta)
+        else:
+            self.save_meta(meta)
 
     @staticmethod
     def _managed_dataset_items() -> list[tuple[str, bool]]:
@@ -244,6 +338,7 @@ class MemoryStorageV3:
             ("index/meta.json", False),
             ("index/query_cache.json", False),
             ("index/bucket_tree.json", False),
+            ("index/memory_index.sqlite3", False),
             ("index/schema_version.json", False),
             ("index/migration_journal.json", False),
             ("bucket_mapping.json", False),
@@ -293,7 +388,10 @@ class MemoryStorageV3:
         return payload
 
     def clear_query_cache(self) -> None:
-        self._atomic_save_json({}, self.cache_file)
+        if self.repository is not None:
+            self.repository.clear_query_cache()
+        else:
+            self._atomic_save_json({}, self.cache_file)
 
     def clone_live_dataset(self, target_root: str | Path) -> dict[str, int]:
         dst = Path(target_root)
@@ -303,6 +401,11 @@ class MemoryStorageV3:
         copied_dirs = 0
         copied_files = 0
         for rel, is_dir in self._managed_dataset_items():
+            if rel == "index/memory_index.sqlite3" and self.repository is not None:
+                dst_path = dst / rel
+                self.repository.backup_to(dst_path)
+                copied_files += 1
+                continue
             src_path = self.root_dir / rel
             dst_path = dst / rel
             if is_dir:
@@ -379,6 +482,22 @@ class MemoryStorageV3:
 
     def validate_dataset_layout(self, *, root_dir: str | Path | None = None) -> dict[str, Any]:
         root = Path(root_dir) if root_dir is not None else self.root_dir
+        sqlite_path = root / "index" / "memory_index.sqlite3"
+        if sqlite_path.exists():
+            repo = IndexRepository(sqlite_path)
+            try:
+                checks = repo.integrity_check()
+                errors: list[str] = []
+                if checks["integrity_check"] != "ok":
+                    errors.append(f"sqlite_integrity:{checks['integrity_check']}")
+                if checks["foreign_key_errors"]:
+                    errors.append(f"sqlite_foreign_keys:{checks['foreign_key_errors']}")
+                for legacy in ("state.json", "meta.json", "query_cache.json", "bucket_tree.json"):
+                    if (root / "index" / legacy).exists():
+                        errors.append(f"legacy_index_remains:index/{legacy}")
+                return {"success": not errors, "errors": errors}
+            finally:
+                repo.close()
         errors: list[str] = []
         required_files = [
             "index/state.json",
@@ -468,6 +587,8 @@ class MemoryStorageV3:
         return {"success": len(errors) == 0, "errors": errors}
 
     def load_bucket_tree(self) -> dict:
+        if self.repository is not None:
+            return self.repository.load_tree_snapshot()
         default = {
             "root_bucket_id": "",
             "active_bucket_id": "",
@@ -481,10 +602,24 @@ class MemoryStorageV3:
         return tree
 
     def save_bucket_tree(self, tree: dict) -> None:
+        if self.repository is not None:
+            raise RepositoryWriteError("whole-snapshot topology writes are forbidden in schema v4")
         tree["updated_at"] = utc_now_iso()
         self._atomic_save_json(tree, self.bucket_tree_file)
 
+    def _commit_bucket_tree(self, tree: dict[str, Any]) -> None:
+        tree["updated_at"] = utc_now_iso()
+        if self.repository is not None:
+            self.repository.save_tree_snapshot(tree)
+        else:
+            self._atomic_save_json(tree, self.bucket_tree_file)
+
     def get_root_bucket_id(self) -> str:
+        if self.repository is not None:
+            root_id = self.repository.root_bucket_id()
+            if not root_id:
+                raise RuntimeError("bucket tree missing root_bucket_id")
+            return root_id
         tree = self.load_bucket_tree()
         root_id = str(tree.get("root_bucket_id", "")).strip()
         if not root_id:
@@ -492,6 +627,8 @@ class MemoryStorageV3:
         return root_id
 
     def get_active_bucket_id(self) -> str:
+        if self.repository is not None:
+            return self.repository.active_bucket_id() or self.get_root_bucket_id()
         tree = self.load_bucket_tree()
         active = str(tree.get("active_bucket_id", "")).strip()
         if active:
@@ -501,20 +638,22 @@ class MemoryStorageV3:
     def set_active_bucket_id(self, bucket_id: str) -> None:
         tree = self.load_bucket_tree()
         tree["active_bucket_id"] = bucket_id
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def set_root_bucket_id(self, bucket_id: str) -> None:
         tree = self.load_bucket_tree()
         tree["root_bucket_id"] = bucket_id
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def set_root_and_active_bucket_id(self, bucket_id: str) -> None:
         tree = self.load_bucket_tree()
         tree["root_bucket_id"] = bucket_id
         tree["active_bucket_id"] = bucket_id
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def list_buckets(self) -> list[BucketInfo]:
+        if self.repository is not None:
+            return list(self.repository.list_buckets())
         tree = self.load_bucket_tree()
         buckets = tree.get("buckets", {})
         if not isinstance(buckets, dict):
@@ -526,6 +665,8 @@ class MemoryStorageV3:
         return out
 
     def get_bucket_info(self, bucket_id: str) -> BucketInfo | None:
+        if self.repository is not None:
+            return self.repository.get_bucket(bucket_id)
         tree = self.load_bucket_tree()
         raw = tree.get("buckets", {}).get(bucket_id)
         if not isinstance(raw, dict):
@@ -540,6 +681,8 @@ class MemoryStorageV3:
         return raw
 
     def get_child_title_target(self, parent_bucket_id: str, title: str) -> str:
+        if self.repository is not None:
+            return self.repository.get_child_title_target(parent_bucket_id, title)
         tree = self.load_bucket_tree()
         parent_map = self._child_title_maps(tree).get(parent_bucket_id, {})
         if not isinstance(parent_map, dict):
@@ -564,7 +707,7 @@ class MemoryStorageV3:
         parent_map[title] = child_bucket_id
         title_maps[parent_bucket_id] = parent_map
         tree["child_title_maps"] = title_maps
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def remove_child_title_refs(self, *, parent_bucket_id: str, child_bucket_id: str) -> int:
         tree = self.load_bucket_tree()
@@ -580,7 +723,7 @@ class MemoryStorageV3:
             else:
                 title_maps.pop(parent_bucket_id, None)
             tree["child_title_maps"] = title_maps
-            self.save_bucket_tree(tree)
+            self._commit_bucket_tree(tree)
         return removed
 
     def ensure_bucket_files(self, bucket_id: str) -> None:
@@ -857,7 +1000,7 @@ class MemoryStorageV3:
                 tree["child_title_maps"] = title_maps
 
         tree["buckets"] = buckets
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
         self.mark_bucket_dirty(bucket_id)
         return info
 
@@ -869,7 +1012,7 @@ class MemoryStorageV3:
         info.updated_at = utc_now_iso()
         buckets[info.bucket_id] = info.to_dict()
         tree["buckets"] = buckets
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def remove_child_link(self, *, parent_bucket_id: str, child_bucket_id: str) -> None:
         tree = self.load_bucket_tree()
@@ -883,7 +1026,7 @@ class MemoryStorageV3:
         parent.children = [c for c in parent.children if c != child_bucket_id]
         buckets[parent_bucket_id] = parent.to_dict()
         tree["buckets"] = buckets
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def add_child_link(self, *, parent_bucket_id: str, child_bucket_id: str) -> None:
         tree = self.load_bucket_tree()
@@ -898,7 +1041,7 @@ class MemoryStorageV3:
             parent.children.append(child_bucket_id)
         buckets[parent_bucket_id] = parent.to_dict()
         tree["buckets"] = buckets
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def reparent_bucket(
         self,
@@ -972,7 +1115,7 @@ class MemoryStorageV3:
                 title_maps[new_parent_bucket_id] = new_map
         tree["buckets"] = buckets
         tree["child_title_maps"] = title_maps
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def seal_bucket_successor(
         self,
@@ -1042,7 +1185,7 @@ class MemoryStorageV3:
         buckets[source_bucket_id] = source.to_dict()
         tree["buckets"] = buckets
         tree["child_title_maps"] = title_maps
-        self.save_bucket_tree(tree)
+        self._commit_bucket_tree(tree)
 
     def _empty_context_dict(self) -> dict[str, Any]:
         return Context().to_dict()
@@ -1090,12 +1233,17 @@ class MemoryStorageV3:
         key_dir = self.memories_dir / record.key
         key_dir.mkdir(parents=True, exist_ok=True)
         save_path = key_dir / f"{record.revision_id}.json"
-        save_path.write_text(json.dumps(record.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        temp_path = save_path.with_name(f"{save_path.name}.{uuid4().hex}.tmp")
+        with temp_path.open("w", encoding="utf-8") as stream:
+            stream.write(json.dumps(record.to_dict(), ensure_ascii=False, indent=2))
+            stream.flush()
+            os.fsync(stream.fileno())
+        temp_path.replace(save_path)
         relative_save_path = self._to_relative_root_path(save_path)
 
-        state = self.load_state()
-        keys = state.setdefault("keys", {})
-        node = keys.get(record.key, {})
+        state = self.load_state() if self.repository is None else {}
+        keys = state.setdefault("keys", {}) if self.repository is None else {}
+        node = self.repository.load_record_node(record.key) if self.repository is not None else keys.get(record.key, {})
         if not isinstance(node, dict):
             node = {}
 
@@ -1125,10 +1273,24 @@ class MemoryStorageV3:
                 "last_compress_penalty_at": str(node.get("last_compress_penalty_at", "")),
             }
         )
-        keys[record.key] = node
-        state["revision_total"] = int(state.get("revision_total", 0)) + 1
-        self.save_state(state)
-        self.mark_bucket_dirty(record.bucket_id)
+        if self.repository is not None:
+            locator = RecordLocator(
+                key=record.key,
+                latest_revision=record.revision_id,
+                latest_path=relative_save_path,
+                bucket_id=record.bucket_id,
+                kind=record.kind,  # type: ignore[arg-type]
+                child_bucket_id=record.child_bucket_id,
+                gray=bool(record.gray),
+                expires_at=record.expires_at,
+                updated_at=str(node["updated_at"]),
+            )
+            self.repository.commit_record_revision(locator, node)
+        else:
+            keys[record.key] = node
+            state["revision_total"] = int(state.get("revision_total", 0)) + 1
+            self.save_state(state)
+            self.mark_bucket_dirty(record.bucket_id)
         return save_path
 
     def touch_bucket_last_event_at(self, *, bucket_id: str, event_ts: float | None = None) -> dict[str, Any]:
@@ -1164,7 +1326,7 @@ class MemoryStorageV3:
         if updated > 0:
             tree["buckets"] = buckets
             tree["updated_at"] = utc_now_iso()
-            self.save_bucket_tree(tree)
+            self._commit_bucket_tree(tree)
         return {"updated": updated, "event_ts": ts}
 
     def get_record(self, key: str, revision_id: str | None = None) -> MemoryRecord | None:
@@ -1174,13 +1336,19 @@ class MemoryStorageV3:
                 return None
             return self._json_to_memory_record(path)
 
-        state = self.load_state()
-        node = state.get("keys", {}).get(key)
-        if not isinstance(node, dict):
-            return None
-        path_text = node.get("latest_path")
-        if not isinstance(path_text, str):
-            return None
+        if self.repository is not None:
+            locator = self.repository.get_locator(key)
+            if locator is None:
+                return None
+            path_text = locator.latest_path
+        else:
+            state = self.load_state()
+            node = state.get("keys", {}).get(key)
+            if not isinstance(node, dict):
+                return None
+            path_text = node.get("latest_path")
+            if not isinstance(path_text, str):
+                return None
         return self._json_to_memory_record(self._resolve_root_path(path_text))
 
     def load_record_from_index_node(self, node: dict[str, Any]) -> MemoryRecord | None:
@@ -1191,6 +1359,15 @@ class MemoryStorageV3:
         return self._json_to_memory_record(self._resolve_root_path(path_text))
 
     def list_latest_records(self, *, include_gray: bool = True) -> list[MemoryRecord]:
+        if self.repository is not None:
+            out: list[MemoryRecord] = []
+            for locator in self.repository.all_locators():
+                if not include_gray and locator.gray:
+                    continue
+                record = self._json_to_memory_record(self._resolve_root_path(locator.latest_path))
+                if record is not None:
+                    out.append(record)
+            return out
         state = self.load_state()
         out: list[MemoryRecord] = []
         for _, node in state.get("keys", {}).items():
@@ -1208,6 +1385,16 @@ class MemoryStorageV3:
         return out
 
     def list_bucket_records(self, bucket_id: str, *, include_gray: bool = False) -> list[MemoryRecord]:
+        if self.repository is not None:
+            out: list[MemoryRecord] = []
+            for key in self.repository.bucket_record_keys(bucket_id, include_gray=include_gray):
+                locator = self.repository.get_locator(key)
+                if locator is None:
+                    continue
+                record = self._json_to_memory_record(self._resolve_root_path(locator.latest_path))
+                if record is not None:
+                    out.append(record)
+            return out
         out: list[MemoryRecord] = []
         for rec in self.list_latest_records(include_gray=True):
             if rec.bucket_id != bucket_id:
@@ -1217,7 +1404,210 @@ class MemoryStorageV3:
             out.append(rec)
         return out
 
+    def load_records_for_keys(self, keys: Iterable[str]) -> list[MemoryRecord]:
+        out: list[MemoryRecord] = []
+        for key in keys:
+            record = self.get_record(str(key))
+            if record is not None:
+                out.append(record)
+        return out
+
+    def is_active_record(self, key: str) -> bool:
+        if self.repository is not None:
+            locator = self.repository.get_locator(key)
+            return locator is not None and not locator.gray
+        record = self.get_record(key)
+        return record is not None and not record.gray
+
+    def record_statuses(self, keys: Iterable[str]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        if self.repository is not None:
+            for raw_key in keys:
+                key = str(raw_key)
+                locator = self.repository.get_locator(key)
+                out[key] = {
+                    "stored": locator is not None and not locator.gray,
+                    "bucket_id": locator.bucket_id if locator is not None else "",
+                    "revision_id": locator.latest_revision if locator is not None else "",
+                }
+            return out
+        state = self.load_state()
+        state_keys = state.get("keys", {})
+        for raw_key in keys:
+            key = str(raw_key)
+            node = state_keys.get(key) if isinstance(state_keys, dict) else None
+            out[key] = {
+                "stored": isinstance(node, dict) and not bool(node.get("gray", False)),
+                "bucket_id": str(node.get("bucket_id", "")) if isinstance(node, dict) else "",
+                "revision_id": str(node.get("latest_revision", "")) if isinstance(node, dict) else "",
+            }
+        return out
+
+    def load_negative_weights(self, keys: Iterable[str]) -> dict[str, float]:
+        if self.repository is not None:
+            return self.repository.load_negative_weights(keys)
+        out: dict[str, float] = {}
+        for key in keys:
+            node = self.get_key_node(str(key))
+            if node is not None:
+                out[str(key)] = float(node.get("last_negative_weight", 0.0) or 0.0)
+        return out
+
+    def list_expired_active_keys(self, now: datetime) -> list[str]:
+        if self.repository is not None:
+            candidates = self.repository.active_expirations()
+            expired: list[str] = []
+            for key, raw_expiry in candidates:
+                expiry = parse_iso_or_none(raw_expiry)
+                if expiry is None:
+                    continue
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                if expiry <= now:
+                    expired.append(key)
+            return expired
+        return [
+            record.key
+            for record in self.list_latest_records(include_gray=False)
+            if (expiry := parse_iso_or_none(record.expires_at)) is not None
+            and (expiry.replace(tzinfo=timezone.utc) if expiry.tzinfo is None else expiry) <= now
+        ]
+
+    def load_bucket_snapshot(self, bucket_id: str, *, include_gray: bool = False) -> list[MemoryRecord]:
+        if self.repository is None:
+            return self.list_bucket_records(bucket_id, include_gray=include_gray)
+        keys = self.repository.bucket_record_keys(bucket_id, include_gray=include_gray)
+        return self.load_records_for_keys(keys)
+
+    def load_buckets_snapshot(
+        self,
+        bucket_ids: Iterable[str],
+        *,
+        include_gray: bool = False,
+    ) -> dict[str, list[MemoryRecord]]:
+        ordered_ids = tuple(dict.fromkeys(str(bucket_id) for bucket_id in bucket_ids if str(bucket_id)))
+        if not ordered_ids:
+            return {}
+        if self.repository is None:
+            wanted = set(ordered_ids)
+            grouped = {bucket_id: [] for bucket_id in ordered_ids}
+            for record in self.list_latest_records(include_gray=include_gray):
+                if record.bucket_id in wanted:
+                    grouped[record.bucket_id].append(record)
+            return grouped
+
+        keys: list[str] = []
+        for bucket_id in ordered_ids:
+            keys.extend(self.repository.bucket_record_keys(bucket_id, include_gray=include_gray))
+        grouped = {bucket_id: [] for bucket_id in ordered_ids}
+        for record in self.load_records_for_keys(keys):
+            if record.bucket_id in grouped:
+                grouped[record.bucket_id].append(record)
+        return grouped
+
+    def load_all_records_snapshot(self, *, include_gray: bool = True) -> list[MemoryRecord]:
+        if self.repository is None:
+            return self.list_latest_records(include_gray=include_gray)
+        keys = tuple(
+            locator.key
+            for locator in self.repository.all_locators()
+            if include_gray or not locator.gray
+        )
+        return self.load_records_for_keys(keys)
+
+    def load_runtime_index_snapshot(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        if self.repository is None:
+            return self.load_bucket_tree(), self.load_state()
+        tree = self.repository.load_tree_snapshot()
+        keys = {
+            locator.key: self._locator_to_index_node(locator)
+            for locator in self.repository.all_locators()
+        }
+        return tree, {"keys": keys}
+
+    @staticmethod
+    def _locator_to_index_node(locator: RecordLocator) -> dict[str, Any]:
+        return {
+            "latest_revision": locator.latest_revision,
+            "latest_path": locator.latest_path,
+            "bucket_id": locator.bucket_id,
+            "kind": locator.kind,
+            "child_bucket_id": locator.child_bucket_id,
+            "gray": locator.gray,
+            "expires_at": locator.expires_at,
+            "updated_at": locator.updated_at,
+        }
+
+    def runtime_index_nodes_for_bucket(
+        self,
+        bucket_id: str,
+        *,
+        include_gray: bool,
+    ) -> list[dict[str, Any]]:
+        """Return compact resident index nodes for one bucket without SQLite or revision I/O."""
+        if self.repository is None:
+            state = self.load_state()
+            return [
+                dict(node)
+                for node in state.get("keys", {}).values()
+                if isinstance(node, dict)
+                and str(node.get("bucket_id", "")) == str(bucket_id)
+                and (include_gray or not bool(node.get("gray", False)))
+            ]
+        return [
+            self._locator_to_index_node(locator)
+            for key in self.repository.bucket_record_keys(bucket_id, include_gray=include_gray)
+            if (locator := self.repository.get_locator(key)) is not None
+        ]
+
+    def topology_snapshot(self) -> dict[str, Any]:
+        if self.repository is not None:
+            return self.repository.load_tree_snapshot()
+        return self.load_bucket_tree()
+
+    def metadata_snapshot(self) -> dict[str, Any]:
+        if self.repository is not None:
+            return self.repository.load_meta()
+        return self.load_meta()
+
+    def state_snapshot_for_maintenance(self) -> dict[str, Any]:
+        if self.repository is not None:
+            return self.repository.load_state_snapshot()
+        return self.load_state()
+
+    def commit_maintenance_snapshots(
+        self,
+        *,
+        state: dict[str, Any],
+        tree: dict[str, Any],
+    ) -> None:
+        if self.repository is None:
+            self.save_state(state)
+            self.save_bucket_tree(tree)
+            return
+        keys = state.get("keys", {})
+        retained = set(keys) if isinstance(keys, dict) else set()
+        removed = [
+            locator.key
+            for locator in self.repository.all_locators()
+            if locator.key not in retained
+        ]
+        self.repository.delete_records(removed)
+        self.repository.save_tree_snapshot(tree)
+
     def record_recall(self, key: str) -> None:
+        if self.repository is not None:
+            node = self.repository.load_record_node(key)
+            if node is None:
+                return
+            now = utc_now_iso()
+            self.repository.update_record_fields(
+                key,
+                query_hits=int(node.get("query_hits", 0)) + 1,
+                last_recalled_at=now,
+                updated_at=now,
+            )
+            return
         state = self.load_state()
         node = state.get("keys", {}).get(key)
         if not isinstance(node, dict):
@@ -1228,6 +1618,14 @@ class MemoryStorageV3:
         self.save_state(state)
 
     def set_last_compress_penalty(self, key: str) -> None:
+        if self.repository is not None:
+            now = utc_now_iso()
+            self.repository.update_record_fields(
+                key,
+                last_compress_penalty_at=now,
+                updated_at=now,
+            )
+            return
         state = self.load_state()
         node = state.get("keys", {}).get(key)
         if not isinstance(node, dict):
@@ -1237,6 +1635,9 @@ class MemoryStorageV3:
         self.save_state(state)
 
     def get_key_node(self, key: str) -> dict[str, Any] | None:
+        if self.repository is not None:
+            locator = self.repository.get_locator(key)
+            return self._locator_to_index_node(locator) if locator is not None else None
         state = self.load_state()
         node = state.get("keys", {}).get(key)
         return node if isinstance(node, dict) else None
@@ -1254,9 +1655,10 @@ class MemoryStorageV3:
         shutil.copy2(source, target)
         evidence_ref = f"{key}/{target.name}"
 
-        state = self.load_state()
-        keys = state.setdefault("keys", {})
-        node = keys.get(key, {})
+        state = self.load_state() if self.repository is None else {}
+        keys = state.setdefault("keys", {}) if self.repository is None else {}
+        node = self.repository.load_record_node(key) if self.repository is not None else self.get_key_node(key)
+        node = node or {}
         if not isinstance(node, dict):
             node = {}
         history = node.get("evidence_history", [])
@@ -1272,8 +1674,16 @@ class MemoryStorageV3:
         node["evidence_history"] = kept
         node["latest_evidence_ref"] = evidence_ref
         node["updated_at"] = utc_now_iso()
-        keys[key] = node
-        self.save_state(state)
+        if self.repository is not None:
+            self.repository.update_record_fields(
+                key,
+                evidence_history_json=json.dumps(kept, ensure_ascii=False),
+                latest_evidence_ref=evidence_ref,
+                updated_at=node["updated_at"],
+            )
+        else:
+            keys[key] = node
+            self.save_state(state)
         return evidence_ref
 
     def _delete_evidence_ref(self, evidence_ref: str) -> None:
@@ -1291,13 +1701,21 @@ class MemoryStorageV3:
         key_dir = self.evidence_dir / key
         if key_dir.exists() and key_dir.is_dir():
             shutil.rmtree(key_dir, ignore_errors=True)
-        state = self.load_state()
-        node = state.get("keys", {}).get(key)
+        state = self.load_state() if self.repository is None else {}
+        node = self.repository.load_record_node(key) if self.repository is not None else self.get_key_node(key)
         if isinstance(node, dict):
             node["evidence_history"] = []
             node["latest_evidence_ref"] = ""
             node["updated_at"] = utc_now_iso()
-            self.save_state(state)
+            if self.repository is not None:
+                self.repository.update_record_fields(
+                    key,
+                    evidence_history_json="[]",
+                    latest_evidence_ref="",
+                    updated_at=node["updated_at"],
+                )
+            else:
+                self.save_state(state)
 
     def read_evidence(self, evidence_ref: str) -> str:
         if not evidence_ref:
@@ -1315,6 +1733,10 @@ class MemoryStorageV3:
             return True
         target = self.evidence_dir / evidence_ref
         return target.exists() and target.is_file()
+
+    def evidence_exists_many(self, evidence_refs: Iterable[str]) -> dict[str, bool]:
+        refs = tuple(dict.fromkeys(str(ref) for ref in evidence_refs if str(ref)))
+        return {ref: self.evidence_exists(ref) for ref in refs}
 
     def get_evidence_content_by_key(self, key: str, revision: str | None = None) -> str:
         rec = self.get_record(key, revision)
@@ -1345,6 +1767,8 @@ class MemoryStorageV3:
         with self.events_file.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False, sort_keys=True))
             f.write("\n")
+        if self.repository is not None:
+            self.repository.increment_engine_meta("event_total", 1)
         return event
 
     def append_alias_audit(self, payload: dict[str, Any]) -> None:
@@ -1383,17 +1807,19 @@ class MemoryStorageV3:
         versions[bucket_id] = int(versions.get(bucket_id, 0)) + 1
         meta["bucket_versions"] = versions
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
         return meta
 
     def clear_dirty(self) -> dict:
         meta = self.load_meta()
         meta["dirty"] = False
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
         return meta
 
     def get_bucket_version(self, bucket_id: str) -> int:
+        if self.repository is not None:
+            return self.repository.get_bucket_version(bucket_id)
         meta = self.load_meta()
         versions = meta.get("bucket_versions", {})
         if not isinstance(versions, dict):
@@ -1401,6 +1827,16 @@ class MemoryStorageV3:
         return int(versions.get(bucket_id, 0))
 
     def record_llm_usage(self, *, input_tokens: int, output_tokens: int, cached_input_tokens: int, calls: int = 1) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta_many(
+                {
+                    "llm_calls_total": max(0, int(calls)),
+                    "llm_input_tokens_total": max(0, int(input_tokens)),
+                    "llm_output_tokens_total": max(0, int(output_tokens)),
+                    "llm_cached_input_tokens_total": max(0, int(cached_input_tokens)),
+                }
+            )
+            return
         meta = self.load_meta()
         meta["llm_calls_total"] = int(meta.get("llm_calls_total", 0)) + max(0, int(calls))
         meta["llm_input_tokens_total"] = int(meta.get("llm_input_tokens_total", 0)) + max(0, int(input_tokens))
@@ -1409,121 +1845,181 @@ class MemoryStorageV3:
             0, int(cached_input_tokens)
         )
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_query_degraded(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("degraded_query_total")
+            return
         meta = self.load_meta()
         meta["degraded_query_total"] = int(meta.get("degraded_query_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_llm_parse_fail(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("llm_parse_fail_total")
+            return
         meta = self.load_meta()
         meta["llm_parse_fail_total"] = int(meta.get("llm_parse_fail_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_llm_precheck_fail(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("llm_precheck_fail_total")
+            return
         meta = self.load_meta()
         meta["llm_precheck_fail_total"] = int(meta.get("llm_precheck_fail_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_clean_reject(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("clean_reject_total")
+            return
         meta = self.load_meta()
         meta["clean_reject_total"] = int(meta.get("clean_reject_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_clean_fallback(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("clean_fallback_total")
+            return
         meta = self.load_meta()
         meta["clean_fallback_total"] = int(meta.get("clean_fallback_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_ingest_blocked_by_clean(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("ingest_blocked_by_clean_total")
+            return
         meta = self.load_meta()
         meta["ingest_blocked_by_clean_total"] = int(meta.get("ingest_blocked_by_clean_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_context_overflow(self, stage: str) -> None:
         stage_key = str(stage or "").strip().lower()
+        if self.repository is not None:
+            deltas = {"context_overflow_total": 1}
+            if stage_key in {"query", "ingest", "compress"}:
+                deltas[f"overflow_{stage_key}_total"] = 1
+            self.repository.increment_engine_meta_many(deltas)
+            return
         meta = self.load_meta()
         meta["context_overflow_total"] = int(meta.get("context_overflow_total", 0)) + 1
         if stage_key in {"query", "ingest", "compress"}:
             field = f"overflow_{stage_key}_total"
             meta[field] = int(meta.get(field, 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_file_import_reject(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("file_import_reject_total")
+            return
         meta = self.load_meta()
         meta["file_import_reject_total"] = int(meta.get("file_import_reject_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_auto_split_guard_hit(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("auto_split_guard_hit_total")
+            return
         meta = self.load_meta()
         meta["auto_split_guard_hit_total"] = int(meta.get("auto_split_guard_hit_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_auto_split_cooldown_skip(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("auto_split_cooldown_skip_total")
+            return
         meta = self.load_meta()
         meta["auto_split_cooldown_skip_total"] = int(meta.get("auto_split_cooldown_skip_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_auto_split_no_progress(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("auto_split_no_progress_total")
+            return
         meta = self.load_meta()
         meta["auto_split_no_progress_total"] = int(meta.get("auto_split_no_progress_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_split_plan_warn(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("split_plan_warn_total")
+            return
         meta = self.load_meta()
         meta["split_plan_warn_total"] = int(meta.get("split_plan_warn_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_alias_real_key_leak(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("real_key_leak_count")
+            return
         meta = self.load_meta()
         meta["real_key_leak_count"] = int(meta.get("real_key_leak_count", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_alias_resolve_fail(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("alias_resolve_fail_count")
+            return
         meta = self.load_meta()
         meta["alias_resolve_fail_count"] = int(meta.get("alias_resolve_fail_count", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_unknown_alias(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("unknown_alias_count")
+            return
         meta = self.load_meta()
         meta["unknown_alias_count"] = int(meta.get("unknown_alias_count", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_query_alias_miss_build(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("query_alias_miss_build_total")
+            return
         meta = self.load_meta()
         meta["query_alias_miss_build_total"] = int(meta.get("query_alias_miss_build_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_query_alias_miss_resolve(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("query_alias_miss_resolve_total")
+            return
         meta = self.load_meta()
         meta["query_alias_miss_resolve_total"] = int(meta.get("query_alias_miss_resolve_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def record_query_side_effect_drop(self) -> None:
+        if self.repository is not None:
+            self.repository.increment_engine_meta("query_side_effect_drop_total")
+            return
         meta = self.load_meta()
         meta["query_side_effect_drop_total"] = int(meta.get("query_side_effect_drop_total", 0)) + 1
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def mark_auto_split(self, *, source_bucket_id: str, successor_bucket_id: str = "") -> None:
+        if self.repository is not None:
+            self.repository.mark_auto_split(source_bucket_id, successor_bucket_id)
+            return
         meta = self.load_meta()
         now = utc_now_iso()
         by_bucket = meta.get("auto_split_last_at_by_bucket", {})
@@ -1535,9 +2031,11 @@ class MemoryStorageV3:
         meta["last_split_source_bucket_id"] = source_bucket_id
         meta["last_split_successor_bucket_id"] = successor_bucket_id
         meta["updated_at"] = now
-        self.save_meta(meta)
+        self._commit_meta(meta)
 
     def get_last_auto_split_at(self, bucket_id: str) -> str:
+        if self.repository is not None:
+            return self.repository.get_last_auto_split_at(bucket_id)
         meta = self.load_meta()
         by_bucket = meta.get("auto_split_last_at_by_bucket", {})
         if not isinstance(by_bucket, dict):
@@ -1578,11 +2076,21 @@ class MemoryStorageV3:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def get_query_cache(self, cache_key: str) -> dict | None:
+        if self.repository is not None:
+            return self.repository.get_query_cache(cache_key)
         cache = self.load_cache()
         hit = cache.get(cache_key)
         return hit if isinstance(hit, dict) else None
 
     def set_query_cache(self, cache_key: str, result: dict, *, bucket_id: str) -> None:
+        if self.repository is not None:
+            self.repository.set_query_cache(
+                cache_key,
+                {"result": result},
+                bucket_id=bucket_id,
+                bucket_version=self.get_bucket_version(bucket_id),
+            )
+            return
         cache = self.load_cache()
         cache[cache_key] = {
             "created_at": utc_now_iso(),
@@ -1621,7 +2129,7 @@ class MemoryStorageV3:
         meta = self.load_meta()
         meta["last_snapshot"] = self._to_relative_root_path(path)
         meta["updated_at"] = utc_now_iso()
-        self.save_meta(meta)
+        self._commit_meta(meta)
         return str(path)
 
     def _job_file_path(self, batch_id: str) -> Path:
@@ -1703,13 +2211,15 @@ class MemoryStorageV3:
                     rel_snap = snap_path.resolve().relative_to(self.root_dir.resolve())
                     meta["last_snapshot"] = str(rel_snap)
                     changed_meta = 1
-                    self.save_meta(meta)
+                    self._commit_meta(meta)
                 except Exception:
                     pass
 
         return {"state_latest_path_changed": changed_state, "meta_last_snapshot_changed": changed_meta}
 
     def get_stats(self) -> dict[str, Any]:
+        if self.repository is not None:
+            return self.repository.stats_snapshot()
         state = self.load_state()
         meta = self.load_meta()
         cache = self.load_cache()
@@ -1787,6 +2297,13 @@ class MemoryStorageV3:
 
     def apply_negative_penalty(self, key: str, value: float) -> None:
         # Persisted for observability if needed in future.
+        if self.repository is not None:
+            self.repository.update_record_fields(
+                key,
+                last_negative_weight=float(value),
+                updated_at=utc_now_iso(),
+            )
+            return
         state = self.load_state()
         node = state.get("keys", {}).get(key)
         if not isinstance(node, dict):
@@ -1796,6 +2313,13 @@ class MemoryStorageV3:
         self.save_state(state)
 
     def move_record_to_bucket(self, key: str, bucket_id: str) -> None:
+        if self.repository is not None:
+            self.repository.update_record_fields(
+                key,
+                bucket_id=bucket_id,
+                updated_at=utc_now_iso(),
+            )
+            return
         state = self.load_state()
         node = state.get("keys", {}).get(key)
         if not isinstance(node, dict):
@@ -1803,5 +2327,4 @@ class MemoryStorageV3:
         node["bucket_id"] = bucket_id
         node["updated_at"] = utc_now_iso()
         self.save_state(state)
-
 

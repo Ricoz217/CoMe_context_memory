@@ -35,8 +35,6 @@ _BRANCH_EXPAND_K_DEFAULT = 5
 _BRANCH_PARENT_WEIGHT = 0.35
 _BRANCH_CHILD_WEIGHT = 0.65
 _BRANCH_FALLBACK_PARENT_WEIGHT = 0.85
-_BRANCH_MIN_ABS_SCORE = 0.25
-_BRANCH_MIN_RELATIVE_SCORE = 0.60
 
 
 class QueryService:
@@ -71,7 +69,7 @@ class QueryService:
         eng = self.runtime.engine
         root = eng._resolve_bucket_id(bucket_id)
         visited: set[str] = set()
-        depth_limit = max_depth if max_depth is not None else eng._query_max_depth_default
+        depth_limit = max_depth if max_depth is not None else eng._max_depth + 2
         mode_effective = self._resolve_query_mode(mode, query_text, eng._query_mode_default)
         recall_top_n = max(10, int(global_recall_top_n if global_recall_top_n is not None else eng._global_recall_top_n))
         recall_top_m = max(1, int(global_recall_top_m if global_recall_top_m is not None else eng._global_recall_top_m))
@@ -164,7 +162,7 @@ class QueryService:
             )
         visited.add(bucket_id)
 
-        meta = eng.storage.load_meta()
+        meta = await eng._run_storage_task(eng.storage.metadata_snapshot)
         normal_cache_key = eng.storage.compute_cache_key(
             query_text=query_text,
             top_k=top_k,
@@ -190,15 +188,19 @@ class QueryService:
             global_recall_time_budget_ms=global_recall_time_budget_ms,
         )
         if use_cache and not bool(meta.get("dirty", False)):
-            hit = eng.storage.get_query_cache(normal_cache_key)
+            hit = await eng._run_storage_task(eng.storage.get_query_cache, normal_cache_key)
             if hit is None:
-                hit = eng.storage.get_query_cache(degraded_cache_key)
+                hit = await eng._run_storage_task(eng.storage.get_query_cache, degraded_cache_key)
             if isinstance(hit, dict) and isinstance(hit.get("result"), dict):
                 result = QueryResult.from_dict(hit["result"])
                 result.cache_hit = True
                 return result
 
-        records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
+        records = await eng._run_storage_task(
+            eng.storage.load_bucket_snapshot,
+            bucket_id,
+            include_gray=include_gray,
+        )
         if not records:
             empty = QueryResult(
                 success=True,
@@ -213,7 +215,12 @@ class QueryService:
                 sub_answer="",
                 message="empty",
             )
-            eng.storage.set_query_cache(normal_cache_key, empty.to_dict(), bucket_id=bucket_id)
+            await eng._run_storage_task(
+                eng.storage.set_query_cache,
+                normal_cache_key,
+                empty.to_dict(),
+                bucket_id=bucket_id,
+            )
             return empty
 
         bucket_version = eng.storage.get_bucket_version(bucket_id)
@@ -249,22 +256,6 @@ class QueryService:
                 child = str(rec.child_bucket_id or "").strip()
                 if child:
                     node_key_to_record_key[child] = rec.key
-        alias_fallback_candidates: list[tuple[dict[str, Any], float]] = []
-        alias_miss_build = 0
-        alias_table = eng._alias_table(bucket_id)
-        for rec, score in bm25_ranked:
-            try:
-                record_view = rec.to_dict()
-                if rec.kind == BUCKET_KIND_BUCKET:
-                    child = str(rec.child_bucket_id or "").strip()
-                    if child:
-                        # Keep bucket node alias semantics consistent in degraded/fallback path.
-                        record_view["key"] = child
-                alias_rec = alias_table.encode_tree(record_view, allow_create=False)
-            except AliasPayloadError:
-                alias_miss_build += 1
-                continue
-            alias_fallback_candidates.append((alias_rec, score))
         hint_keys: list[str] = []
         hint_seen: set[str] = set()
         for rec, _score in bm25_ranked:
@@ -277,14 +268,17 @@ class QueryService:
                 break
         if not hint_keys:
             hint_keys = [self._node_view_key(r) for r in records[:50]]
-        alias_key_hints: list[str] = []
-        for key in hint_keys:
-            try:
-                token = alias_table.to_alias(key, allow_create=False)
-            except (AliasPayloadError, ValueError):
-                alias_miss_build += 1
-                continue
-            alias_key_hints.append(token)
+        alias_table = eng._alias_table(bucket_id)
+        (
+            alias_fallback_candidates,
+            alias_key_hints,
+            alias_miss_build,
+        ) = await eng._run_storage_task(
+            self._prepare_alias_candidates_sync,
+            alias_table,
+            tuple(bm25_ranked),
+            tuple(hint_keys),
+        )
         if alias_miss_build > 0:
             eng._enqueue_query_side_effect("record_alias_miss_build", {"count": alias_miss_build})
         query_alias_payload = {
@@ -294,28 +288,26 @@ class QueryService:
             "key_hints": alias_key_hints,
             "hint_count": len(alias_key_hints),
         }
-        query_alias_payload = await eng.prepare_alias_payload(
+        query_alias_payload, map_ver = await eng._prepare_alias_payload_with_version(
             bucket_id,
             query_alias_payload,
         )
-        map_ver = alias_table.map_version()
-        alias_table.assert_safe(query_alias_payload)
         llm_result_alias = await eng.pipeline.query(
-            bucket_context=eng._bucket_context(bucket_id),
+            bucket_context=await eng._bucket_context(bucket_id),
             query_text=str(query_alias_payload.get("query_text", "")),
             top_k=top_k,
             include_gray=include_gray,
             key_hints=list(query_alias_payload.get("key_hints", [])),
             fallback_candidates=alias_fallback_candidates,
         )
-        eng._audit_alias_llm_call(
+        await eng._audit_alias_llm_call(
             tool="query",
             bucket_id=bucket_id,
             map_version=map_ver,
             alias_input=query_alias_payload,
             alias_output=llm_result_alias,
         )
-        llm_result, alias_miss_resolve = self._resolve_query_llm_output(
+        llm_result, alias_miss_resolve = await self._resolve_query_llm_output(
             eng=eng,
             bucket_id=bucket_id,
             llm_result_alias=llm_result_alias,
@@ -336,12 +328,17 @@ class QueryService:
         if eng._is_context_overflow_diag(diag):
             eng._enqueue_query_side_effect("record_overflow_query", {})
         llm_accepted_count = 0
+        negative_weights = await eng._run_storage_task(
+            eng.storage.load_negative_weights,
+            [record.key for record in records],
+        )
         query_matches, llm_accepted_count = self.merge_llm_bm25_matches(
             records=records,
             llm_matches=llm_result.get("matches", []),
             bm25_ranked=bm25_ranked,
             bm25_norm_map=boosted_norm_map,
             top_k=top_k,
+            negative_weights=negative_weights,
         )
 
         final_matches, sub_answer, sub_answer_from = await self.resolve_bucket_matches(
@@ -402,7 +399,45 @@ class QueryService:
         )
         return result
 
-    def _resolve_query_llm_output(
+    @staticmethod
+    def _prepare_alias_candidates_sync(
+        alias_table: Any,
+        bm25_ranked: tuple[tuple[MemoryRecord, float], ...],
+        hint_keys: tuple[str, ...],
+    ) -> tuple[list[tuple[dict[str, Any], float]], list[str], int]:
+        record_views: list[dict[str, Any]] = []
+        for rec, _score in bm25_ranked:
+            record_view = rec.to_dict()
+            if rec.kind == BUCKET_KIND_BUCKET:
+                child = str(rec.child_bucket_id or "").strip()
+                if child:
+                    # Bucket nodes are represented by the child bucket alias.
+                    record_view["key"] = child
+            record_views.append(record_view)
+
+        encoded = alias_table.encode_many(
+            (*record_views, *hint_keys),
+            allow_create=False,
+            strict=False,
+        )
+        fallback_candidates: list[tuple[dict[str, Any], float]] = []
+        alias_hints: list[str] = []
+        misses = 0
+        record_count = len(record_views)
+        for index, (success, value) in enumerate(encoded):
+            if not success:
+                misses += 1
+                continue
+            if index < record_count:
+                if isinstance(value, dict):
+                    fallback_candidates.append((value, bm25_ranked[index][1]))
+                else:
+                    misses += 1
+            else:
+                alias_hints.append(str(value))
+        return fallback_candidates, alias_hints, misses
+
+    async def _resolve_query_llm_output(
         self,
         *,
         eng: Any,
@@ -417,7 +452,16 @@ class QueryService:
         miss = 0
         if not isinstance(raw_matches, list):
             raw_matches = []
-        alias_table = eng._alias_table(bucket_id)
+        aliases = [
+            str(item.get("key", "")).strip()
+            for item in raw_matches
+            if isinstance(item, dict) and looks_like_alias(str(item.get("key", "")).strip())
+        ]
+        resolved_aliases = await eng._resolve_aliases_from_resolved_bucket(
+            bucket_id,
+            aliases,
+            strict=False,
+        )
         for item in raw_matches:
             if not isinstance(item, dict):
                 continue
@@ -427,9 +471,8 @@ class QueryService:
             if not looks_like_alias(raw_key):
                 miss += 1
                 continue
-            try:
-                real_key = alias_table.to_real(raw_key)
-            except Exception:
+            real_key = str(resolved_aliases.get(raw_key, "")).strip()
+            if not real_key:
                 miss += 1
                 continue
             record_key = node_key_to_record_key.get(real_key, real_key)
@@ -454,8 +497,10 @@ class QueryService:
         bm25_ranked: list[tuple[MemoryRecord, float]],
         bm25_norm_map: dict[str, float],
         top_k: int,
+        negative_weights: dict[str, float] | None = None,
     ) -> tuple[list[QueryMatch], int]:
         eng = self.runtime.engine
+        negative_weights = negative_weights or {}
         record_map = {r.key: r for r in records}
         used: set[str] = set()
         merged: list[QueryMatch] = []
@@ -483,12 +528,20 @@ class QueryService:
                     llm_score = 0.0
                     local_score = raw_item_score
                     local_fused = _clamp_score(0.7 * bm_score + 0.3 * local_score)
-                    final = eng._apply_negative_weight_adjust(key, local_fused)
+                    final = eng._apply_negative_weight_adjust(
+                        key,
+                        local_fused,
+                        negative_weight=negative_weights.get(key, 0.0),
+                    )
                     final = min(0.6, _clamp_score(final))
                 else:
                     llm_score = raw_item_score
                     final = _clamp_score(0.85 * llm_score + 0.15 * bm_score)
-                    final = eng._apply_negative_weight_adjust(key, final)
+                    final = eng._apply_negative_weight_adjust(
+                        key,
+                        final,
+                        negative_weight=negative_weights.get(key, 0.0),
+                    )
                 merged.append(
                     QueryMatch(
                         key=key,
@@ -510,7 +563,11 @@ class QueryService:
                 continue
             bm_norm = _clamp_score(float(bm25_norm_map.get(rec.key, 0.0)))
             supplement = min(0.5, bm_norm * 0.5)
-            supplement = eng._apply_negative_weight_adjust(rec.key, supplement)
+            supplement = eng._apply_negative_weight_adjust(
+                rec.key,
+                supplement,
+                negative_weight=negative_weights.get(rec.key, 0.0),
+            )
             merged.append(
                 QueryMatch(
                     key=rec.key,
@@ -560,8 +617,15 @@ class QueryService:
         parent_candidate_limit = max(1, int(parent_top_k))
         bucket_parent_limit = 1 if depth > 1 else parent_candidate_limit
         bucket_candidates: list[tuple[QueryMatch, str]] = []
+        parent_records = {
+            record.key: record
+            for record in await eng._run_storage_task(
+                eng.storage.load_records_for_keys,
+                [match.key for match in query_matches[:parent_candidate_limit]],
+            )
+        }
         for match in query_matches[:parent_candidate_limit]:
-            rec = eng.storage.get_record(match.key)
+            rec = parent_records.get(match.key)
             if rec is None:
                 continue
             if rec.kind == BUCKET_KIND_BUCKET and rec.child_bucket_id and depth < depth_limit:
@@ -651,9 +715,16 @@ class QueryService:
                 return None
 
             branch_candidates = list(child.matches[:branch_expand_k])
+            branch_records = {
+                record.key: record
+                for record in await eng._run_storage_task(
+                    eng.storage.load_records_for_keys,
+                    [candidate.key for candidate in branch_candidates],
+                )
+            }
             memory_candidates: list[QueryMatch] = []
             for candidate in branch_candidates:
-                rec = eng.storage.get_record(candidate.key)
+                rec = branch_records.get(candidate.key)
                 if rec is not None and rec.kind == BUCKET_KIND_MEMORY:
                     memory_candidates.append(candidate)
 
@@ -661,7 +732,7 @@ class QueryService:
             if not selected_candidates and depth + 1 >= depth_limit:
                 bucket_candidate = None
                 for candidate in branch_candidates:
-                    rec = eng.storage.get_record(candidate.key)
+                    rec = branch_records.get(candidate.key)
                     if rec is not None and rec.kind == BUCKET_KIND_BUCKET:
                         bucket_candidate = candidate
                         break
@@ -670,16 +741,14 @@ class QueryService:
             if not selected_candidates:
                 return None
 
-            branch_top_score = float(selected_candidates[0].score)
-            branch_floor = max(_BRANCH_MIN_ABS_SCORE, branch_top_score * _BRANCH_MIN_RELATIVE_SCORE)
             merged_matches: list[QueryMatch] = []
             best_merged_score = -1.0
             best_key = str(selected_candidates[0].key)
-            for idx, child_match in enumerate(selected_candidates):
-                if idx > 0 and float(child_match.score) < branch_floor:
-                    continue
+            for child_match in selected_candidates:
+                # Parent route confidence acts as upper-bound guidance; child refines inside-route ranking.
                 merged_score = _clamp_score(
-                    (_BRANCH_PARENT_WEIGHT * parent_match.score + _BRANCH_CHILD_WEIGHT * child_match.score)
+                    float(parent_match.score)
+                    * (_BRANCH_PARENT_WEIGHT + _BRANCH_CHILD_WEIGHT * float(child_match.score))
                 )
                 merged_match = QueryMatch(
                     key=child_match.key,
@@ -805,11 +874,14 @@ class QueryService:
             scanned.append(bucket_id)
             if depth >= max(1, int(depth_limit)):
                 continue
-            records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
-            for rec in records:
-                if rec.kind != BUCKET_KIND_BUCKET:
+            nodes = eng.storage.runtime_index_nodes_for_bucket(
+                bucket_id,
+                include_gray=include_gray,
+            )
+            for node in nodes:
+                if str(node.get("kind", "")) != BUCKET_KIND_BUCKET:
                     continue
-                child = str(rec.child_bucket_id or "").strip()
+                child = str(node.get("child_bucket_id", "") or "").strip()
                 if not child:
                     continue
                 try:
@@ -821,10 +893,15 @@ class QueryService:
 
         record_boost: dict[str, float] = {}
         bucket_boost: dict[str, float] = {}
+        records_by_bucket = await eng._run_storage_task(
+            eng.storage.load_buckets_snapshot,
+            scanned,
+            include_gray=include_gray,
+        )
         for bucket_id in scanned:
             if time.perf_counter() - start > time_budget_sec:
                 break
-            records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
+            records = records_by_bucket.get(bucket_id, [])
             if not records:
                 continue
             bucket_version = eng.storage.get_bucket_version(bucket_id)

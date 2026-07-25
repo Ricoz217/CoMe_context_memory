@@ -5,9 +5,11 @@ import copy
 import json
 import re
 import threading
+from collections import ChainMap
 from collections.abc import Iterable
 from dataclasses import dataclass
 from hashlib import sha256
+from types import MappingProxyType
 from typing import Any
 
 
@@ -80,12 +82,13 @@ def validate_alias_map_payload(
     *,
     bucket_id: str | None = None,
     normalize_metadata: bool = False,
+    _copy_payload: bool = True,
 ) -> tuple[dict[str, Any], bool]:
     """Validate an alias map and optionally repair metadata without changing mappings."""
     if not isinstance(payload, dict):
         raise AliasPayloadError("invalid alias map structure")
 
-    normalized = copy.deepcopy(payload)
+    normalized = copy.deepcopy(payload) if _copy_payload else payload
     changed = False
     real_to_alias = normalized.get("real_to_alias")
     alias_to_real = normalized.get("alias_to_real")
@@ -242,6 +245,10 @@ class AliasTable:
         resolved: dict[str, str] = {}
         seen: set[str] = set()
         with self._lock:
+            amap: dict[str, Any] | None = None
+            if self._supports_transactions():
+                amap = self.storage.load_alias_map(self.bucket_id)
+                self._validate_map(amap)
             for alias in aliases:
                 token = str(alias or "").strip()
                 if not token:
@@ -252,7 +259,10 @@ class AliasTable:
                     continue
                 seen.add(token)
                 try:
-                    real_id = self.storage.resolve_alias(self.bucket_id, token, expected_type)
+                    if amap is not None:
+                        real_id = self._real_from_map(token, amap, expected_type=expected_type)
+                    else:
+                        real_id = self.storage.resolve_alias(self.bucket_id, token, expected_type)
                 except (KeyError, TypeError):
                     if strict:
                         raise
@@ -296,6 +306,82 @@ class AliasTable:
             )
         self.assert_safe(encoded)
         return encoded
+
+    def encode_tree_with_version(
+        self,
+        value: Any,
+        *,
+        allow_create: bool = True,
+        map_version: int | None = None,
+    ) -> tuple[Any, int]:
+        """Encode one value and return the exact committed map version."""
+        with self._lock:
+            encoded, committed_version = self._encode_tree_transaction_with_version(
+                value,
+                allow_create=allow_create,
+                map_version=map_version,
+            )
+        self.assert_safe(encoded)
+        return encoded, committed_version
+
+    def encode_many(
+        self,
+        values: Iterable[Any],
+        *,
+        allow_create: bool = True,
+        strict: bool = True,
+        map_version: int | None = None,
+    ) -> tuple[tuple[bool, Any], ...]:
+        """Encode many independent values against one alias-map snapshot."""
+        if isinstance(values, (str, bytes)):
+            raise TypeError("values must be an iterable, not a string")
+        if allow_create and not strict:
+            raise ValueError("best-effort alias encoding cannot allocate new aliases")
+        batch = tuple(values)
+        with self._lock:
+            if not self._supports_transactions():
+                results: list[tuple[bool, Any]] = []
+                for value in batch:
+                    try:
+                        encoded = self._encode_with_callbacks(value, allow_create=allow_create)
+                    except (AliasPayloadError, ValueError):
+                        if strict:
+                            raise
+                        results.append((False, None))
+                        continue
+                    results.append((True, encoded))
+            else:
+                original = self.storage.load_alias_map(self.bucket_id)
+                self._validate_map(original)
+                self._assert_map_version(original, map_version)
+                transaction = self._new_delta_transaction(original)
+                added = [0]
+                results = []
+                for value in batch:
+                    try:
+                        encoded = self._encode_value(
+                            value,
+                            transaction,
+                            allow_create=allow_create,
+                            added=added,
+                        )
+                    except (AliasPayloadError, ValueError):
+                        if strict:
+                            raise
+                        results.append((False, None))
+                        continue
+                    results.append((True, encoded))
+                if added[0] > 0:
+                    snapshot = self._materialize_delta(original, transaction)
+                    commit = getattr(self.storage, "commit_alias_map", None)
+                    if callable(commit):
+                        commit(self.bucket_id, snapshot)
+                    else:
+                        self.storage.save_alias_map(self.bucket_id, snapshot)
+        for success, encoded in results:
+            if success:
+                self.assert_safe(encoded)
+        return tuple(results)
 
     def decode_tree(
         self,
@@ -357,7 +443,7 @@ class AliasTable:
 
     def snapshot_hash(self) -> str:
         with self._lock:
-            amap = copy.deepcopy(self.storage.load_alias_map(self.bucket_id))
+            amap = self.storage.load_alias_map(self.bucket_id)
             self._validate_map(amap)
             return stable_payload_hash(amap)
 
@@ -375,28 +461,104 @@ class AliasTable:
         forced_type: str | None = None,
         map_version: int | None = None,
     ) -> Any:
+        encoded, _ = self._encode_tree_transaction_with_version(
+            value,
+            allow_create=allow_create,
+            forced_type=forced_type,
+            map_version=map_version,
+        )
+        return encoded
+
+    def _encode_tree_transaction_with_version(
+        self,
+        value: Any,
+        *,
+        allow_create: bool = True,
+        forced_type: str | None = None,
+        map_version: int | None = None,
+    ) -> tuple[Any, int]:
         if not self._supports_transactions():
-            return self._encode_with_callbacks(value, allow_create=allow_create, forced_type=forced_type)
+            encoded = self._encode_with_callbacks(value, allow_create=allow_create, forced_type=forced_type)
+            return encoded, int(self.storage.alias_map_version(self.bucket_id))
 
         original = self.storage.load_alias_map(self.bucket_id)
-        snapshot = copy.deepcopy(original)
-        self._validate_map(snapshot)
-        self._assert_map_version(snapshot, map_version)
+        self._validate_map(original)
+        self._assert_map_version(original, map_version)
+        transaction = self._new_delta_transaction(original)
         added = [0]
         encoded = self._encode_value(
             value,
-            snapshot,
+            transaction,
             allow_create=allow_create,
             added=added,
             forced_type=forced_type,
         )
         if added[0] > 0:
+            snapshot = self._materialize_delta(original, transaction)
             commit = getattr(self.storage, "commit_alias_map", None)
             if callable(commit):
                 commit(self.bucket_id, snapshot)
             else:
                 self.storage.save_alias_map(self.bucket_id, snapshot)
-        return encoded
+            committed_version = int(snapshot.get("map_version", 1))
+        else:
+            committed_version = int(original.get("map_version", 1))
+        return encoded, committed_version
+
+    @staticmethod
+    def _new_delta_transaction(original: dict[str, Any]) -> dict[str, Any]:
+        """Create a copy-on-write view backed by small pending dictionaries."""
+        return {
+            "bucket_id": original.get("bucket_id", ""),
+            "map_version": int(original.get("map_version", 1)),
+            "sealed": bool(original.get("sealed", False)),
+            "real_to_alias": ChainMap(
+                {},
+                MappingProxyType(original["real_to_alias"]),
+            ),
+            "alias_to_real": ChainMap(
+                {},
+                MappingProxyType(original["alias_to_real"]),
+            ),
+            "counters": dict(original["counters"]),
+            "updated_at": original.get("updated_at", ""),
+        }
+
+    @staticmethod
+    def _materialize_delta(
+        original: dict[str, Any],
+        transaction: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build the complete JSON document once, only for a real commit."""
+        snapshot = dict(original)
+        snapshot["real_to_alias"] = dict(transaction["real_to_alias"])
+        snapshot["alias_to_real"] = dict(transaction["alias_to_real"])
+        snapshot["counters"] = dict(transaction["counters"])
+        snapshot["map_version"] = int(transaction.get("map_version", 1))
+        return snapshot
+
+    def _real_from_map(
+        self,
+        alias: str,
+        amap: dict[str, Any],
+        *,
+        expected_type: str | None = None,
+    ) -> str:
+        raw = amap["alias_to_real"].get(alias)
+        if not isinstance(raw, dict):
+            raise KeyError(f"unknown alias={alias} in bucket={self.bucket_id}")
+        key_type = str(raw.get("key_type", "")).strip().lower()
+        real_id = str(raw.get("real_key", "")).strip()
+        expected = _normalize_key_type(expected_type) if expected_type else None
+        if expected and key_type != expected:
+            raise TypeError(
+                f"alias type mismatch: alias={alias}, expected={expected}, got={key_type}"
+            )
+        if key_type != KEY_TYPE_REF and infer_real_key_type(real_id) != key_type:
+            raise ValueError(f"invalid mapped real key for alias={alias}")
+        if key_type == KEY_TYPE_REF and not real_id:
+            raise ValueError(f"invalid mapped real key for alias={alias}")
+        return real_id
 
     def _decode_value(self, value: Any, amap: dict[str, Any], *, strict_unknown: bool) -> Any:
         if isinstance(value, dict):
@@ -539,7 +701,7 @@ class AliasTable:
 
     @staticmethod
     def _validate_map(amap: dict[str, Any]) -> None:
-        validate_alias_map_payload(amap)
+        validate_alias_map_payload(amap, _copy_payload=False)
 
     def _find_leak(self, value: Any, path: str) -> str:
         if isinstance(value, dict):
