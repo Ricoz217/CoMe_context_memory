@@ -71,7 +71,7 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 return Prompts(TextPrompt("assistant", "ok"))
 
             async def _run() -> None:
-                svc = eng._advance_query_service
+                svc = eng._advance
                 with (
                     patch.object(svc, "_advance_llm_request", side_effect=_fake_request),
                     patch.object(svc, "_advance_count_tokens_exact", return_value=1),
@@ -110,8 +110,8 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 return Prompts(TextPrompt("assistant", "ok"))
 
             async def _run() -> None:
-                svc = eng._advance_query_service
-                eng._begin_alias_session()
+                svc = eng._advance
+                eng._alias.begin_session()
                 try:
                     with patch.object(svc, "_advance_llm_request", side_effect=_fake_request):
                         await svc._advance_execute_chunks(
@@ -133,7 +133,7 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                             audit=False,
                         )
                 finally:
-                    eng._end_alias_session()
+                    eng._alias.end_session()
 
             asyncio.run(_run())
             self.assertEqual(len(captured), 1)
@@ -155,7 +155,7 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 return Prompts(TextPrompt("assistant", "ok"))
 
             async def _run() -> None:
-                svc = eng._advance_query_service
+                svc = eng._advance
                 with (
                     patch.object(svc, "_advance_count_tokens_exact", side_effect=_count),
                     patch.object(svc, "_advance_llm_request", side_effect=_fake_request),
@@ -167,7 +167,7 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
             self.assertEqual(len(sent), 1)
             self.assertEqual(
                 counted[0],
-                eng._advance_query_service._advance_combine_request_markdown(
+                eng._advance._advance_combine_request_markdown(
                     system_text=sent[0][0],
                     user_markdown=sent[0][1],
                 ),
@@ -188,9 +188,9 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 return value
 
             async def _run() -> None:
-                svc = eng._advance_query_service
+                svc = eng._advance
                 with (
-                    patch.object(eng, "prepare_alias_payload", side_effect=_unsafe_prepare),
+                    patch.object(eng._alias, "prepare_alias_payload", side_effect=_unsafe_prepare),
                     patch.object(svc, "_advance_llm_request", side_effect=_fake_request),
                     patch.object(svc, "_advance_count_tokens_exact", return_value=1),
                 ):

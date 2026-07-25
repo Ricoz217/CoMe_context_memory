@@ -19,7 +19,7 @@ def _engine(tmp_path: Path) -> ContextMemoryEngineV3:
             auto_resume_pending_jobs=False,
         )
     )
-    engine._negative_delete_threshold = 1.1
+    engine._runtime._negative_delete_threshold = 1.1
     return engine
 
 

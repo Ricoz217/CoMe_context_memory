@@ -117,7 +117,7 @@ async def _test_child_successor_replaces_parent_title_target(tmp_path: Path) -> 
     source = await parent.set_bucket("child")
     successor = await parent.create_bucket(title="child-successor")
 
-    await engine._seal_bucket_unlocked(
+    await engine._topology._seal_bucket_unlocked(
         source_bucket_id=source.bucket_id,
         successor_bucket_id=successor.bucket_id,
     )
@@ -144,7 +144,7 @@ async def _test_parent_successor_inherits_child_title_map(tmp_path: Path) -> Non
         preserve_old_title_map=True,
     )
 
-    await engine._seal_bucket_unlocked(
+    await engine._topology._seal_bucket_unlocked(
         source_bucket_id=source.bucket_id,
         successor_bucket_id=successor.bucket_id,
     )
@@ -164,7 +164,7 @@ async def _test_parent_successor_inherits_child_title_map(tmp_path: Path) -> Non
         new_parent_bucket_id=second.bucket_id,
         preserve_old_title_map=True,
     )
-    await engine._seal_bucket_unlocked(
+    await engine._topology._seal_bucket_unlocked(
         source_bucket_id=successor.bucket_id,
         successor_bucket_id=second.bucket_id,
     )
@@ -195,7 +195,7 @@ async def _test_root_successor_inherits_child_title_map(tmp_path: Path) -> None:
         preserve_old_title_map=True,
     )
 
-    await engine._seal_bucket_unlocked(source_bucket_id=root_id, successor_bucket_id=successor.bucket_id)
+    await engine._topology._seal_bucket_unlocked(source_bucket_id=root_id, successor_bucket_id=successor.bucket_id)
 
     routed = await engine.set_bucket("member")
     assert routed.bucket_id == child.bucket_id
@@ -258,7 +258,7 @@ async def _test_gc_removes_deleted_bucket_title_map_and_inbound_refs(tmp_path: P
         new_parent_bucket_id=successor.bucket_id,
         preserve_old_title_map=True,
     )
-    await engine._seal_bucket_unlocked(
+    await engine._topology._seal_bucket_unlocked(
         source_bucket_id=source.bucket_id,
         successor_bucket_id=successor.bucket_id,
     )
@@ -266,7 +266,7 @@ async def _test_gc_removes_deleted_bucket_title_map_and_inbound_refs(tmp_path: P
     tree["buckets"][source.bucket_id]["updated_at"] = "2000-01-01T00:00:00+00:00"
     assert engine.storage.repository is not None
     engine.storage.repository.save_tree_snapshot(tree)
-    engine._gc_archived_bucket_retention_days = 1
+    engine._runtime._gc_archived_bucket_retention_days = 1
 
     result = await engine.gc_storage(dry_run=False, reason="title-map-test")
 

@@ -69,7 +69,7 @@ async def _test_non_empty_optimize_applies_successor_rebuild(tmp_path: Path) -> 
     try:
         old_root = engine.root_bucket_id()
         record = _record(engine, old_root, "optimize-me")
-        await engine._run_storage_task(engine.storage.write_memory_record, record)
+        await engine._runtime.run_storage_task(engine.storage.write_memory_record, record)
         llm_plan = {
             "skip_optimize": False,
             "parent_flat_keys": ["memory_1"],
@@ -109,12 +109,12 @@ async def _test_global_recall_loads_all_scanned_buckets_in_one_batch(tmp_path: P
     try:
         root = engine.root_bucket_id()
         child = await engine.create_bucket(root, title="child", summary="child")
-        await engine._run_storage_task(engine.storage.write_memory_record, _record(engine, root, "root-memory"))
-        await engine._run_storage_task(
+        await engine._runtime.run_storage_task(engine.storage.write_memory_record, _record(engine, root, "root-memory"))
+        await engine._runtime.run_storage_task(
             engine.storage.write_memory_record,
             _record(engine, child.bucket_id, "child-memory"),
         )
-        service = engine._query_service
+        service = engine._query
         original_batch = engine.storage.load_buckets_snapshot
         with (
             patch.object(engine.storage, "load_buckets_snapshot", wraps=original_batch) as batch_loader,

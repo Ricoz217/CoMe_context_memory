@@ -62,7 +62,7 @@ def test_transactional_batch_resolve_loads_one_alias_snapshot(tmp_path: Path) ->
     engine = _create_engine(tmp_path / "store")
     try:
         root = engine.root_bucket_id()
-        table = engine._alias_table(root)
+        table = engine._alias._alias_table(root)
         real_ids = [engine.storage.generate_key() for _ in range(12)]
         aliases = [table.to_alias(real_id) for real_id in real_ids]
         original_load = engine.storage.load_alias_map
@@ -80,7 +80,7 @@ def test_alias_write_transaction_uses_delta_without_deepcopy(tmp_path: Path) -> 
     engine = _create_engine(tmp_path / "store")
     try:
         root = engine.root_bucket_id()
-        table = engine._alias_table(root)
+        table = engine._alias._alias_table(root)
         real_ids = [engine.storage.generate_key() for _ in range(8)]
         original_commit = engine.storage.commit_alias_map
 
@@ -115,7 +115,7 @@ async def _test_query_alias_work_is_batched_and_never_blocks_event_loop(tmp_path
         root = engine.root_bucket_id()
         records = [_record(engine, root, index) for index in range(16)]
         for record in records:
-            await engine._run_storage_task(engine.storage.write_memory_record, record)
+            await engine._runtime.run_storage_task(engine.storage.write_memory_record, record)
 
         prepared = await engine.prepare_alias_payload(
             root,

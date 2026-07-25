@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from context_memory.LLM_connect import Chat, Prompts, SystemPrompt, TextPrompt, ToolInput, parse_llm_setting
 
 from ..models import BUCKET_KIND_BUCKET, BUCKET_KIND_MEMORY, BucketInfo, MemoryRecord
-from .runtime import ServiceRuntime
+if TYPE_CHECKING:
+    from ..engine_runtime import EngineRuntime
 
 
 ADVANCE_QUERY_MODE_SINGLE_SHOT = "single_shot"
@@ -20,8 +21,24 @@ ADVANCE_QUERY_DEFAULT_SYSTEM_PROMPT = (
 
 
 class AdvanceQueryService:
-    def __init__(self, runtime: ServiceRuntime) -> None:
+    def __init__(
+        self,
+        runtime: "EngineRuntime",
+        *,
+        alias: Callable[[], Any],
+        topology: Callable[[], Any],
+    ) -> None:
         self.runtime = runtime
+        self._alias_provider = alias
+        self._topology_provider = topology
+
+    @property
+    def alias(self) -> Any:
+        return self._alias_provider()
+
+    @property
+    def topology(self) -> Any:
+        return self._topology_provider()
 
     async def advance_query(
         self,
@@ -38,19 +55,19 @@ class AdvanceQueryService:
         audit: bool = False,
         max_parallel_chunks: int | None = None,
     ) -> Prompts:
-        eng = self.runtime.engine
+        rt = self.runtime
         mode_value = self._normalize_advance_query_mode(mode)
         target_bucket_id = str(bucket_id or "").strip()
         system_text = self._advance_resolve_system_prompt_text(system_prompt)
-        threshold_tokens = max(1, int(eng.max_context_window * ADVANCE_QUERY_OVERFLOW_RATIO))
+        threshold_tokens = max(1, int(rt.max_context_window * ADVANCE_QUERY_OVERFLOW_RATIO))
         parallel_limit = max(
             1,
-            int(max_parallel_chunks if max_parallel_chunks is not None else eng._split_ingest_parallelism),
+            int(max_parallel_chunks if max_parallel_chunks is not None else rt._split_ingest_parallelism),
         )
         if max_expand_depth is not None and int(max_expand_depth) < 0:
             raise ValueError("max_expand_depth must be >= 0 or None")
 
-        eng._begin_alias_session()
+        self.alias.begin_session()
         try:
             target_bucket_id, root_node, full_payload = await self._advance_collect_bucket_snapshot(
                 bucket_id=target_bucket_id,
@@ -138,7 +155,7 @@ class AdvanceQueryService:
             )
             raise
         finally:
-            eng._end_alias_session(flush=True)
+            self.alias.end_session(flush=True)
 
     def _normalize_advance_query_mode(self, mode: str) -> str:
         token = str(mode or "").strip().lower()
@@ -194,8 +211,8 @@ class AdvanceQueryService:
         visited: set[str],
     ) -> dict[str, Any]:
         """Compatibility facade for callers that still need the synchronous collector."""
-        eng = self.runtime.engine
-        tree = eng.storage.topology_snapshot()
+        rt = self.runtime
+        tree = rt.storage.topology_snapshot()
         resolved_bucket_id = self._advance_resolve_bucket_from_tree(bucket_id, tree)
         records_by_bucket = self._advance_collect_subtree_index_nodes(
             bucket_id=resolved_bucket_id,
@@ -220,7 +237,7 @@ class AdvanceQueryService:
         include_gray: bool,
         max_expand_depth: int | None,
     ) -> tuple[str, dict[str, Any], dict[str, Any]]:
-        return await self.runtime.engine._run_storage_task(
+        return await self.runtime.run_storage_task(
             self._advance_collect_bucket_snapshot_sync,
             bucket_id=bucket_id,
             include_gray=include_gray,
@@ -234,8 +251,8 @@ class AdvanceQueryService:
         include_gray: bool,
         max_expand_depth: int | None,
     ) -> tuple[str, dict[str, Any], dict[str, Any]]:
-        eng = self.runtime.engine
-        tree = eng.storage.topology_snapshot()
+        rt = self.runtime
+        tree = rt.storage.topology_snapshot()
         resolved_bucket_id = self._advance_resolve_bucket_from_tree(bucket_id, tree)
         records_by_bucket = self._advance_collect_subtree_index_nodes(
             bucket_id=resolved_bucket_id,
@@ -263,7 +280,7 @@ class AdvanceQueryService:
         tree: dict[str, Any],
     ) -> dict[str, list[dict[str, Any]]]:
         """Read only compact locator nodes belonging to the requested subtree."""
-        eng = self.runtime.engine
+        rt = self.runtime
         buckets = tree.get("buckets", {})
         if not isinstance(buckets, dict):
             buckets = {}
@@ -275,7 +292,7 @@ class AdvanceQueryService:
             if current in visited or current not in buckets:
                 continue
             visited.add(current)
-            nodes = eng.storage.runtime_index_nodes_for_bucket(
+            nodes = rt.storage.runtime_index_nodes_for_bucket(
                 current,
                 include_gray=include_gray,
             )
@@ -342,7 +359,7 @@ class AdvanceQueryService:
         tree: dict[str, Any],
         records_by_bucket: dict[str, list[dict[str, Any]]],
     ) -> dict[str, Any]:
-        eng = self.runtime.engine
+        rt = self.runtime
         buckets = tree.get("buckets", {})
         if not isinstance(buckets, dict):
             buckets = {}
@@ -361,7 +378,7 @@ class AdvanceQueryService:
                     continue
                 if not include_gray and bool(index_node.get("gray", False)):
                     continue
-                rec = eng.storage.load_record_from_index_node(index_node)
+                rec = rt.storage.load_record_from_index_node(index_node)
                 if rec is None or rec.kind != BUCKET_KIND_MEMORY or rec.bucket_id != bucket_id:
                     continue
                 if not include_gray and rec.gray:
@@ -469,7 +486,7 @@ class AdvanceQueryService:
     ) -> tuple[str, str, dict[str, Any]]:
         if not enable_aliasing:
             return str(system_text), str(command), raw_payload
-        prepared = await self.runtime.engine.prepare_alias_payload(
+        prepared = await self.alias.prepare_alias_payload(
             alias_bucket_id,
             {
                 "system_text": str(system_text),
@@ -492,13 +509,13 @@ class AdvanceQueryService:
         user_markdown: str,
     ) -> None:
         if enable_aliasing:
-            await self.runtime.engine._assert_alias_payload_safe(
+            await self.alias._assert_alias_payload_safe(
                 alias_bucket_id,
                 {"system_text": system_text, "user_markdown": user_markdown}
             )
 
     async def _advance_count_tokens_exact(self, text: str) -> int:
-        return await asyncio.to_thread(self.runtime.engine.token_counter.count_text, text)
+        return await asyncio.to_thread(self.runtime.token_counter.count_text, text)
 
     async def _advance_prepare_payload_for_llm(
         self,
@@ -507,10 +524,9 @@ class AdvanceQueryService:
         alias_bucket_id: str,
         enable_aliasing: bool,
     ) -> dict[str, Any]:
-        eng = self.runtime.engine
         if not enable_aliasing:
             return raw_payload
-        return await eng.prepare_alias_payload(alias_bucket_id, raw_payload)
+        return await self.alias.prepare_alias_payload(alias_bucket_id, raw_payload)
 
     async def _advance_payload_tokens(
         self,
@@ -543,13 +559,13 @@ class AdvanceQueryService:
         allow_tools: bool,
         alias_bucket_id: str | None = None,
     ) -> Prompts:
-        eng = self.runtime.engine
+        rt = self.runtime
         if alias_bucket_id:
-            await eng._assert_alias_payload_safe(
+            await self.alias._assert_alias_payload_safe(
                 alias_bucket_id,
                 {"system_text": system_text, "user_markdown": user_markdown}
             )
-        preset = str(llm_preset or eng.llm_preset or "CONTEXT_MEMORY").strip()
+        preset = str(llm_preset or rt.llm_preset or "CONTEXT_MEMORY").strip()
         last_error: Exception | None = None
         for _ in range(2):
             chat = Chat(keep_alive=False)
@@ -566,7 +582,7 @@ class AdvanceQueryService:
                     chat.add_context(SystemPrompt(str(system_text).strip()))
                 if allow_tools and tool_input is not None:
                     chat.add_tools(tool_input)
-                response = await chat.ask(TextPrompt("user", user_markdown), timeout=eng.pipeline.ask_timeout)
+                response = await chat.ask(TextPrompt("user", user_markdown), timeout=rt.pipeline.ask_timeout)
                 if response is None:
                     raise RuntimeError("llm returned empty response")
                 return response
@@ -1058,12 +1074,12 @@ class AdvanceQueryService:
         bucket_id: str,
         payload: dict[str, Any],
     ) -> None:
-        eng = self.runtime.engine
+        rt = self.runtime
         if not enabled:
             return
         try:
-            await eng._run_storage_task(
-                eng.storage.append_event,
+            await rt.run_storage_task(
+                rt.storage.append_event,
                 event_type=event_type,
                 bucket_id=bucket_id,
                 payload=dict(payload),

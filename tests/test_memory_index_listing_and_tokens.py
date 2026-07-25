@@ -35,7 +35,7 @@ async def _test_list_memories_returns_index_result_without_loading_revisions(tmp
     handle = await engine.set_bucket("index-list")
     direct = await handle.add_memory("direct memory")
     child = await handle.create_bucket(title="child")
-    child_handle = engine._bucket_handle_cls(engine, child.bucket_id)
+    child_handle = memory_engine.BucketHandle(engine, child.bucket_id)
     nested = await child_handle.add_memory("nested memory")
 
     with patch.object(
@@ -158,7 +158,7 @@ async def _test_subtree_count_respects_gray_nodes_successors_and_cycles(tmp_path
     await root.set_gray(direct_gray.key, gray=True)
 
     old_child = await root.create_bucket(title="old child")
-    old_handle = engine._bucket_handle_cls(engine, old_child.bucket_id)
+    old_handle = memory_engine.BucketHandle(engine, old_child.bucket_id)
     old_memory = await old_handle.add_memory("old child memory")
     child_node = next(item for item in (await root.list_memories()).buckets if item.child_bucket_id == old_child.bucket_id)
 
@@ -174,9 +174,9 @@ async def _test_subtree_count_respects_gray_nodes_successors_and_cycles(tmp_path
     await root.set_gray(child_node.key, gray=False)
 
     successor = await root.create_bucket(title="successor")
-    successor_handle = engine._bucket_handle_cls(engine, successor.bucket_id)
+    successor_handle = memory_engine.BucketHandle(engine, successor.bucket_id)
     successor_memory = await successor_handle.add_memory("successor memory")
-    await engine._run_storage_task(
+    await engine._runtime.run_storage_task(
         engine.storage.seal_bucket_successor,
         source_bucket_id=old_child.bucket_id,
         successor_bucket_id=successor.bucket_id,

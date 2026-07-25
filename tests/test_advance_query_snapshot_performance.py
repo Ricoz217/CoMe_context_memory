@@ -27,9 +27,9 @@ async def _build_tree(engine):
     nested = await engine.create_bucket(target.bucket_id, title="nested", summary="nested")
     unrelated = await engine.create_bucket(root, title="unrelated", summary="unrelated")
 
-    target_handle = engine._bucket_handle_cls(engine, target.bucket_id)
-    nested_handle = engine._bucket_handle_cls(engine, nested.bucket_id)
-    unrelated_handle = engine._bucket_handle_cls(engine, unrelated.bucket_id)
+    target_handle = memory_engine.BucketHandle(engine, target.bucket_id)
+    nested_handle = memory_engine.BucketHandle(engine, nested.bucket_id)
+    unrelated_handle = memory_engine.BucketHandle(engine, unrelated.bucket_id)
     await target_handle.add_memory("target memory")
     await nested_handle.add_memory("nested memory")
     await unrelated_handle.add_memory("unrelated memory")
@@ -43,7 +43,7 @@ def test_advance_snapshot_reads_indexes_once_and_only_target_revisions(tmp_path:
 async def _test_advance_snapshot_reads_indexes_once_and_only_target_revisions(tmp_path: Path) -> None:
     engine = _create_engine(tmp_path / "store")
     target_bucket = await _build_tree(engine)
-    service = engine._advance_query_service
+    service = engine._advance
     event_loop_thread = threading.get_ident()
     worker_threads: list[int] = []
 
@@ -96,7 +96,7 @@ def test_advance_snapshot_slow_io_does_not_block_event_loop(tmp_path: Path) -> N
 async def _test_advance_snapshot_slow_io_does_not_block_event_loop(tmp_path: Path) -> None:
     engine = _create_engine(tmp_path / "store")
     target_bucket = await _build_tree(engine)
-    service = engine._advance_query_service
+    service = engine._advance
     original_record = engine.storage.load_record_from_index_node
 
     def slow_record(node):
@@ -132,7 +132,7 @@ def test_advance_query_entrypoint_never_uses_global_record_scan(tmp_path: Path) 
 async def _test_advance_query_entrypoint_never_uses_global_record_scan(tmp_path: Path) -> None:
     engine = _create_engine(tmp_path / "store")
     target_bucket = await _build_tree(engine)
-    service = engine._advance_query_service
+    service = engine._advance
 
     async def fake_request(**_kwargs):
         return Prompts(TextPrompt("assistant", "ok"))

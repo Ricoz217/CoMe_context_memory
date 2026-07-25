@@ -76,7 +76,7 @@ class AdvanceQueryTests(unittest.TestCase):
             eng.storage.write_memory_record(rec_z)
             eng.storage.write_memory_record(rec_a)
 
-            svc = eng._advance_query_service
+            svc = eng._advance
             node1 = svc._advance_collect_bucket_tree(
                 bucket_id=root,
                 include_gray=False,
@@ -110,7 +110,7 @@ class AdvanceQueryTests(unittest.TestCase):
     def test_single_shot_overflow_raises(self) -> None:
         with _temporary_engine() as eng:
             threshold = int(eng.max_context_window * 0.8)
-            with patch.object(eng._advance_query_service, "_advance_count_tokens_exact", return_value=threshold + 1):
+            with patch.object(eng._advance, "_advance_count_tokens_exact", return_value=threshold + 1):
                 with self.assertRaises(RuntimeError):
                     asyncio.run(
                         eng.advance_query(
@@ -135,12 +135,12 @@ class AdvanceQueryTests(unittest.TestCase):
             chunk_specs = [
                 {"label": f"{root} chunk 1/1", "source": [f"{root}_memories"], "content": {"k1": {"content": "v1"}}}
             ]
-            with patch.object(eng._advance_query_service, "_advance_llm_request", side_effect=_fake_llm_request):
+            with patch.object(eng._advance, "_advance_llm_request", side_effect=_fake_llm_request):
                 chunk_items = asyncio.run(
-                    eng._advance_query_service._advance_execute_chunks(
+                    eng._advance._advance_execute_chunks(
                         chunk_specs=chunk_specs,
                         bucket_id=root,
-                        bucket_metadata=eng._advance_query_service._advance_bucket_metadata(info),
+                        bucket_metadata=eng._advance._advance_bucket_metadata(info),
                         command="cmd",
                         system_text="sys",
                         llm_preset=None,
@@ -155,13 +155,13 @@ class AdvanceQueryTests(unittest.TestCase):
             calls.clear()
             tool = ToolInput(lambda: "ok", "noop")
             with (
-                patch.object(eng._advance_query_service, "_advance_llm_request", side_effect=_fake_llm_request),
-                patch.object(eng._advance_query_service, "_advance_payload_tokens", return_value=100),
+                patch.object(eng._advance, "_advance_llm_request", side_effect=_fake_llm_request),
+                patch.object(eng._advance, "_advance_payload_tokens", return_value=100),
             ):
                 asyncio.run(
-                    eng._advance_query_service._advance_reduce_result_items(
+                    eng._advance._advance_reduce_result_items(
                         bucket_id=root,
-                        bucket_metadata=eng._advance_query_service._advance_bucket_metadata(info),
+                        bucket_metadata=eng._advance._advance_bucket_metadata(info),
                         items=chunk_items,
                         command="cmd",
                         system_text="sys",
@@ -191,8 +191,8 @@ class AdvanceQueryTests(unittest.TestCase):
                 return Prompts(TextPrompt("assistant", "ok"))
 
             with (
-                patch.object(eng._advance_query_service, "_advance_llm_request", side_effect=_fake_llm_request),
-                patch.object(eng._advance_query_service, "_advance_count_tokens_exact", return_value=1),
+                patch.object(eng._advance, "_advance_llm_request", side_effect=_fake_llm_request),
+                patch.object(eng._advance, "_advance_count_tokens_exact", return_value=1),
             ):
                 asyncio.run(
                     eng.advance_query(
