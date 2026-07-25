@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import copy
@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from context_memory.memory import engine as memory_engine
+from context_memory.memory.index_repository import RepositoryWriteError
 
 
 def _create_engine(base_dir: Path):
@@ -116,7 +117,7 @@ async def _test_child_successor_replaces_parent_title_target(tmp_path: Path) -> 
     source = await parent.set_bucket("child")
     successor = await parent.create_bucket(title="child-successor")
 
-    engine._seal_bucket_unlocked(
+    await engine._topology._seal_bucket_unlocked(
         source_bucket_id=source.bucket_id,
         successor_bucket_id=successor.bucket_id,
     )
@@ -143,7 +144,7 @@ async def _test_parent_successor_inherits_child_title_map(tmp_path: Path) -> Non
         preserve_old_title_map=True,
     )
 
-    engine._seal_bucket_unlocked(
+    await engine._topology._seal_bucket_unlocked(
         source_bucket_id=source.bucket_id,
         successor_bucket_id=successor.bucket_id,
     )
@@ -163,7 +164,7 @@ async def _test_parent_successor_inherits_child_title_map(tmp_path: Path) -> Non
         new_parent_bucket_id=second.bucket_id,
         preserve_old_title_map=True,
     )
-    engine._seal_bucket_unlocked(
+    await engine._topology._seal_bucket_unlocked(
         source_bucket_id=successor.bucket_id,
         successor_bucket_id=second.bucket_id,
     )
@@ -194,7 +195,7 @@ async def _test_root_successor_inherits_child_title_map(tmp_path: Path) -> None:
         preserve_old_title_map=True,
     )
 
-    engine._seal_bucket_unlocked(source_bucket_id=root_id, successor_bucket_id=successor.bucket_id)
+    await engine._topology._seal_bucket_unlocked(source_bucket_id=root_id, successor_bucket_id=successor.bucket_id)
 
     routed = await engine.set_bucket("member")
     assert routed.bucket_id == child.bucket_id
@@ -257,14 +258,15 @@ async def _test_gc_removes_deleted_bucket_title_map_and_inbound_refs(tmp_path: P
         new_parent_bucket_id=successor.bucket_id,
         preserve_old_title_map=True,
     )
-    engine._seal_bucket_unlocked(
+    await engine._topology._seal_bucket_unlocked(
         source_bucket_id=source.bucket_id,
         successor_bucket_id=successor.bucket_id,
     )
     tree = engine.storage.load_bucket_tree()
     tree["buckets"][source.bucket_id]["updated_at"] = "2000-01-01T00:00:00+00:00"
-    engine.storage.save_bucket_tree(tree)
-    engine._gc_archived_bucket_retention_days = 1
+    assert engine.storage.repository is not None
+    engine.storage.repository.save_tree_snapshot(tree)
+    engine._runtime._gc_archived_bucket_retention_days = 1
 
     result = await engine.gc_storage(dry_run=False, reason="title-map-test")
 
@@ -339,8 +341,5 @@ def test_corrupt_child_title_maps_fails_closed(tmp_path: Path) -> None:
     engine = _create_engine(tmp_path / "store")
     tree = engine.storage.load_bucket_tree()
     tree["child_title_maps"] = []
-    engine.storage.save_bucket_tree(tree)
-
-    with pytest.raises(ValueError, match="child_title_maps"):
-        engine.storage.get_child_title_target(engine.root_bucket_id(), "anything")
-
+    with pytest.raises(RepositoryWriteError, match="whole-snapshot topology"):
+        engine.storage.save_bucket_tree(tree)

@@ -5,9 +5,9 @@ import math
 import re
 import time
 from collections import deque
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 
-from ..aliasing import AliasPayloadError, looks_like_alias
+from ..aliasing import looks_like_alias
 from ..models import (
     BUCKET_KIND_BUCKET,
     BUCKET_KIND_MEMORY,
@@ -16,7 +16,8 @@ from ..models import (
     QueryResult,
 )
 from ..rerank import rank_records_with_index
-from .runtime import ServiceRuntime
+if TYPE_CHECKING:
+    from ..engine_runtime import EngineRuntime
 
 
 def _clamp_score(value: float) -> float:
@@ -35,13 +36,128 @@ _BRANCH_EXPAND_K_DEFAULT = 5
 _BRANCH_PARENT_WEIGHT = 0.35
 _BRANCH_CHILD_WEIGHT = 0.65
 _BRANCH_FALLBACK_PARENT_WEIGHT = 0.85
-_BRANCH_MIN_ABS_SCORE = 0.25
-_BRANCH_MIN_RELATIVE_SCORE = 0.60
 
 
 class QueryService:
-    def __init__(self, runtime: ServiceRuntime) -> None:
+    def __init__(
+        self,
+        runtime: "EngineRuntime",
+        *,
+        topology: Callable[[], Any],
+        alias: Callable[[], Any],
+        forgetting: Callable[[], Any],
+    ) -> None:
         self.runtime = runtime
+        self._topology_provider = topology
+        self._alias_provider = alias
+        self._forgetting_provider = forgetting
+        self._side_effect_lock = asyncio.Lock()
+        self._side_effect_queue: asyncio.Queue[tuple[str, dict[str, Any]]] = (
+            asyncio.Queue(maxsize=20_000)
+        )
+        self._side_effect_worker: asyncio.Task | None = None
+
+    @property
+    def topology(self) -> Any:
+        return self._topology_provider()
+
+    @property
+    def alias(self) -> Any:
+        return self._alias_provider()
+
+    @property
+    def forgetting(self) -> Any:
+        return self._forgetting_provider()
+
+    def ensure_side_effect_worker(self) -> None:
+        task = self._side_effect_worker
+        if task is not None and not task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._side_effect_worker = loop.create_task(self._side_effect_worker_loop())
+
+    def enqueue_side_effect(self, op: str, payload: dict[str, Any]) -> None:
+        self.ensure_side_effect_worker()
+        try:
+            self._side_effect_queue.put_nowait((str(op), dict(payload)))
+        except asyncio.QueueFull:
+            executor = self.runtime._storage_executor
+            if executor is not None:
+                executor.submit(self.runtime.storage.record_query_side_effect_drop)
+
+    async def _side_effect_worker_loop(self) -> None:
+        while True:
+            op, payload = await self._side_effect_queue.get()
+            try:
+                async with self._side_effect_lock:
+                    try:
+                        await self.runtime.run_storage_task(
+                            self._apply_side_effect_sync,
+                            op,
+                            payload,
+                        )
+                    except Exception:
+                        await self.runtime.run_storage_task(
+                            self.runtime.storage.record_query_side_effect_drop
+                        )
+            finally:
+                self._side_effect_queue.task_done()
+
+    def _apply_side_effect_sync(self, op: str, payload: dict[str, Any]) -> None:
+        storage = self.runtime.storage
+        if op == "set_query_cache":
+            bucket_id = (
+                str(payload.get("bucket_id", "")).strip()
+                or storage.get_active_bucket_id()
+            )
+            storage.set_query_cache(
+                str(payload.get("cache_key", "")),
+                dict(payload.get("result", {})),
+                bucket_id=bucket_id,
+            )
+        elif op == "record_recall_batch":
+            keys = payload.get("keys", [])
+            if isinstance(keys, list):
+                for key in keys:
+                    token = str(key).strip()
+                    if token:
+                        storage.record_recall(token)
+        elif op == "record_query_degraded":
+            storage.record_query_degraded()
+        elif op == "record_llm_usage":
+            self.runtime.record_llm_usage_values(payload.get("usage", {}))
+        elif op == "record_llm_diag":
+            self.runtime.record_llm_diag_values(payload.get("diag", {}))
+        elif op == "record_overflow_query":
+            storage.record_context_overflow("query")
+        elif op == "record_alias_miss_build":
+            for _ in range(max(1, int(payload.get("count", 1)))):
+                storage.record_query_alias_miss_build()
+        elif op == "record_alias_miss_resolve":
+            for _ in range(max(1, int(payload.get("count", 1)))):
+                storage.record_query_alias_miss_resolve()
+
+    def shutdown(self) -> None:
+        worker = self._side_effect_worker
+        if worker is not None and not worker.done():
+            worker.cancel()
+        self._side_effect_worker = None
+
+    async def close(self) -> None:
+        worker = self._side_effect_worker
+        if worker is None or worker.done():
+            self._side_effect_worker = None
+            return
+        await self._side_effect_queue.join()
+        worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
+        self._side_effect_worker = None
 
     @staticmethod
     def _node_view_key(rec: MemoryRecord) -> str:
@@ -68,19 +184,19 @@ class QueryService:
         global_recall_time_budget_ms: int | None = None,
         branch_expand_k: int | None = None,
     ) -> QueryResult:
-        eng = self.runtime.engine
-        root = eng._resolve_bucket_id(bucket_id)
+        rt = self.runtime
+        root = self.topology._resolve_bucket_id(bucket_id)
         visited: set[str] = set()
-        depth_limit = max_depth if max_depth is not None else eng._query_max_depth_default
-        mode_effective = self._resolve_query_mode(mode, query_text, eng._query_mode_default)
-        recall_top_n = max(10, int(global_recall_top_n if global_recall_top_n is not None else eng._global_recall_top_n))
-        recall_top_m = max(1, int(global_recall_top_m if global_recall_top_m is not None else eng._global_recall_top_m))
+        depth_limit = max_depth if max_depth is not None else rt._max_depth + 2
+        mode_effective = self._resolve_query_mode(mode, query_text, rt._query_mode_default)
+        recall_top_n = max(10, int(global_recall_top_n if global_recall_top_n is not None else rt._global_recall_top_n))
+        recall_top_m = max(1, int(global_recall_top_m if global_recall_top_m is not None else rt._global_recall_top_m))
         recall_depth_limit = max(
             1,
             int(
                 global_recall_depth_limit
                 if global_recall_depth_limit is not None
-                else eng._global_recall_depth_limit
+                else rt._global_recall_depth_limit
             ),
         )
         recall_time_budget_ms = max(
@@ -88,7 +204,7 @@ class QueryService:
             int(
                 global_recall_time_budget_ms
                 if global_recall_time_budget_ms is not None
-                else eng._global_recall_time_budget_ms
+                else rt._global_recall_time_budget_ms
             ),
         )
         effective_branch_expand_k = self._resolve_branch_expand_k(
@@ -147,7 +263,7 @@ class QueryService:
         global_record_boost: dict[str, float],
         global_bucket_boost: dict[str, float],
     ) -> QueryResult:
-        eng = self.runtime.engine
+        rt = self.runtime
         if bucket_id in visited:
             return QueryResult(
                 success=True,
@@ -164,8 +280,8 @@ class QueryService:
             )
         visited.add(bucket_id)
 
-        meta = eng.storage.load_meta()
-        normal_cache_key = eng.storage.compute_cache_key(
+        meta = await rt.run_storage_task(rt.storage.metadata_snapshot)
+        normal_cache_key = rt.storage.compute_cache_key(
             query_text=query_text,
             top_k=top_k,
             include_gray=include_gray,
@@ -177,7 +293,7 @@ class QueryService:
             global_recall_depth_limit=global_recall_depth_limit,
             global_recall_time_budget_ms=global_recall_time_budget_ms,
         )
-        degraded_cache_key = eng.storage.compute_cache_key(
+        degraded_cache_key = rt.storage.compute_cache_key(
             query_text=query_text,
             top_k=top_k,
             include_gray=include_gray,
@@ -190,15 +306,19 @@ class QueryService:
             global_recall_time_budget_ms=global_recall_time_budget_ms,
         )
         if use_cache and not bool(meta.get("dirty", False)):
-            hit = eng.storage.get_query_cache(normal_cache_key)
+            hit = await rt.run_storage_task(rt.storage.get_query_cache, normal_cache_key)
             if hit is None:
-                hit = eng.storage.get_query_cache(degraded_cache_key)
+                hit = await rt.run_storage_task(rt.storage.get_query_cache, degraded_cache_key)
             if isinstance(hit, dict) and isinstance(hit.get("result"), dict):
                 result = QueryResult.from_dict(hit["result"])
                 result.cache_hit = True
                 return result
 
-        records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
+        records = await rt.run_storage_task(
+            rt.storage.load_bucket_snapshot,
+            bucket_id,
+            include_gray=include_gray,
+        )
         if not records:
             empty = QueryResult(
                 success=True,
@@ -213,135 +333,30 @@ class QueryService:
                 sub_answer="",
                 message="empty",
             )
-            eng.storage.set_query_cache(normal_cache_key, empty.to_dict(), bucket_id=bucket_id)
+            await rt.run_storage_task(
+                rt.storage.set_query_cache,
+                normal_cache_key,
+                empty.to_dict(),
+                bucket_id=bucket_id,
+            )
             return empty
 
-        bucket_version = eng.storage.get_bucket_version(bucket_id)
-        bm25_index = eng.bm25_cache.get_or_build(
+        (
+            query_matches,
+            llm_result,
+            llm_accepted_count,
+            degraded,
+            degraded_reason,
+            failure_stage,
+        ) = await self._rank_query_bucket(
             bucket_id=bucket_id,
-            bucket_version=bucket_version,
-            records=records,
-        )
-        rank_top_k = max(top_k * 6, top_k)
-        records_snapshot = tuple(records)
-        bm25_ranked, bm25_norm_scores = await eng._run_cpu_task(
-            self._rank_records_with_local_scores,
-            query_text,
-            records_snapshot,
-            rank_top_k,
-            bm25_index,
-            mode,
-        )
-        bm25_norm_map = {rec.key: bm25_norm_scores[idx] for idx, (rec, _) in enumerate(bm25_ranked)}
-        boosted_norm_map: dict[str, float] = {}
-        for rec, _score in bm25_ranked:
-            boosted_norm_map[rec.key] = self._apply_global_boost(
-                rec=rec,
-                base_score=float(bm25_norm_map.get(rec.key, 0.0)),
-                global_record_boost=global_record_boost,
-                global_bucket_boost=global_bucket_boost,
-                boost_weight=float(getattr(eng, "_global_recall_boost_weight", 0.0)),
-            )
-        node_key_to_record_key: dict[str, str] = {}
-        for rec in records:
-            node_key_to_record_key[rec.key] = rec.key
-            if rec.kind == BUCKET_KIND_BUCKET:
-                child = str(rec.child_bucket_id or "").strip()
-                if child:
-                    node_key_to_record_key[child] = rec.key
-        alias_fallback_candidates: list[tuple[dict[str, Any], float]] = []
-        alias_miss_build = 0
-        alias_table = eng._alias_table(bucket_id)
-        for rec, score in bm25_ranked:
-            try:
-                record_view = rec.to_dict()
-                if rec.kind == BUCKET_KIND_BUCKET:
-                    child = str(rec.child_bucket_id or "").strip()
-                    if child:
-                        # Keep bucket node alias semantics consistent in degraded/fallback path.
-                        record_view["key"] = child
-                alias_rec = alias_table.encode_tree(record_view, allow_create=False)
-            except AliasPayloadError:
-                alias_miss_build += 1
-                continue
-            alias_fallback_candidates.append((alias_rec, score))
-        hint_keys: list[str] = []
-        hint_seen: set[str] = set()
-        for rec, _score in bm25_ranked:
-            node_key = self._node_view_key(rec)
-            if node_key in hint_seen:
-                continue
-            hint_seen.add(node_key)
-            hint_keys.append(node_key)
-            if len(hint_keys) >= 50:
-                break
-        if not hint_keys:
-            hint_keys = [self._node_view_key(r) for r in records[:50]]
-        alias_key_hints: list[str] = []
-        for key in hint_keys:
-            try:
-                token = alias_table.to_alias(key, allow_create=False)
-            except (AliasPayloadError, ValueError):
-                alias_miss_build += 1
-                continue
-            alias_key_hints.append(token)
-        if alias_miss_build > 0:
-            eng._enqueue_query_side_effect("record_alias_miss_build", {"count": alias_miss_build})
-        query_alias_payload = {
-            "query_text": query_text,
-            "top_k": top_k,
-            "include_gray": include_gray,
-            "key_hints": alias_key_hints,
-            "hint_count": len(alias_key_hints),
-        }
-        query_alias_payload = await eng.prepare_alias_payload(
-            bucket_id,
-            query_alias_payload,
-        )
-        map_ver = alias_table.map_version()
-        alias_table.assert_safe(query_alias_payload)
-        llm_result_alias = await eng.pipeline.query(
-            bucket_context=eng._bucket_context(bucket_id),
-            query_text=str(query_alias_payload.get("query_text", "")),
+            query_text=query_text,
             top_k=top_k,
             include_gray=include_gray,
-            key_hints=list(query_alias_payload.get("key_hints", [])),
-            fallback_candidates=alias_fallback_candidates,
-        )
-        eng._audit_alias_llm_call(
-            tool="query",
-            bucket_id=bucket_id,
-            map_version=map_ver,
-            alias_input=query_alias_payload,
-            alias_output=llm_result_alias,
-        )
-        llm_result, alias_miss_resolve = self._resolve_query_llm_output(
-            eng=eng,
-            bucket_id=bucket_id,
-            llm_result_alias=llm_result_alias,
-            node_key_to_record_key=node_key_to_record_key,
-            record_keys=set(r.key for r in records),
-        )
-        if alias_miss_resolve > 0:
-            eng._enqueue_query_side_effect("record_alias_miss_resolve", {"count": alias_miss_resolve})
-
-        eng._enqueue_query_side_effect("record_llm_usage", {"usage": dict(eng.pipeline.last_usage)})
-        eng._enqueue_query_side_effect("record_llm_diag", {"diag": dict(eng.pipeline.last_diagnostics)})
-        diag = eng.pipeline.last_diagnostics
-        degraded = bool(diag.get("degraded", False))
-        degraded_reason = str(diag.get("degraded_reason", ""))
-        failure_stage = eng._diag_failure_stage(diag)
-        if degraded:
-            eng._enqueue_query_side_effect("record_query_degraded", {})
-        if eng._is_context_overflow_diag(diag):
-            eng._enqueue_query_side_effect("record_overflow_query", {})
-        llm_accepted_count = 0
-        query_matches, llm_accepted_count = self.merge_llm_bm25_matches(
+            mode=mode,
             records=records,
-            llm_matches=llm_result.get("matches", []),
-            bm25_ranked=bm25_ranked,
-            bm25_norm_map=boosted_norm_map,
-            top_k=top_k,
+            global_record_boost=global_record_boost,
+            global_bucket_boost=global_bucket_boost,
         )
 
         final_matches, sub_answer, sub_answer_from = await self.resolve_bucket_matches(
@@ -365,7 +380,7 @@ class QueryService:
         )
         recall_keys = [m.key for m in final_matches if str(m.key).strip()]
         if recall_keys:
-            eng._enqueue_query_side_effect("record_recall_batch", {"keys": recall_keys})
+            self.enqueue_side_effect("record_recall_batch", {"keys": recall_keys})
 
         top_matches = final_matches[:top_k]
         has_local_supplement = any(str(m.source).lower() == "bm25" for m in top_matches)
@@ -392,7 +407,7 @@ class QueryService:
         )
 
         cache_key = degraded_cache_key if degraded else normal_cache_key
-        eng._enqueue_query_side_effect(
+        self.enqueue_side_effect(
             "set_query_cache",
             {
                 "cache_key": cache_key,
@@ -402,10 +417,175 @@ class QueryService:
         )
         return result
 
-    def _resolve_query_llm_output(
+    async def _rank_query_bucket(
         self,
         *,
-        eng: Any,
+        bucket_id: str,
+        query_text: str,
+        top_k: int,
+        include_gray: bool,
+        mode: str,
+        records: list[MemoryRecord],
+        global_record_boost: dict[str, float],
+        global_bucket_boost: dict[str, float],
+    ) -> tuple[list[QueryMatch], dict[str, Any], int, bool, str, str]:
+        rt = self.runtime
+        bucket_version = rt.storage.get_bucket_version(bucket_id)
+        bm25_index = rt.bm25_cache.get_or_build(
+            bucket_id=bucket_id,
+            bucket_version=bucket_version,
+            records=records,
+        )
+        rank_top_k = max(top_k * 6, top_k)
+        bm25_ranked, bm25_norm_scores = await rt.run_cpu_task(
+            self._rank_records_with_local_scores,
+            query_text,
+            tuple(records),
+            rank_top_k,
+            bm25_index,
+            mode,
+        )
+        bm25_norm_map = {
+            rec.key: bm25_norm_scores[idx]
+            for idx, (rec, _score) in enumerate(bm25_ranked)
+        }
+        boosted_norm_map = {
+            rec.key: self._apply_global_boost(
+                rec=rec,
+                base_score=float(bm25_norm_map.get(rec.key, 0.0)),
+                global_record_boost=global_record_boost,
+                global_bucket_boost=global_bucket_boost,
+                boost_weight=float(getattr(rt, "_global_recall_boost_weight", 0.0)),
+            )
+            for rec, _score in bm25_ranked
+        }
+        node_key_to_record_key = {rec.key: rec.key for rec in records}
+        for rec in records:
+            child = str(rec.child_bucket_id or "").strip()
+            if rec.kind == BUCKET_KIND_BUCKET and child:
+                node_key_to_record_key[child] = rec.key
+        hint_keys: list[str] = []
+        for rec, _score in bm25_ranked:
+            node_key = self._node_view_key(rec)
+            if node_key not in hint_keys:
+                hint_keys.append(node_key)
+            if len(hint_keys) >= 50:
+                break
+        if not hint_keys:
+            hint_keys = [self._node_view_key(record) for record in records[:50]]
+        alias_fallback_candidates, alias_key_hints, alias_miss_build = (
+            await rt.run_storage_task(
+                self._prepare_alias_candidates_sync,
+                self.alias._alias_table(bucket_id),
+                tuple(bm25_ranked),
+                tuple(hint_keys),
+            )
+        )
+        if alias_miss_build > 0:
+            self.enqueue_side_effect("record_alias_miss_build", {"count": alias_miss_build})
+        query_alias_payload, map_ver = await self.alias._prepare_alias_payload_with_version(
+            bucket_id,
+            {
+                "query_text": query_text,
+                "top_k": top_k,
+                "include_gray": include_gray,
+                "key_hints": alias_key_hints,
+                "hint_count": len(alias_key_hints),
+            },
+        )
+        llm_result_alias = await rt.pipeline.query(
+            bucket_context=await rt.bucket_context(bucket_id),
+            query_text=str(query_alias_payload.get("query_text", "")),
+            top_k=top_k,
+            include_gray=include_gray,
+            key_hints=list(query_alias_payload.get("key_hints", [])),
+            fallback_candidates=alias_fallback_candidates,
+        )
+        await self.alias.audit_llm_call(
+            tool="query",
+            bucket_id=bucket_id,
+            map_version=map_ver,
+            alias_input=query_alias_payload,
+            alias_output=llm_result_alias,
+        )
+        llm_result, alias_miss_resolve = await self._resolve_query_llm_output(
+            bucket_id=bucket_id,
+            llm_result_alias=llm_result_alias,
+            node_key_to_record_key=node_key_to_record_key,
+            record_keys={record.key for record in records},
+        )
+        if alias_miss_resolve > 0:
+            self.enqueue_side_effect("record_alias_miss_resolve", {"count": alias_miss_resolve})
+        self.enqueue_side_effect("record_llm_usage", {"usage": dict(rt.pipeline.last_usage)})
+        self.enqueue_side_effect("record_llm_diag", {"diag": dict(rt.pipeline.last_diagnostics)})
+        diag = rt.pipeline.last_diagnostics
+        degraded = bool(diag.get("degraded", False))
+        if degraded:
+            self.enqueue_side_effect("record_query_degraded", {})
+        if rt.is_context_overflow_diag(diag):
+            self.enqueue_side_effect("record_overflow_query", {})
+        negative_weights = await rt.run_storage_task(
+            rt.storage.load_negative_weights,
+            [record.key for record in records],
+        )
+        query_matches, accepted_count = self.merge_llm_bm25_matches(
+            records=records,
+            llm_matches=llm_result.get("matches", []),
+            bm25_ranked=bm25_ranked,
+            bm25_norm_map=boosted_norm_map,
+            top_k=top_k,
+            negative_weights=negative_weights,
+        )
+        return (
+            query_matches,
+            llm_result,
+            accepted_count,
+            degraded,
+            str(diag.get("degraded_reason", "")),
+            rt.diag_failure_stage(diag),
+        )
+
+    @staticmethod
+    def _prepare_alias_candidates_sync(
+        alias_table: Any,
+        bm25_ranked: tuple[tuple[MemoryRecord, float], ...],
+        hint_keys: tuple[str, ...],
+    ) -> tuple[list[tuple[dict[str, Any], float]], list[str], int]:
+        record_views: list[dict[str, Any]] = []
+        for rec, _score in bm25_ranked:
+            record_view = rec.to_dict()
+            if rec.kind == BUCKET_KIND_BUCKET:
+                child = str(rec.child_bucket_id or "").strip()
+                if child:
+                    # Bucket nodes are represented by the child bucket alias.
+                    record_view["key"] = child
+            record_views.append(record_view)
+
+        encoded = alias_table.encode_many(
+            (*record_views, *hint_keys),
+            allow_create=False,
+            strict=False,
+        )
+        fallback_candidates: list[tuple[dict[str, Any], float]] = []
+        alias_hints: list[str] = []
+        misses = 0
+        record_count = len(record_views)
+        for index, (success, value) in enumerate(encoded):
+            if not success:
+                misses += 1
+                continue
+            if index < record_count:
+                if isinstance(value, dict):
+                    fallback_candidates.append((value, bm25_ranked[index][1]))
+                else:
+                    misses += 1
+            else:
+                alias_hints.append(str(value))
+        return fallback_candidates, alias_hints, misses
+
+    async def _resolve_query_llm_output(
+        self,
+        *,
         bucket_id: str,
         llm_result_alias: dict[str, Any],
         node_key_to_record_key: dict[str, str],
@@ -417,7 +597,16 @@ class QueryService:
         miss = 0
         if not isinstance(raw_matches, list):
             raw_matches = []
-        alias_table = eng._alias_table(bucket_id)
+        aliases = [
+            str(item.get("key", "")).strip()
+            for item in raw_matches
+            if isinstance(item, dict) and looks_like_alias(str(item.get("key", "")).strip())
+        ]
+        resolved_aliases = await self.alias._resolve_aliases_from_resolved_bucket(
+            bucket_id,
+            aliases,
+            strict=False,
+        )
         for item in raw_matches:
             if not isinstance(item, dict):
                 continue
@@ -427,9 +616,8 @@ class QueryService:
             if not looks_like_alias(raw_key):
                 miss += 1
                 continue
-            try:
-                real_key = alias_table.to_real(raw_key)
-            except Exception:
+            real_key = str(resolved_aliases.get(raw_key, "")).strip()
+            if not real_key:
                 miss += 1
                 continue
             record_key = node_key_to_record_key.get(real_key, real_key)
@@ -454,8 +642,9 @@ class QueryService:
         bm25_ranked: list[tuple[MemoryRecord, float]],
         bm25_norm_map: dict[str, float],
         top_k: int,
+        negative_weights: dict[str, float] | None = None,
     ) -> tuple[list[QueryMatch], int]:
-        eng = self.runtime.engine
+        negative_weights = negative_weights or {}
         record_map = {r.key: r for r in records}
         used: set[str] = set()
         merged: list[QueryMatch] = []
@@ -483,12 +672,20 @@ class QueryService:
                     llm_score = 0.0
                     local_score = raw_item_score
                     local_fused = _clamp_score(0.7 * bm_score + 0.3 * local_score)
-                    final = eng._apply_negative_weight_adjust(key, local_fused)
+                    final = self.forgetting._apply_negative_weight_adjust(
+                        key,
+                        local_fused,
+                        negative_weight=negative_weights.get(key, 0.0),
+                    )
                     final = min(0.6, _clamp_score(final))
                 else:
                     llm_score = raw_item_score
                     final = _clamp_score(0.85 * llm_score + 0.15 * bm_score)
-                    final = eng._apply_negative_weight_adjust(key, final)
+                    final = self.forgetting._apply_negative_weight_adjust(
+                        key,
+                        final,
+                        negative_weight=negative_weights.get(key, 0.0),
+                    )
                 merged.append(
                     QueryMatch(
                         key=key,
@@ -510,7 +707,11 @@ class QueryService:
                 continue
             bm_norm = _clamp_score(float(bm25_norm_map.get(rec.key, 0.0)))
             supplement = min(0.5, bm_norm * 0.5)
-            supplement = eng._apply_negative_weight_adjust(rec.key, supplement)
+            supplement = self.forgetting._apply_negative_weight_adjust(
+                rec.key,
+                supplement,
+                negative_weight=negative_weights.get(rec.key, 0.0),
+            )
             merged.append(
                 QueryMatch(
                     key=rec.key,
@@ -551,7 +752,7 @@ class QueryService:
         global_record_boost: dict[str, float],
         global_bucket_boost: dict[str, float],
     ) -> tuple[list[QueryMatch], str, str]:
-        eng = self.runtime.engine
+        rt = self.runtime
         out: list[QueryMatch] = []
         seen: set[str] = set()
         sub_answer = ""
@@ -560,8 +761,15 @@ class QueryService:
         parent_candidate_limit = max(1, int(parent_top_k))
         bucket_parent_limit = 1 if depth > 1 else parent_candidate_limit
         bucket_candidates: list[tuple[QueryMatch, str]] = []
+        parent_records = {
+            record.key: record
+            for record in await rt.run_storage_task(
+                rt.storage.load_records_for_keys,
+                [match.key for match in query_matches[:parent_candidate_limit]],
+            )
+        }
         for match in query_matches[:parent_candidate_limit]:
-            rec = eng.storage.get_record(match.key)
+            rec = parent_records.get(match.key)
             if rec is None:
                 continue
             if rec.kind == BUCKET_KIND_BUCKET and rec.child_bucket_id and depth < depth_limit:
@@ -570,14 +778,14 @@ class QueryService:
                 child_raw_id = str(rec.child_bucket_id).strip()
                 if not child_raw_id:
                     continue
-                child_info = eng.storage.get_bucket_info(child_raw_id)
+                child_info = rt.storage.get_bucket_info(child_raw_id)
                 if child_info is not None and child_info.sealed and not str(child_info.sealed_to or "").strip():
                     continue
                 try:
-                    child_bucket_id = eng._resolve_bucket_id(child_raw_id)
+                    child_bucket_id = self.topology._resolve_bucket_id(child_raw_id)
                 except ValueError:
                     continue
-                child_info_final = eng.storage.get_bucket_info(child_bucket_id)
+                child_info_final = rt.storage.get_bucket_info(child_bucket_id)
                 if child_info_final is not None and child_info_final.sealed:
                     continue
                 bucket_candidates.append((match, child_bucket_id))
@@ -605,119 +813,6 @@ class QueryService:
             )
             seen.add(rec.key)
 
-        async def _query_bucket_branch(
-            parent_match: QueryMatch,
-            child_bucket_id: str,
-        ) -> tuple[list[QueryMatch], float, str, str] | None:
-            try:
-                child = await self.query_bucket_recursive(
-                    bucket_id=child_bucket_id,
-                    query_text=query_text,
-                    top_k=branch_expand_k,
-                    include_gray=include_gray,
-                    use_cache=use_cache,
-                    with_evidence=with_evidence,
-                    depth=depth + 1,
-                    depth_limit=depth_limit,
-                    visited=visited,
-                    mode=mode,
-                    global_recall_top_n=global_recall_top_n,
-                    global_recall_top_m=global_recall_top_m,
-                    global_recall_depth_limit=global_recall_depth_limit,
-                    global_recall_time_budget_ms=global_recall_time_budget_ms,
-                    branch_expand_k=branch_expand_k,
-                    global_record_boost=global_record_boost,
-                    global_bucket_boost=global_bucket_boost,
-                )
-            except Exception:
-                return None
-
-            if not child.matches:
-                if depth + 1 >= depth_limit:
-                    fallback_score = _clamp_score(_BRANCH_FALLBACK_PARENT_WEIGHT * parent_match.score)
-                    fallback_match = QueryMatch(
-                        key=parent_match.key,
-                        score=fallback_score,
-                        reason=f"via_bucket_depth_limit:{parent_match.key}",
-                        summary=parent_match.summary,
-                        source="recursive_bucket_fallback",
-                        llm_score=parent_match.llm_score,
-                        bm25_score=parent_match.bm25_score,
-                        final_score=fallback_score,
-                    )
-                    candidate_sub_answer = ""
-                    candidate_sub_answer_from = str(parent_match.key)
-                    return [fallback_match], fallback_score, candidate_sub_answer, candidate_sub_answer_from
-                return None
-
-            branch_candidates = list(child.matches[:branch_expand_k])
-            memory_candidates: list[QueryMatch] = []
-            for candidate in branch_candidates:
-                rec = eng.storage.get_record(candidate.key)
-                if rec is not None and rec.kind == BUCKET_KIND_MEMORY:
-                    memory_candidates.append(candidate)
-
-            selected_candidates = memory_candidates[:branch_expand_k]
-            if not selected_candidates and depth + 1 >= depth_limit:
-                bucket_candidate = None
-                for candidate in branch_candidates:
-                    rec = eng.storage.get_record(candidate.key)
-                    if rec is not None and rec.kind == BUCKET_KIND_BUCKET:
-                        bucket_candidate = candidate
-                        break
-                if bucket_candidate is not None:
-                    selected_candidates = [bucket_candidate]
-            if not selected_candidates:
-                return None
-
-            branch_top_score = float(selected_candidates[0].score)
-            branch_floor = max(_BRANCH_MIN_ABS_SCORE, branch_top_score * _BRANCH_MIN_RELATIVE_SCORE)
-            merged_matches: list[QueryMatch] = []
-            best_merged_score = -1.0
-            best_key = str(selected_candidates[0].key)
-            for idx, child_match in enumerate(selected_candidates):
-                if idx > 0 and float(child_match.score) < branch_floor:
-                    continue
-                merged_score = _clamp_score(
-                    (_BRANCH_PARENT_WEIGHT * parent_match.score + _BRANCH_CHILD_WEIGHT * child_match.score)
-                )
-                merged_match = QueryMatch(
-                    key=child_match.key,
-                    score=merged_score,
-                    reason=f"via_bucket:{parent_match.key}",
-                    summary=child_match.summary,
-                    source="recursive",
-                    llm_score=child_match.llm_score,
-                    bm25_score=child_match.bm25_score,
-                    final_score=merged_score,
-                )
-                merged_matches.append(merged_match)
-                if merged_score > best_merged_score:
-                    best_merged_score = merged_score
-                    best_key = str(child_match.key)
-
-            if not merged_matches:
-                if depth + 1 >= depth_limit:
-                    fallback_score = _clamp_score(_BRANCH_FALLBACK_PARENT_WEIGHT * parent_match.score)
-                    fallback_match = QueryMatch(
-                        key=parent_match.key,
-                        score=fallback_score,
-                        reason=f"via_bucket_depth_limit:{parent_match.key}",
-                        summary=parent_match.summary,
-                        source="recursive_bucket_fallback",
-                        llm_score=parent_match.llm_score,
-                        bm25_score=parent_match.bm25_score,
-                        final_score=fallback_score,
-                    )
-                    candidate_sub_answer = ""
-                    candidate_sub_answer_from = str(parent_match.key)
-                    return [fallback_match], fallback_score, candidate_sub_answer, candidate_sub_answer_from
-                return None
-
-            candidate_sub_answer = str(child.sub_answer or child.answer or "").strip()
-            candidate_sub_answer_from = str(getattr(child, "sub_answer_from", "") or "").strip() or best_key
-            return merged_matches, best_merged_score, candidate_sub_answer, candidate_sub_answer_from
-
         branch_results: list[tuple[list[QueryMatch], float, str, str] | None] = []
         if bucket_candidates:
             if depth == 1:
@@ -728,14 +823,52 @@ class QueryService:
                     child_bucket_id: str,
                 ) -> tuple[list[QueryMatch], float, str, str] | None:
                     async with semaphore:
-                        return await _query_bucket_branch(parent_match, child_bucket_id)
+                        return await self._query_bucket_branch(
+                            parent_match=parent_match,
+                            child_bucket_id=child_bucket_id,
+                            query_text=query_text,
+                            include_gray=include_gray,
+                            use_cache=use_cache,
+                            with_evidence=with_evidence,
+                            depth=depth,
+                            depth_limit=depth_limit,
+                            visited=visited,
+                            mode=mode,
+                            global_recall_top_n=global_recall_top_n,
+                            global_recall_top_m=global_recall_top_m,
+                            global_recall_depth_limit=global_recall_depth_limit,
+                            global_recall_time_budget_ms=global_recall_time_budget_ms,
+                            branch_expand_k=branch_expand_k,
+                            global_record_boost=global_record_boost,
+                            global_bucket_boost=global_bucket_boost,
+                        )
 
                 branch_results = await asyncio.gather(
                     *[_guarded(match, child_bucket_id) for match, child_bucket_id in bucket_candidates]
                 )
             else:
                 for match, child_bucket_id in bucket_candidates:
-                    branch_results.append(await _query_bucket_branch(match, child_bucket_id))
+                    branch_results.append(
+                        await self._query_bucket_branch(
+                            parent_match=match,
+                            child_bucket_id=child_bucket_id,
+                            query_text=query_text,
+                            include_gray=include_gray,
+                            use_cache=use_cache,
+                            with_evidence=with_evidence,
+                            depth=depth,
+                            depth_limit=depth_limit,
+                            visited=visited,
+                            mode=mode,
+                            global_recall_top_n=global_recall_top_n,
+                            global_recall_top_m=global_recall_top_m,
+                            global_recall_depth_limit=global_recall_depth_limit,
+                            global_recall_time_budget_ms=global_recall_time_budget_ms,
+                            branch_expand_k=branch_expand_k,
+                            global_record_boost=global_record_boost,
+                            global_bucket_boost=global_bucket_boost,
+                        )
+                    )
 
         for result in branch_results:
             if result is None:
@@ -753,6 +886,125 @@ class QueryService:
 
         out.sort(key=lambda m: m.score, reverse=True)
         return out, sub_answer, sub_answer_from
+
+    async def _query_bucket_branch(
+        self,
+        *,
+        parent_match: QueryMatch,
+        child_bucket_id: str,
+        query_text: str,
+        include_gray: bool,
+        use_cache: bool,
+        with_evidence: bool,
+        depth: int,
+        depth_limit: int,
+        visited: set[str],
+        mode: str,
+        global_recall_top_n: int,
+        global_recall_top_m: int,
+        global_recall_depth_limit: int,
+        global_recall_time_budget_ms: int,
+        branch_expand_k: int,
+        global_record_boost: dict[str, float],
+        global_bucket_boost: dict[str, float],
+    ) -> tuple[list[QueryMatch], float, str, str] | None:
+        try:
+            child = await self.query_bucket_recursive(
+                bucket_id=child_bucket_id,
+                query_text=query_text,
+                top_k=branch_expand_k,
+                include_gray=include_gray,
+                use_cache=use_cache,
+                with_evidence=with_evidence,
+                depth=depth + 1,
+                depth_limit=depth_limit,
+                visited=visited,
+                mode=mode,
+                global_recall_top_n=global_recall_top_n,
+                global_recall_top_m=global_recall_top_m,
+                global_recall_depth_limit=global_recall_depth_limit,
+                global_recall_time_budget_ms=global_recall_time_budget_ms,
+                branch_expand_k=branch_expand_k,
+                global_record_boost=global_record_boost,
+                global_bucket_boost=global_bucket_boost,
+            )
+        except Exception:
+            return None
+        if not child.matches:
+            return self._depth_limit_fallback(parent_match) if depth + 1 >= depth_limit else None
+        branch_candidates = list(child.matches[:branch_expand_k])
+        branch_records = {
+            record.key: record
+            for record in await self.runtime.run_storage_task(
+                self.runtime.storage.load_records_for_keys,
+                [candidate.key for candidate in branch_candidates],
+            )
+        }
+        selected_candidates = [
+            candidate
+            for candidate in branch_candidates
+            if branch_records.get(candidate.key) is not None
+            and branch_records[candidate.key].kind == BUCKET_KIND_MEMORY
+        ][:branch_expand_k]
+        if not selected_candidates and depth + 1 >= depth_limit:
+            selected_candidates = [
+                candidate
+                for candidate in branch_candidates
+                if branch_records.get(candidate.key) is not None
+                and branch_records[candidate.key].kind == BUCKET_KIND_BUCKET
+            ][:1]
+        if not selected_candidates:
+            return None
+        merged_matches: list[QueryMatch] = []
+        best_merged_score = -1.0
+        best_key = str(selected_candidates[0].key)
+        for child_match in selected_candidates:
+            merged_score = _clamp_score(
+                float(parent_match.score)
+                * (_BRANCH_PARENT_WEIGHT + _BRANCH_CHILD_WEIGHT * float(child_match.score))
+            )
+            merged_matches.append(
+                QueryMatch(
+                    key=child_match.key,
+                    score=merged_score,
+                    reason=f"via_bucket:{parent_match.key}",
+                    summary=child_match.summary,
+                    source="recursive",
+                    llm_score=child_match.llm_score,
+                    bm25_score=child_match.bm25_score,
+                    final_score=merged_score,
+                )
+            )
+            if merged_score > best_merged_score:
+                best_merged_score = merged_score
+                best_key = str(child_match.key)
+        candidate_sub_answer = str(child.sub_answer or child.answer or "").strip()
+        candidate_sub_answer_from = (
+            str(getattr(child, "sub_answer_from", "") or "").strip() or best_key
+        )
+        return (
+            merged_matches,
+            best_merged_score,
+            candidate_sub_answer,
+            candidate_sub_answer_from,
+        )
+
+    @staticmethod
+    def _depth_limit_fallback(
+        parent_match: QueryMatch,
+    ) -> tuple[list[QueryMatch], float, str, str]:
+        fallback_score = _clamp_score(_BRANCH_FALLBACK_PARENT_WEIGHT * parent_match.score)
+        fallback = QueryMatch(
+            key=parent_match.key,
+            score=fallback_score,
+            reason=f"via_bucket_depth_limit:{parent_match.key}",
+            summary=parent_match.summary,
+            source="recursive_bucket_fallback",
+            llm_score=parent_match.llm_score,
+            bm25_score=parent_match.bm25_score,
+            final_score=fallback_score,
+        )
+        return [fallback], fallback_score, "", str(parent_match.key)
 
     @staticmethod
     def _resolve_query_mode(mode: str, query_text: str, default_mode: str) -> str:
@@ -772,10 +1024,10 @@ class QueryService:
     def _resolve_branch_expand_k(self, *, branch_expand_k: int | None, query_top_k: int) -> int:
         if branch_expand_k is not None:
             return max(1, int(branch_expand_k))
-        eng = self.runtime.engine
-        if bool(getattr(eng, "_query_branch_expand_bind_top_k", False)):
+        rt = self.runtime
+        if bool(getattr(rt, "_query_branch_expand_bind_top_k", False)):
             return max(1, int(query_top_k))
-        return max(1, int(getattr(eng, "_query_branch_expand_k", _BRANCH_EXPAND_K_DEFAULT)))
+        return max(1, int(getattr(rt, "_query_branch_expand_k", _BRANCH_EXPAND_K_DEFAULT)))
 
     async def _build_global_recall_boosts(
         self,
@@ -789,7 +1041,7 @@ class QueryService:
         depth_limit: int,
         time_budget_ms: int,
     ) -> tuple[dict[str, float], dict[str, float]]:
-        eng = self.runtime.engine
+        rt = self.runtime
         start = time.perf_counter()
         time_budget_sec = max(0.01, float(time_budget_ms) / 1000.0)
         visited: set[str] = set()
@@ -805,15 +1057,18 @@ class QueryService:
             scanned.append(bucket_id)
             if depth >= max(1, int(depth_limit)):
                 continue
-            records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
-            for rec in records:
-                if rec.kind != BUCKET_KIND_BUCKET:
+            nodes = rt.storage.runtime_index_nodes_for_bucket(
+                bucket_id,
+                include_gray=include_gray,
+            )
+            for node in nodes:
+                if str(node.get("kind", "")) != BUCKET_KIND_BUCKET:
                     continue
-                child = str(rec.child_bucket_id or "").strip()
+                child = str(node.get("child_bucket_id", "") or "").strip()
                 if not child:
                     continue
                 try:
-                    child = eng._resolve_bucket_id(child)
+                    child = self.topology._resolve_bucket_id(child)
                 except Exception:
                     pass
                 if child and child not in visited:
@@ -821,20 +1076,25 @@ class QueryService:
 
         record_boost: dict[str, float] = {}
         bucket_boost: dict[str, float] = {}
+        records_by_bucket = await rt.run_storage_task(
+            rt.storage.load_buckets_snapshot,
+            scanned,
+            include_gray=include_gray,
+        )
         for bucket_id in scanned:
             if time.perf_counter() - start > time_budget_sec:
                 break
-            records = eng.storage.list_bucket_records(bucket_id, include_gray=include_gray)
+            records = records_by_bucket.get(bucket_id, [])
             if not records:
                 continue
-            bucket_version = eng.storage.get_bucket_version(bucket_id)
-            bm25_index = eng.bm25_cache.get_or_build(
+            bucket_version = rt.storage.get_bucket_version(bucket_id)
+            bm25_index = rt.bm25_cache.get_or_build(
                 bucket_id=bucket_id,
                 bucket_version=bucket_version,
                 records=records,
             )
             records_snapshot = tuple(records)
-            ranked, norms = await eng._run_cpu_task(
+            ranked, norms = await rt.run_cpu_task(
                 self._rank_records_with_local_scores,
                 query_text,
                 records_snapshot,

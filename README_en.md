@@ -59,6 +59,8 @@ python -m context_memory.rpc_server
 
 > On first run, a `config` directory is created in your working directory. Configure your `LLM ApiKey` and restart. See [docs/config_guide.md](docs/config_guide.md).
 
+> On first open, v0.5.0 upgrades legacy stores to the SQLite schema v4 index. Memory body files keep their existing layout, and the complete pre-upgrade dataset remains under `index/migration_backups/pre_upgrade_latest/`. Do not open an upgraded store with older code.
+
 ## Three Interfaces
 1. Python API (primary interface)
 2. CLI

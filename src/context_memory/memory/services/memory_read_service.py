@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from ..models import (
     BUCKET_KIND_BUCKET,
@@ -13,21 +13,21 @@ from ..models import (
     MemoryRecord,
 )
 from ..token_counter import TokenCountError
-from .runtime import ServiceRuntime
 
 if TYPE_CHECKING:
-    from ..engine import ContextMemoryEngineV3
+    from ..engine_runtime import EngineRuntime
 
 
 class MemoryReadService:
     """Index-backed reads used by BucketHandle protocols."""
 
-    def __init__(self, runtime: ServiceRuntime) -> None:
+    def __init__(self, runtime: "EngineRuntime", *, topology: Callable[[], Any]) -> None:
         self.runtime = runtime
+        self._topology_provider = topology
 
     @property
-    def engine(self) -> "ContextMemoryEngineV3":
-        return self.runtime.engine
+    def topology(self) -> Any:
+        return self._topology_provider()
 
     async def list_memories(
         self,
@@ -35,13 +35,14 @@ class MemoryReadService:
         *,
         include_gray: bool,
     ) -> ListMemoriesResult:
-        tree = await asyncio.to_thread(self.engine.storage.load_bucket_tree)
+        tree = self.runtime.storage.topology_snapshot()
         resolved_bucket_id = self._resolve_requested_bucket(bucket_id, tree)
-        index_task = asyncio.to_thread(
-            self._build_index_result,
-            resolved_bucket_id,
-            include_gray,
-            tree,
+        index_task = asyncio.create_task(
+            self._build_index_result_async(
+                resolved_bucket_id,
+                include_gray,
+                tree,
+            )
         )
         usage_task = self.get_context_usage(
             resolved_bucket_id,
@@ -64,6 +65,50 @@ class MemoryReadService:
             token_count_method=usage.token_count_method,
         )
 
+    async def _build_index_result_async(
+        self,
+        bucket_id: str,
+        include_gray: bool,
+        tree: dict[str, Any],
+    ) -> tuple[list[MemoryIndexItem], list[MemoryIndexItem], int]:
+        repository = self.runtime.storage.repository
+        if repository is None:
+            return await self.runtime.run_storage_task(
+                self._build_index_result,
+                bucket_id,
+                include_gray,
+                tree,
+            )
+        memory_keys = repository.memory_keys(bucket_id, include_gray=include_gray)
+        bucket_keys = repository.bucket_node_keys(bucket_id, include_gray=include_gray)
+        memories = [
+            self._locator_item(repository.get_locator(key))
+            for key in memory_keys
+            if repository.get_locator(key) is not None
+        ]
+        buckets = [
+            self._locator_item(repository.get_locator(key))
+            for key in bucket_keys
+            if repository.get_locator(key) is not None
+        ]
+        total = 0
+        visited: set[str] = set()
+        stack = [bucket_id]
+        while stack:
+            current = self._resolve_bucket_from_tree(stack.pop(), tree)
+            if not current or current in visited:
+                continue
+            visited.add(current)
+            total += len(repository.memory_keys(current, include_gray=include_gray))
+            for key in repository.bucket_node_keys(current, include_gray=include_gray):
+                locator = repository.get_locator(key)
+                if locator is None:
+                    continue
+                child = self._resolve_bucket_from_tree(locator.child_bucket_id, tree)
+                if child and child not in visited:
+                    stack.append(child)
+        return memories, buckets, total
+
     async def get_context_usage(
         self,
         bucket_id: str | None,
@@ -71,15 +116,15 @@ class MemoryReadService:
         allow_fallback: bool,
         resolve_bucket: bool = True,
     ) -> BucketContextUsage:
-        eng = self.engine
+        rt = self.runtime
         if resolve_bucket:
-            tree = await asyncio.to_thread(eng.storage.load_bucket_tree)
+            tree = rt.storage.topology_snapshot()
             bucket_id = self._resolve_requested_bucket(bucket_id, tree)
         else:
             bucket_id = str(bucket_id or "").strip()
-        bucket_version = await asyncio.to_thread(eng.storage.get_bucket_version, bucket_id)
+        bucket_version = rt.storage.get_bucket_version(bucket_id)
         cache_key = f"ctx_tokens:{bucket_id}"
-        cached = eng.memory_manager.get(cache_key)
+        cached = rt.memory_manager.get(cache_key)
         if isinstance(cached, dict) and int(cached.get("version", -1)) == bucket_version:
             method = str(cached.get("method", ""))
             if method == "tiktoken" or (allow_fallback and method == "char_estimate"):
@@ -89,12 +134,12 @@ class MemoryReadService:
                     method,
                 )
 
-        token_count = await asyncio.to_thread(
+        token_count = await rt.run_storage_task(
             self._load_and_count_context,
             bucket_id,
             allow_fallback,
         )
-        eng.memory_manager.set(
+        rt.memory_manager.set(
             cache_key,
             {
                 "version": bucket_version,
@@ -107,7 +152,25 @@ class MemoryReadService:
         return self._make_context_usage(bucket_id, token_count[0], token_count[1])
 
     async def count_direct_records(self, bucket_id: str, *, include_gray: bool) -> int:
-        return await asyncio.to_thread(self._count_direct_records, bucket_id, include_gray)
+        repository = self.runtime.storage.repository
+        if repository is not None:
+            return len(repository.bucket_record_keys(bucket_id, include_gray=include_gray))
+        return await self.runtime.run_storage_task(
+            self._count_direct_records,
+            bucket_id,
+            include_gray,
+        )
+
+    async def bucket_memory_count(self, bucket_id: str) -> int:
+        repository = self.runtime.storage.repository
+        if repository is not None:
+            return len(repository.memory_keys(bucket_id, include_gray=False))
+        records = await self.runtime.run_storage_task(
+            self.runtime.storage.load_bucket_snapshot,
+            bucket_id,
+            include_gray=False,
+        )
+        return sum(1 for record in records if record.kind == BUCKET_KIND_MEMORY)
 
     def _build_index_result(
         self,
@@ -115,7 +178,7 @@ class MemoryReadService:
         include_gray: bool,
         tree: dict[str, Any],
     ) -> tuple[list[MemoryIndexItem], list[MemoryIndexItem], int]:
-        state = self.engine.storage.load_state()
+        _, state = self.runtime.storage.load_runtime_index_snapshot()
         keys = state.get("keys", {})
         if not isinstance(keys, dict):
             return [], [], 0
@@ -164,7 +227,7 @@ class MemoryReadService:
         return resolved
 
     def _count_direct_records(self, bucket_id: str, include_gray: bool) -> int:
-        state = self.engine.storage.load_state()
+        _, state = self.runtime.storage.load_runtime_index_snapshot()
         keys = state.get("keys", {})
         if not isinstance(keys, dict):
             return 0
@@ -175,7 +238,7 @@ class MemoryReadService:
         )
 
     def _load_and_count_context(self, bucket_id: str, allow_fallback: bool) -> tuple[int, str]:
-        context = self.engine.storage.load_bucket_context(bucket_id)
+        context = self.runtime.storage.load_bucket_context(bucket_id)
         try:
             prompts = context.to_prompts()
         except Exception:
@@ -186,15 +249,15 @@ class MemoryReadService:
             if isinstance(getattr(prompt, "text", None), str) and prompt.text
         )
         if allow_fallback:
-            count = self.engine.token_counter.count_text_for_display(raw_text)
+            count = self.runtime.token_counter.count_text_for_display(raw_text)
             return count.tokens, count.method
         try:
-            return self.engine.token_counter.count_text(raw_text), "tiktoken"
+            return self.runtime.token_counter.count_text(raw_text), "tiktoken"
         except TokenCountError:
             raise
 
     def _make_context_usage(self, bucket_id: str, tokens: int, method: str) -> BucketContextUsage:
-        max_window = max(1, int(self.engine.max_context_window))
+        max_window = max(1, int(self.runtime.max_context_window))
         normalized_method = "char_estimate" if method == "char_estimate" else "tiktoken"
         return BucketContextUsage(
             bucket_id=bucket_id,
@@ -241,8 +304,20 @@ class MemoryReadService:
         *,
         include_gray: bool = False,
     ) -> AsyncIterator[MemoryRecord]:
-        storage = self.engine.storage
-        state = await asyncio.to_thread(storage.load_state)
+        storage = self.runtime.storage
+        repository = storage.repository
+        if repository is not None:
+            keys = repository.memory_keys(bucket_id, include_gray=include_gray) + repository.bucket_node_keys(
+                bucket_id,
+                include_gray=include_gray,
+            )
+            for key in keys:
+                record = await self.runtime.run_storage_task(storage.get_record, key)
+                if record is not None:
+                    yield record
+            return
+
+        state = await self.runtime.run_storage_task(storage.load_state)
         keys = state.get("keys", {})
         if not isinstance(keys, dict):
             return
@@ -257,7 +332,7 @@ class MemoryReadService:
                     include_gray=include_gray,
                 ):
                     continue
-                record = await asyncio.to_thread(storage.load_record_from_index_node, node)
+                record = await self.runtime.run_storage_task(storage.load_record_from_index_node, node)
                 if record is not None:
                     yield record
 
@@ -268,7 +343,26 @@ class MemoryReadService:
         key_targets: set[str],
         bucket_targets: set[str],
     ) -> bool:
-        keys = self.engine.storage.load_state().get("keys", {})
+        repository = self.runtime.storage.repository
+        if repository is not None:
+            for key in repository.bucket_record_keys(bucket_id, include_gray=False):
+                locator = repository.get_locator(key)
+                if locator is None:
+                    continue
+                if key in key_targets:
+                    return True
+                if locator.kind != BUCKET_KIND_BUCKET or not bucket_targets:
+                    continue
+                try:
+                    child_bucket = self.topology._resolve_bucket_id(locator.child_bucket_id)
+                except Exception:
+                    child_bucket = locator.child_bucket_id
+                if child_bucket in bucket_targets:
+                    return True
+            return False
+
+        _, state = self.runtime.storage.load_runtime_index_snapshot()
+        keys = state.get("keys", {})
         if not isinstance(keys, dict):
             return False
 
@@ -288,7 +382,7 @@ class MemoryReadService:
             if not child_raw:
                 continue
             try:
-                child_bucket = self.engine._resolve_bucket_id(child_raw)
+                child_bucket = self.topology._resolve_bucket_id(child_raw)
             except Exception:
                 child_bucket = child_raw
             if child_bucket in bucket_targets:
@@ -310,3 +404,15 @@ class MemoryReadService:
         if expected_kind is not None and node.get("kind") != expected_kind:
             return False
         return include_gray or not bool(node.get("gray", False))
+
+    @staticmethod
+    def _locator_item(locator: Any) -> MemoryIndexItem:
+        return MemoryIndexItem(
+            key=str(locator.key),
+            revision_id=str(locator.latest_revision),
+            kind=locator.kind,
+            bucket_id=str(locator.bucket_id),
+            child_bucket_id=str(locator.child_bucket_id),
+            gray=bool(locator.gray),
+            updated_at=str(locator.updated_at),
+        )

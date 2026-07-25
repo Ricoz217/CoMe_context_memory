@@ -4,6 +4,7 @@ import asyncio
 import re
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,6 +24,16 @@ def _create_engine(base_dir: str | Path):
         init_config=False,
         auto_resume_pending_jobs=False,
     )
+
+@contextmanager
+def _temporary_engine(prefix: str):
+    with tempfile.TemporaryDirectory(prefix=prefix) as td:
+        with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
+            engine = _create_engine(td)
+        try:
+            yield engine
+        finally:
+            engine.shutdown(wait=True)
 
 
 def _write_memory(eng, bucket_id: str, title: str) -> str:
@@ -48,9 +59,7 @@ def _write_memory(eng, bucket_id: str, title: str) -> str:
 
 class AdvanceQueryAliasSafetyTests(unittest.TestCase):
     def test_single_shot_and_best_effort_send_alias_only_markdown(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_advance_alias_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_advance_alias_") as eng:
             root = eng.root_bucket_id()
             child = asyncio.run(eng.create_bucket(root, title="child", summary="child"))
             mem_id = _write_memory(eng, root, "root-memory")
@@ -62,7 +71,7 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 return Prompts(TextPrompt("assistant", "ok"))
 
             async def _run() -> None:
-                svc = eng._advance_query_service
+                svc = eng._advance
                 with (
                     patch.object(svc, "_advance_llm_request", side_effect=_fake_request),
                     patch.object(svc, "_advance_count_tokens_exact", return_value=1),
@@ -89,9 +98,7 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 self.assertIn("bucket_", user_markdown)
 
     def test_chunk_request_converts_real_ids_in_keys_labels_and_sources(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_advance_chunk_alias_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_advance_chunk_alias_") as eng:
             root = eng.root_bucket_id()
             mem_id = _write_memory(eng, root, "root-memory")
             info = eng.storage.get_bucket_info(root)
@@ -103,8 +110,8 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 return Prompts(TextPrompt("assistant", "ok"))
 
             async def _run() -> None:
-                svc = eng._advance_query_service
-                eng._begin_alias_session()
+                svc = eng._advance
+                eng._alias.begin_session()
                 try:
                     with patch.object(svc, "_advance_llm_request", side_effect=_fake_request):
                         await svc._advance_execute_chunks(
@@ -126,16 +133,14 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                             audit=False,
                         )
                 finally:
-                    eng._end_alias_session()
+                    eng._alias.end_session()
 
             asyncio.run(_run())
             self.assertEqual(len(captured), 1)
             self.assertIsNone(REAL_ID_RE.search(captured[0]))
 
     def test_single_shot_counts_the_exact_markdown_it_sends(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_advance_token_parity_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_advance_token_parity_") as eng:
             root = eng.root_bucket_id()
             _write_memory(eng, root, "root-memory")
             counted: list[str] = []
@@ -150,7 +155,7 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 return Prompts(TextPrompt("assistant", "ok"))
 
             async def _run() -> None:
-                svc = eng._advance_query_service
+                svc = eng._advance
                 with (
                     patch.object(svc, "_advance_count_tokens_exact", side_effect=_count),
                     patch.object(svc, "_advance_llm_request", side_effect=_fake_request),
@@ -162,16 +167,14 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
             self.assertEqual(len(sent), 1)
             self.assertEqual(
                 counted[0],
-                eng._advance_query_service._advance_combine_request_markdown(
+                eng._advance._advance_combine_request_markdown(
                     system_text=sent[0][0],
                     user_markdown=sent[0][1],
                 ),
             )
 
     def test_fail_closed_prevents_llm_call_when_real_id_survives(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_advance_fail_closed_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_advance_fail_closed_") as eng:
             root = eng.root_bucket_id()
             mem_id = _write_memory(eng, root, "root-memory")
             calls = 0
@@ -185,9 +188,9 @@ class AdvanceQueryAliasSafetyTests(unittest.TestCase):
                 return value
 
             async def _run() -> None:
-                svc = eng._advance_query_service
+                svc = eng._advance
                 with (
-                    patch.object(eng, "prepare_alias_payload", side_effect=_unsafe_prepare),
+                    patch.object(eng._alias, "prepare_alias_payload", side_effect=_unsafe_prepare),
                     patch.object(svc, "_advance_llm_request", side_effect=_fake_request),
                     patch.object(svc, "_advance_count_tokens_exact", return_value=1),
                 ):

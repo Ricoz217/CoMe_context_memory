@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from ..aliasing import AliasPayloadError
 from ..models import BUCKET_KIND_BUCKET, BucketInfo, MemoryRecord, OptimizeResult, normalize_relations, utc_now_iso
-from .runtime import ServiceRuntime
+if TYPE_CHECKING:
+    from ..engine_runtime import EngineRuntime
 
 
 def _clamp_ratio(v: float) -> float:
@@ -14,8 +14,54 @@ def _clamp_ratio(v: float) -> float:
 
 
 class OptimizeService:
-    def __init__(self, runtime: ServiceRuntime) -> None:
+    def __init__(
+        self,
+        runtime: "EngineRuntime",
+        *,
+        alias: Callable[[], Any],
+        compression: Callable[[], Any],
+        governance: Callable[[], Any],
+        maintenance: Callable[[], Any],
+        primitives: Callable[[], Any],
+        summary: Callable[[], Any],
+        topology: Callable[[], Any],
+    ) -> None:
         self.runtime = runtime
+        self._alias_provider = alias
+        self._compression_provider = compression
+        self._governance_provider = governance
+        self._maintenance_provider = maintenance
+        self._primitives_provider = primitives
+        self._summary_provider = summary
+        self._topology_provider = topology
+
+    @property
+    def alias(self) -> Any:
+        return self._alias_provider()
+
+    @property
+    def compression(self) -> Any:
+        return self._compression_provider()
+
+    @property
+    def governance(self) -> Any:
+        return self._governance_provider()
+
+    @property
+    def maintenance(self) -> Any:
+        return self._maintenance_provider()
+
+    @property
+    def primitives(self) -> Any:
+        return self._primitives_provider()
+
+    @property
+    def summary(self) -> Any:
+        return self._summary_provider()
+
+    @property
+    def topology(self) -> Any:
+        return self._topology_provider()
 
     @staticmethod
     def _node_view_key(rec: MemoryRecord) -> str:
@@ -26,370 +72,167 @@ class OptimizeService:
                 return child
         return rec.key
 
-    async def optimize(self, bucket_id: str | None = None, *, reason: str = "manual_optimize") -> OptimizeResult:
-        eng = self.runtime.engine
-        target_bucket = eng._resolve_bucket_id(bucket_id)
-        info = eng.storage.get_bucket_info(target_bucket)
+    async def optimize(self, bucket_id: str | None=None, *, reason: str='manual_optimize') -> OptimizeResult:
+        rt = self.runtime
+        target_bucket = self.topology._resolve_bucket_id(bucket_id)
+        info = rt.storage.get_bucket_info(target_bucket)
         if info is None:
-            return OptimizeResult(success=False, bucket_id=target_bucket, message="target bucket not found", reason_code="bucket_not_found")
-        if int(info.level) >= int(eng._max_depth):
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message="third-level bucket optimize is not supported",
-                reason_code="third_level_not_supported",
-            )
-
-        (
-            candidate_records,
-            parent_keys,
-            child_expansions,
-            sealed_redirects,
-            leaf_node_keys,
-            leaf_bucket_keys,
-            bucket_id_to_node_key,
-        ) = self._collect_candidates(target_bucket)
+            return OptimizeResult(success=False, bucket_id=target_bucket, message='target bucket not found', reason_code='bucket_not_found')
+        if int(info.level) >= int(rt._max_depth):
+            return OptimizeResult(success=False, bucket_id=target_bucket, message='third-level bucket optimize is not supported', reason_code='third_level_not_supported')
+        candidate_records, parent_keys, child_expansions, sealed_redirects, leaf_node_keys, leaf_bucket_keys, bucket_id_to_node_key = await self._collect_candidates(target_bucket)
         if not candidate_records:
-            return OptimizeResult(success=False, bucket_id=target_bucket, message="no candidates in target bucket", reason_code="empty_bucket")
+            return OptimizeResult(success=False, bucket_id=target_bucket, message='no candidates in target bucket', reason_code='empty_bucket')
+        payload = self._build_optimize_payload(target_bucket=target_bucket, info=info, parent_keys=parent_keys, child_expansions=child_expansions, candidate_records=candidate_records, leaf_nodes=leaf_node_keys, reason=reason)
+        requested = await self._request_optimize_plan(target_bucket=target_bucket, payload=payload, reason=reason, sealed_redirects=sealed_redirects)
+        if isinstance(requested, OptimizeResult):
+            return requested
+        llm_out, map_ver, llm_path_source = requested
+        validated = await self._validate_optimize_plan(target_bucket=target_bucket, llm_out=llm_out, parent_keys=parent_keys, candidate_records=candidate_records, bucket_id_to_node_key=bucket_id_to_node_key, child_expansions=child_expansions, leaf_node_keys=leaf_node_keys, leaf_bucket_keys=leaf_bucket_keys, sealed_redirects=sealed_redirects)
+        if isinstance(validated, OptimizeResult):
+            return validated
+        prepared, pressure_check = validated
+        return await self._apply_optimize_plan(target_bucket=target_bucket, info=info, reason=reason, prepared=prepared, pressure_check=pressure_check, candidate_records=candidate_records, map_ver=map_ver, llm_path_source=llm_path_source, sealed_redirects=sealed_redirects)
 
-        payload = self._build_optimize_payload(
-            target_bucket=target_bucket,
-            info=info,
-            parent_keys=parent_keys,
-            child_expansions=child_expansions,
-            candidate_records=candidate_records,
-            leaf_nodes=leaf_node_keys,
-            reason=reason,
-        )
+    async def _request_optimize_plan(self, *, target_bucket: str, payload: dict[str, Any], reason: str, sealed_redirects: dict[str, str]) -> OptimizeResult | tuple[dict[str, Any], int, str]:
+        rt = self.runtime
         try:
-            alias_table = eng._alias_table(target_bucket)
-            alias_payload = await eng.prepare_alias_payload(target_bucket, payload)
-            map_ver = alias_table.map_version()
-            alias_table.assert_safe(alias_payload)
-            outbound_payload = {"reason": reason, "payload": alias_payload}
-            payload_tokens = await asyncio.to_thread(eng.token_counter.count_json, outbound_payload)
-            if payload_tokens > int(eng.max_context_window * 0.70):
-                return OptimizeResult(
-                    success=False,
-                    bucket_id=target_bucket,
-                    message="optimize payload too large for current context window",
-                    reason_code="payload_over_70pct",
-                    coverage_ratio=0.0,
-                    skipped_invalid_count=0,
-                    sealed_redirects=sealed_redirects,
-                )
-            llm_alias = await eng.pipeline.optimize(
-                bucket_context=None,
-                reason=reason,
-                payload=alias_payload,
-            )
-            eng._audit_alias_llm_call(
-                tool="optimize",
-                bucket_id=target_bucket,
-                map_version=map_ver,
-                alias_input=alias_payload,
-                alias_output=llm_alias,
-            )
-            llm_out = await alias_table.restore(llm_alias, map_version=map_ver)
+            alias_payload, map_ver = await self.alias._prepare_alias_payload_with_version(target_bucket, payload)
+            outbound_payload = {'reason': reason, 'payload': alias_payload}
+            payload_tokens = await asyncio.to_thread(rt.token_counter.count_json, outbound_payload)
+            if payload_tokens > int(rt.max_context_window * 0.7):
+                return OptimizeResult(success=False, bucket_id=target_bucket, message='optimize payload too large for current context window', reason_code='payload_over_70pct', coverage_ratio=0.0, skipped_invalid_count=0, sealed_redirects=sealed_redirects)
+            llm_alias = await rt.pipeline.optimize(bucket_context=None, reason=reason, payload=alias_payload)
+            await self.alias.audit_llm_call(tool='optimize', bucket_id=target_bucket, map_version=map_ver, alias_input=alias_payload, alias_output=llm_alias)
+            llm_out = await self.alias.restore_alias_payload(target_bucket, llm_alias, map_version=map_ver)
         except AliasPayloadError as exc:
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message=f"optimize alias failure: {exc}",
-                reason_code="alias_failure",
-                sealed_redirects=sealed_redirects,
-            )
+            return OptimizeResult(success=False, bucket_id=target_bucket, message=f'optimize alias failure: {exc}', reason_code='alias_failure', sealed_redirects=sealed_redirects)
+        await rt.record_llm_usage()
+        await rt.record_llm_diag()
+        llm_path_source = 'LOCAL' if bool(rt.pipeline.last_diagnostics.get('degraded', False)) else 'LLM'
+        if bool(llm_out.get('skip_optimize', False)):
+            skip_reason = str(llm_out.get('skip_reason', '')).strip() or 'model judged current structure as reasonable'
+            await rt.run_storage_task(rt.storage.append_event, event_type='OPTIMIZE_SKIP', bucket_id=target_bucket, payload={'request_id': self.alias.next_request_id('optimize_skip'), 'reason': reason, 'message': skip_reason, 'result_source': llm_path_source})
+            return OptimizeResult(success=True, bucket_id=target_bucket, message=f'optimize skipped: {skip_reason}', reason_code='skip_by_model', coverage_ratio=1.0, skipped_invalid_count=0, sealed_redirects=sealed_redirects)
+        return (llm_out, map_ver, llm_path_source)
 
-        eng._record_llm_usage()
-        eng._record_llm_diag()
-        llm_path_source = "LOCAL" if bool(eng.pipeline.last_diagnostics.get("degraded", False)) else "LLM"
-
-        if bool(llm_out.get("skip_optimize", False)):
-            skip_reason = str(llm_out.get("skip_reason", "")).strip() or "model judged current structure as reasonable"
-            eng.storage.append_event(
-                event_type="OPTIMIZE_SKIP",
-                bucket_id=target_bucket,
-                payload={
-                    "request_id": eng._next_alias_request_id("optimize_skip"),
-                    "reason": reason,
-                    "message": skip_reason,
-                    "result_source": llm_path_source,
-                },
-            )
-            return OptimizeResult(
-                success=True,
-                bucket_id=target_bucket,
-                message=f"optimize skipped: {skip_reason}",
-                reason_code="skip_by_model",
-                coverage_ratio=1.0,
-                skipped_invalid_count=0,
-                sealed_redirects=sealed_redirects,
-            )
-
-        prepared = self._prepare_plan(
-            target_bucket=target_bucket,
-            llm_out=llm_out,
-            parent_keys=parent_keys,
-            candidate_records=candidate_records,
-            bucket_id_to_node_key=bucket_id_to_node_key,
-            child_expansions=child_expansions,
-        )
-        duplicate_leaf_keys = [
-            k
-            for k, n in prepared.get("effective_key_counts", {}).items()
-            if n > 1 and k in leaf_node_keys
-        ]
+    async def _validate_optimize_plan(self, *, target_bucket: str, llm_out: dict[str, Any], parent_keys: list[str], candidate_records: dict[str, MemoryRecord], bucket_id_to_node_key: dict[str, str], child_expansions: list[dict[str, Any]], leaf_node_keys: set[str], leaf_bucket_keys: set[str], sealed_redirects: dict[str, str]) -> OptimizeResult | tuple[dict[str, Any], dict[str, Any]]:
+        rt = self.runtime
+        prepared = await rt.run_storage_task(self._prepare_plan, target_bucket=target_bucket, llm_out=llm_out, parent_keys=parent_keys, candidate_records=candidate_records, bucket_id_to_node_key=bucket_id_to_node_key, child_expansions=child_expansions)
+        duplicate_leaf_keys = [k for k, n in prepared.get('effective_key_counts', {}).items() if n > 1 and k in leaf_node_keys]
         if duplicate_leaf_keys:
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message=f"duplicate leaf keys in optimize plan: {duplicate_leaf_keys[:5]}",
-                reason_code="duplicate_leaf_keys",
-                coverage_ratio=prepared["coverage_ratio"],
-                skipped_invalid_count=prepared["skipped_invalid_count"],
-                sealed_redirects=sealed_redirects,
-            )
-
-        leaf_check = self._validate_leaf_retention(
-            leaf_node_keys=leaf_node_keys,
-            leaf_bucket_keys=leaf_bucket_keys,
-            mentioned_keys=set(prepared["mentioned_keys"]),
-        )
-        if not leaf_check["ok"]:
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message=str(leaf_check.get("message", "leaf retention check failed")),
-                reason_code=str(leaf_check.get("reason_code", "leaf_retention_failed")),
-                coverage_ratio=prepared["coverage_ratio"],
-                skipped_invalid_count=prepared["skipped_invalid_count"],
-                sealed_redirects=sealed_redirects,
-            )
-
-        if prepared["coverage_ratio"] < 0.60:
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message="optimize coverage too low",
-                reason_code="coverage_too_low",
-                coverage_ratio=prepared["coverage_ratio"],
-                skipped_invalid_count=prepared["skipped_invalid_count"],
-                sealed_redirects=sealed_redirects,
-            )
-
-        if prepared["parent_count"] > 800 or prepared["max_group_count"] > 800:
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message="too many elements in parent/group bucket",
-                reason_code="elements_over_800",
-                coverage_ratio=prepared["coverage_ratio"],
-                skipped_invalid_count=prepared["skipped_invalid_count"],
-                sealed_redirects=sealed_redirects,
-            )
-
+            return OptimizeResult(success=False, bucket_id=target_bucket, message=f'duplicate leaf keys in optimize plan: {duplicate_leaf_keys[:5]}', reason_code='duplicate_leaf_keys', coverage_ratio=prepared['coverage_ratio'], skipped_invalid_count=prepared['skipped_invalid_count'], sealed_redirects=sealed_redirects)
+        leaf_check = self._validate_leaf_retention(leaf_node_keys=leaf_node_keys, leaf_bucket_keys=leaf_bucket_keys, mentioned_keys=set(prepared['mentioned_keys']))
+        if not leaf_check['ok']:
+            return OptimizeResult(success=False, bucket_id=target_bucket, message=str(leaf_check.get('message', 'leaf retention check failed')), reason_code=str(leaf_check.get('reason_code', 'leaf_retention_failed')), coverage_ratio=prepared['coverage_ratio'], skipped_invalid_count=prepared['skipped_invalid_count'], sealed_redirects=sealed_redirects)
+        if prepared['coverage_ratio'] < 0.6:
+            return OptimizeResult(success=False, bucket_id=target_bucket, message='optimize coverage too low', reason_code='coverage_too_low', coverage_ratio=prepared['coverage_ratio'], skipped_invalid_count=prepared['skipped_invalid_count'], sealed_redirects=sealed_redirects)
+        if prepared['parent_count'] > 800 or prepared['max_group_count'] > 800:
+            return OptimizeResult(success=False, bucket_id=target_bucket, message='too many elements in parent/group bucket', reason_code='elements_over_800', coverage_ratio=prepared['coverage_ratio'], skipped_invalid_count=prepared['skipped_invalid_count'], sealed_redirects=sealed_redirects)
         bucket_plan = self._build_bucket_assignment_plan(target_bucket=target_bucket, prepared=prepared)
-        pressure_check = await asyncio.to_thread(
-            self._validate_bucket_pressure,
-            max_context_window=eng.max_context_window,
-            candidate_records=candidate_records,
-            bucket_plan=bucket_plan,
-            target_bucket=target_bucket,
-        )
-        if not pressure_check["ok"]:
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message=str(pressure_check.get("message", "optimize pressure check failed")),
-                reason_code=str(pressure_check.get("reason_code", "pressure_reject")),
-                coverage_ratio=prepared["coverage_ratio"],
-                skipped_invalid_count=prepared["skipped_invalid_count"],
-                sealed_redirects=sealed_redirects,
-            )
+        pressure_check = await rt.run_storage_task(self._validate_bucket_pressure, max_context_window=rt.max_context_window, candidate_records=candidate_records, bucket_plan=bucket_plan, target_bucket=target_bucket)
+        if not pressure_check['ok']:
+            return OptimizeResult(success=False, bucket_id=target_bucket, message=str(pressure_check.get('message', 'optimize pressure check failed')), reason_code=str(pressure_check.get('reason_code', 'pressure_reject')), coverage_ratio=prepared['coverage_ratio'], skipped_invalid_count=prepared['skipped_invalid_count'], sealed_redirects=sealed_redirects)
+        return (prepared, pressure_check)
 
-        req_id = eng._next_alias_request_id("optimize_apply")
+    async def _apply_optimize_plan(self, *, target_bucket: str, info: BucketInfo, reason: str, prepared: dict[str, Any], pressure_check: dict[str, Any], candidate_records: dict[str, MemoryRecord], map_ver: int, llm_path_source: str, sealed_redirects: dict[str, str]) -> OptimizeResult:
+        rt = self.runtime
+        req_id = self.alias.next_request_id('optimize_apply')
         created_bucket_ids: list[str] = []
         moved_items = 0
         post_actions: list[dict[str, Any]] = []
-
         try:
-            successor = eng._create_successor_bucket_shallow_unlocked(
-                source_bucket_id=target_bucket,
-                title=f"{info.title}_optimized",
-                summary=(str(prepared.get("parent_summary", "")).strip() or info.summary),
-            )
-
+            successor = await self.topology._create_successor_bucket_shallow_unlocked(source_bucket_id=target_bucket, title=f'{info.title}_optimized', summary=str(prepared.get('parent_summary', '')).strip() or info.summary)
             group_bucket_mapping: dict[str, str] = {}
-            for g in prepared["groups"]:
-                gid = str(g["group_id"])
-                existing_bucket_id = str(g.get("group_bucket_id", "")).strip()
-                dst_bucket_id = ""
+            for g in prepared['groups']:
+                gid = str(g['group_id'])
+                existing_bucket_id = str(g.get('group_bucket_id', '')).strip()
+                dst_bucket_id = ''
                 if existing_bucket_id:
                     try:
-                        rb = eng._resolve_bucket_id(existing_bucket_id)
+                        rb = self.topology._resolve_bucket_id(existing_bucket_id)
                     except Exception:
-                        rb = ""
+                        rb = ''
                     if rb:
-                        dst_info = eng.storage.get_bucket_info(rb)
-                        if dst_info is not None and not dst_info.sealed:
+                        dst_info = rt.storage.get_bucket_info(rb)
+                        if dst_info is not None and (not dst_info.sealed):
                             dst_bucket_id = rb
                 if not dst_bucket_id:
-                    title = str(g.get("title", "")).strip() or f"optimized_group_{gid}"
-                    summary = str(g.get("summary", "")).strip() or "optimized group"
-                    content = str(g.get("content", "")).strip() or summary
-                    created = eng._create_bucket_unlocked(
-                        successor.bucket_id,
-                        title=title[:80],
-                        summary=summary[:140],
-                        content=content[:1000],
-                    )
+                    title = str(g.get('title', '')).strip() or f'optimized_group_{gid}'
+                    summary = str(g.get('summary', '')).strip() or 'optimized group'
+                    content = str(g.get('content', '')).strip() or summary
+                    created = await self.topology._create_bucket_unlocked(successor.bucket_id, title=title[:80], summary=summary[:140], content=content[:1000])
                     created_bucket_ids.append(created.bucket_id)
                     dst_bucket_id = created.bucket_id
                 group_bucket_mapping[gid] = dst_bucket_id
-
             assignment: dict[str, str] = {}
-            for key in prepared["parent_flat_keys"]:
+            for key in prepared['parent_flat_keys']:
                 assignment[key] = successor.bucket_id
-            for g in prepared["groups"]:
-                gid = str(g["group_id"])
-                dst = group_bucket_mapping.get(gid, "")
+            for g in prepared['groups']:
+                gid = str(g['group_id'])
+                dst = group_bucket_mapping.get(gid, '')
                 if not dst:
                     continue
-                for key in g.get("member_keys", []):
+                for key in g.get('member_keys', []):
                     if key in assignment and assignment[key] == successor.bucket_id:
                         continue
                     assignment[key] = dst
-
-            retained_keys = set(prepared.get("retained_keys", []))
+            retained_keys = set(prepared.get('retained_keys', []))
             omitted_keys = [k for k in candidate_records.keys() if k not in retained_keys]
-            metadata_update = prepared.get("metadata_update", {})
-
+            metadata_update = prepared.get('metadata_update', {})
             for key, dst_bucket in assignment.items():
-                current = eng.storage.get_record(key)
+                current = await rt.run_storage_task(rt.storage.get_record, key)
                 if current is None or current.gray:
                     continue
-                dst_bucket_resolved = eng._resolve_bucket_id(dst_bucket)
+                dst_bucket_resolved = self.topology._resolve_bucket_id(dst_bucket)
                 source_record = current
                 row = metadata_update.get(key, {})
                 if isinstance(row, dict) and row:
                     source_record = MemoryRecord.from_dict(current.to_dict())
-                    if "relations" in row:
-                        source_record.relations = normalize_relations(row.get("relations", {}))
+                    if 'relations' in row:
+                        source_record.relations = normalize_relations(row.get('relations', {}))
                     if current.kind == BUCKET_KIND_BUCKET:
-                        if "summary" in row:
-                            source_record.summary = str(row.get("summary", "")).strip()[:140]
-                        if "content" in row:
-                            source_record.content = str(row.get("content", "")).strip()[:1000]
-                eng._write_rebuilt_record_unlocked(
-                    source_record=source_record,
-                    dst_bucket_id=dst_bucket_resolved,
-                    event="OPTIMIZE_REBUILD",
-                    reason=reason,
-                )
+                        if 'summary' in row:
+                            source_record.summary = str(row.get('summary', '')).strip()[:140]
+                        if 'content' in row:
+                            source_record.content = str(row.get('content', '')).strip()[:1000]
+                await self.primitives._write_rebuilt_record_unlocked(source_record=source_record, dst_bucket_id=dst_bucket_resolved, event='OPTIMIZE_REBUILD', reason=reason)
                 if current.bucket_id != dst_bucket_resolved:
                     moved_items += 1
-
             for key in omitted_keys:
-                current = eng.storage.get_record(key)
+                current = await rt.run_storage_task(rt.storage.get_record, key)
                 if current is None or current.gray:
                     continue
-                self._gray_out_record_unlocked(current=current, reason="optimize_plan_omitted")
+                await self._gray_out_record_unlocked(current=current, reason='optimize_plan_omitted')
                 if current.kind == BUCKET_KIND_BUCKET:
-                    self._seal_archive_child_bucket_unlocked(current)
-
-            parent_summary = str(prepared.get("parent_summary", "")).strip()
-            parent_content = str(prepared.get("parent_content", "")).strip()
-            successor_info = eng.storage.get_bucket_info(successor.bucket_id)
+                    await self._seal_archive_child_bucket_unlocked(current)
+            parent_summary = str(prepared.get('parent_summary', '')).strip()
+            parent_content = str(prepared.get('parent_content', '')).strip()
+            successor_info = rt.storage.get_bucket_info(successor.bucket_id)
             if successor_info is not None and (parent_summary or parent_content):
                 if parent_summary:
                     successor_info.summary = parent_summary[:140]
-                successor_info.summary_status = "ready"
-                eng.storage.update_bucket_info(successor_info)
-                eng._append_bucket_summary_update_event_unlocked(
-                    info=successor_info,
-                    summary=successor_info.summary,
-                    content=(parent_content or successor_info.summary)[:1000],
-                    reason=f"optimize:{reason}",
-                )
-
-            eng._seal_and_switch_bucket_unlocked(
-                source_bucket_id=target_bucket,
-                successor_bucket_id=successor.bucket_id,
-                reason=reason,
-            )
-
-            eng.storage.append_alias_audit(
-                {
-                    "request_id": req_id,
-                    "tool": "optimize_apply",
-                    "bucket_id": target_bucket,
-                    "successor_bucket_id": successor.bucket_id,
-                    "map_version": map_ver,
-                    "result_source": llm_path_source,
-                    "coverage_ratio": prepared["coverage_ratio"],
-                    "skipped_invalid_count": prepared["skipped_invalid_count"],
-                    "created_bucket_ids": created_bucket_ids,
-                    "moved_keys": moved_items,
-                    "omitted_keys_count": len(omitted_keys),
-                    "sealed_redirects": sealed_redirects,
-                    "switched_at": utc_now_iso(),
-                }
-            )
-            eng.storage.append_event(
-                event_type="OPTIMIZE_APPLY",
-                bucket_id=target_bucket,
-                payload={
-                    "request_id": req_id,
-                    "reason": reason,
-                    "result_source": llm_path_source,
-                    "coverage_ratio": prepared["coverage_ratio"],
-                    "skipped_invalid_count": prepared["skipped_invalid_count"],
-                    "created_bucket_ids": created_bucket_ids,
-                    "moved_items": moved_items,
-                    "omitted_keys": len(omitted_keys),
-                    "sealed_redirects": sealed_redirects,
-                    "successor_bucket_id": successor.bucket_id,
-                },
-            )
-
-            post_targets = [b for b in pressure_check["post_action_buckets"] if not str(b).startswith("__new_group__")]
+                successor_info.summary_status = 'ready'
+                await rt.run_storage_task(rt.storage.update_bucket_info, successor_info)
+                await self.summary._append_bucket_summary_update_event_unlocked(info=successor_info, summary=successor_info.summary, content=(parent_content or successor_info.summary)[:1000], reason=f'optimize:{reason}')
+            await self.topology._seal_and_switch_bucket_unlocked(source_bucket_id=target_bucket, successor_bucket_id=successor.bucket_id, reason=reason)
+            await rt.run_storage_task(rt.storage.append_alias_audit, {'request_id': req_id, 'tool': 'optimize_apply', 'bucket_id': target_bucket, 'successor_bucket_id': successor.bucket_id, 'map_version': map_ver, 'result_source': llm_path_source, 'coverage_ratio': prepared['coverage_ratio'], 'skipped_invalid_count': prepared['skipped_invalid_count'], 'created_bucket_ids': created_bucket_ids, 'moved_keys': moved_items, 'omitted_keys_count': len(omitted_keys), 'sealed_redirects': sealed_redirects, 'switched_at': utc_now_iso()})
+            await rt.run_storage_task(rt.storage.append_event, event_type='OPTIMIZE_APPLY', bucket_id=target_bucket, payload={'request_id': req_id, 'reason': reason, 'result_source': llm_path_source, 'coverage_ratio': prepared['coverage_ratio'], 'skipped_invalid_count': prepared['skipped_invalid_count'], 'created_bucket_ids': created_bucket_ids, 'moved_items': moved_items, 'omitted_keys': len(omitted_keys), 'sealed_redirects': sealed_redirects, 'successor_bucket_id': successor.bucket_id})
+            post_targets = [b for b in pressure_check['post_action_buckets'] if not str(b).startswith('__new_group__')]
             if post_targets and len(post_targets) < 3:
                 for bid in post_targets:
                     try:
-                        await eng._force_compress_unlocked(bucket_id=bid, reason="optimize_post_action")
-                        await eng._auto_manage_bucket(bid)
-                        post_actions.append({"bucket_id": bid, "action": "compress_split", "ok": True})
+                        await self.compression._force_compress_unlocked(bucket_id=bid, reason='optimize_post_action')
+                        await self.governance._auto_manage_bucket(bid)
+                        post_actions.append({'bucket_id': bid, 'action': 'compress_split', 'ok': True})
                     except Exception as exc:
-                        post_actions.append({"bucket_id": bid, "action": "compress_split", "ok": False, "error": str(exc)})
-
-            await eng._run_memory_gc()
-            return OptimizeResult(
-                success=True,
-                bucket_id=successor.bucket_id,
-                message="optimize applied via successor rebuild",
-                reason_code="ok",
-                coverage_ratio=prepared["coverage_ratio"],
-                skipped_invalid_count=prepared["skipped_invalid_count"],
-                created_buckets=created_bucket_ids,
-                moved_items=moved_items,
-                sealed_redirects=sealed_redirects,
-                post_actions=post_actions,
-            )
+                        post_actions.append({'bucket_id': bid, 'action': 'compress_split', 'ok': False, 'error': str(exc)})
+            await self.maintenance._run_memory_gc()
+            return OptimizeResult(success=True, bucket_id=successor.bucket_id, message='optimize applied via successor rebuild', reason_code='ok', coverage_ratio=prepared['coverage_ratio'], skipped_invalid_count=prepared['skipped_invalid_count'], created_buckets=created_bucket_ids, moved_items=moved_items, sealed_redirects=sealed_redirects, post_actions=post_actions)
         except Exception as exc:
-            return OptimizeResult(
-                success=False,
-                bucket_id=target_bucket,
-                message=f"optimize failed: {exc}",
-                reason_code="apply_failed",
-                coverage_ratio=prepared.get("coverage_ratio", 0.0),
-                skipped_invalid_count=prepared.get("skipped_invalid_count", 0),
-                created_buckets=created_bucket_ids,
-                moved_items=moved_items,
-                sealed_redirects=sealed_redirects,
-                post_actions=post_actions,
-            )
+            return OptimizeResult(success=False, bucket_id=target_bucket, message=f'optimize failed: {exc}', reason_code='apply_failed', coverage_ratio=prepared.get('coverage_ratio', 0.0), skipped_invalid_count=prepared.get('skipped_invalid_count', 0), created_buckets=created_bucket_ids, moved_items=moved_items, sealed_redirects=sealed_redirects, post_actions=post_actions)
 
-    def _collect_candidates(
+    async def _collect_candidates(
         self,
         target_bucket: str,
     ) -> tuple[
@@ -401,14 +244,18 @@ class OptimizeService:
         set[str],
         dict[str, str],
     ]:
-        eng = self.runtime.engine
+        rt = self.runtime
         candidate_records: dict[str, MemoryRecord] = {}
         parent_keys: list[str] = []
         child_expansions: list[dict[str, Any]] = []
         sealed_redirects: dict[str, str] = {}
         bucket_id_to_node_key: dict[str, str] = {}
 
-        direct_records = eng.storage.list_bucket_records(target_bucket, include_gray=False)
+        direct_records = await rt.run_storage_task(
+            rt.storage.load_bucket_snapshot,
+            target_bucket,
+            include_gray=False,
+        )
         for rec in direct_records:
             if rec.key not in candidate_records:
                 candidate_records[rec.key] = rec
@@ -416,14 +263,22 @@ class OptimizeService:
             if rec.kind == BUCKET_KIND_BUCKET and str(rec.child_bucket_id or "").strip():
                 raw_child = str(rec.child_bucket_id).strip()
                 try:
-                    child_bucket = eng._resolve_bucket_id(raw_child)
+                    child_bucket = self.topology._resolve_bucket_id(raw_child)
                 except Exception:
                     child_bucket = raw_child
                 if child_bucket and raw_child and child_bucket != raw_child:
                     sealed_redirects[raw_child] = child_bucket
                 if child_bucket:
                     bucket_id_to_node_key[child_bucket] = rec.key
-                child_records = eng.storage.list_bucket_records(child_bucket, include_gray=False) if child_bucket else []
+                child_records = (
+                    await rt.run_storage_task(
+                        rt.storage.load_bucket_snapshot,
+                        child_bucket,
+                        include_gray=False,
+                    )
+                    if child_bucket
+                    else []
+                )
                 expanded_keys: list[str] = []
                 for c in child_records:
                     if c.key not in candidate_records:
@@ -431,7 +286,7 @@ class OptimizeService:
                     expanded_keys.append(c.key)
                     if c.kind == BUCKET_KIND_BUCKET and str(c.child_bucket_id or "").strip():
                         try:
-                            grand_child = eng._resolve_bucket_id(str(c.child_bucket_id).strip())
+                            grand_child = self.topology._resolve_bucket_id(str(c.child_bucket_id).strip())
                         except Exception:
                             grand_child = str(c.child_bucket_id).strip()
                         if grand_child:
@@ -580,8 +435,6 @@ class OptimizeService:
         bucket_id_to_node_key: dict[str, str],
         child_expansions: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        eng = self.runtime.engine
-        alias_table = eng._alias_table(target_bucket)
         candidate_keys = set(candidate_records.keys())
         skipped_invalid_count = 0
         child_expand_map: dict[str, list[str]] = {}
@@ -602,15 +455,6 @@ class OptimizeService:
             if token in candidate_keys:
                 return token
             node_key = str(bucket_id_to_node_key.get(token, "")).strip()
-            if node_key and node_key in candidate_keys:
-                return node_key
-            try:
-                resolved = str(alias_table.to_real(token)).strip()
-            except Exception:
-                resolved = ""
-            if resolved in candidate_keys:
-                return resolved
-            node_key = str(bucket_id_to_node_key.get(resolved, "")).strip()
             if node_key and node_key in candidate_keys:
                 return node_key
             return ""
@@ -803,7 +647,7 @@ class OptimizeService:
         bucket_plan: dict[str, Any],
         target_bucket: str,
     ) -> dict[str, Any]:
-        eng = self.runtime.engine
+        rt = self.runtime
         assignment: dict[str, str] = bucket_plan["assignment"]
         retain_in_place_keys = set(bucket_plan.get("retain_in_place_keys", []))
 
@@ -813,17 +657,17 @@ class OptimizeService:
         for dst in assignment.values():
             if dst and not dst.startswith("__new_group__"):
                 try:
-                    touched_existing_buckets.add(eng._resolve_bucket_id(dst))
+                    touched_existing_buckets.add(self.topology._resolve_bucket_id(dst))
                 except Exception:
                     touched_existing_buckets.add(dst)
 
         sim: dict[str, list[MemoryRecord]] = {}
         for bid in touched_existing_buckets:
             try:
-                rb = eng._resolve_bucket_id(bid)
+                rb = self.topology._resolve_bucket_id(bid)
             except Exception:
                 rb = bid
-            sim[rb] = eng.storage.list_bucket_records(rb, include_gray=False)
+            sim[rb] = rt.storage.load_bucket_snapshot(rb, include_gray=False)
 
         candidate_keys = set(candidate_records.keys())
         for bid, items in list(sim.items()):
@@ -836,7 +680,7 @@ class OptimizeService:
                     dst_bucket = dst
                 else:
                     try:
-                        dst_bucket = eng._resolve_bucket_id(dst)
+                        dst_bucket = self.topology._resolve_bucket_id(dst)
                     except Exception:
                         dst_bucket = dst
                 sim.setdefault(dst_bucket, []).append(rec)
@@ -854,7 +698,7 @@ class OptimizeService:
         mid_buckets: list[str] = []
         max_window = max(1, int(max_context_window))
         for bid, records in sim.items():
-            est = eng.token_counter.count_json([record.to_dict() for record in records])
+            est = rt.token_counter.count_json([record.to_dict() for record in records])
             ratio = est / float(max_window)
             if ratio > 0.80:
                 return {"ok": False, "reason_code": "bucket_over_80pct", "message": f"bucket pressure too high: {bid}"}
@@ -865,17 +709,17 @@ class OptimizeService:
         return {"ok": True, "post_action_buckets": mid_buckets}
 
     def _is_leaf_bucket_node(self, rec: MemoryRecord) -> bool:
-        eng = self.runtime.engine
+        rt = self.runtime
         child_raw = str(rec.child_bucket_id or "").strip()
         if not child_raw:
             return True
         try:
-            child = eng._resolve_bucket_id(child_raw)
+            child = self.topology._resolve_bucket_id(child_raw)
         except Exception:
             child = child_raw
         if not child:
             return True
-        info = eng.storage.get_bucket_info(child)
+        info = rt.storage.get_bucket_info(child)
         if info is None:
             return True
         return len(info.children) == 0
@@ -887,8 +731,8 @@ class OptimizeService:
         leaf_bucket_keys: set[str],
         mentioned_keys: set[str],
     ) -> dict[str, Any]:
-        eng = self.runtime.engine
-        loss_threshold = max(0.0, min(1.0, float(getattr(eng, "_optimize_leaf_loss_threshold", 0.03))))
+        rt = self.runtime
+        loss_threshold = max(0.0, min(1.0, float(getattr(rt, "_optimize_leaf_loss_threshold", 0.03))))
         if not leaf_node_keys:
             return {"ok": True}
         missing_leaf_nodes = {k for k in leaf_node_keys if k not in mentioned_keys}
@@ -910,10 +754,10 @@ class OptimizeService:
             }
         return {"ok": True}
 
-    def _gray_out_record_unlocked(self, *, current: MemoryRecord, reason: str) -> None:
-        eng = self.runtime.engine
+    async def _gray_out_record_unlocked(self, *, current: MemoryRecord, reason: str) -> None:
+        rt = self.runtime
         rel = normalize_relations(current.relations)
-        eng._append_relation_once(
+        self.primitives._append_relation_once(
             rel["lifecycle_links"],
             target=current.revision_id,
             rel_type="tombstones",
@@ -922,7 +766,7 @@ class OptimizeService:
         )
         out_rec = MemoryRecord(
             key=current.key,
-            revision_id=eng.storage.generate_revision_id(),
+            revision_id=rt.storage.generate_revision_id(),
             kind=current.kind,
             bucket_id=current.bucket_id,
             title=current.title,
@@ -938,33 +782,33 @@ class OptimizeService:
             child_bucket_id=current.child_bucket_id,
             confidence_type=current.confidence_type,
         )
-        eng.storage.write_memory_record(out_rec)
-        eng._append_context_event(
+        await rt.run_storage_task(rt.storage.write_memory_record, out_rec)
+        await self.primitives._append_context_event(
             bucket_id=current.bucket_id,
             event_type="GRAY_SET",
             record=out_rec,
             payload={"from_revision": current.revision_id, "reason": reason},
         )
 
-    def _seal_archive_child_bucket_unlocked(self, bucket_node: MemoryRecord) -> None:
-        eng = self.runtime.engine
+    async def _seal_archive_child_bucket_unlocked(self, bucket_node: MemoryRecord) -> None:
+        rt = self.runtime
         child_raw = str(bucket_node.child_bucket_id or "").strip()
         if not child_raw:
             return
         try:
-            child_bucket = eng._resolve_bucket_id(child_raw)
+            child_bucket = self.topology._resolve_bucket_id(child_raw)
         except Exception:
             child_bucket = child_raw
         if not child_bucket:
             return
-        info = eng.storage.get_bucket_info(child_bucket)
+        info = rt.storage.get_bucket_info(child_bucket)
         if info is None:
             return
         info.sealed = True
         info.archived = True
         info.updated_at = utc_now_iso()
-        eng.storage.update_bucket_info(info)
+        await rt.run_storage_task(rt.storage.update_bucket_info, info)
         try:
-            eng._alias_table(child_bucket).freeze()
+            await rt.run_storage_task(self.alias._alias_table(child_bucket).freeze)
         except Exception:
             pass

@@ -81,7 +81,7 @@ def smoke_input_dir(smoke_runtime_dir: Path) -> Path:
     return input_dir
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def engine(smoke_runtime_dir: Path) -> ContextMemoryEngineV3:
     _ensure_real_llm_ready()
     store_dir = smoke_runtime_dir / "store"
@@ -96,7 +96,11 @@ async def engine(smoke_runtime_dir: Path) -> ContextMemoryEngineV3:
         enable_cleaning=True,
         auto_manage=False,
     )
-    return ContextMemoryEngineV3(config=cfg)
+    engine = ContextMemoryEngineV3(config=cfg)
+    try:
+        yield engine
+    finally:
+        await engine.close(wait=True)
 
 
 @pytest.mark.asyncio

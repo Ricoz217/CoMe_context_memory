@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import json
@@ -65,14 +65,21 @@ def _create_engine(base_dir: str | Path):
 
 
 class SchemaMigrationTests(unittest.TestCase):
-    def test_missing_schema_file_defaults_to_v1_and_upgrades_to_v3(self) -> None:
+    def test_missing_schema_file_creates_v4_directly(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                _create_engine(td)
+                engine = _create_engine(td)
+            engine.shutdown(wait=True)
             st = MemoryStorageV3(td)
             info = st.read_schema_version(default_schema_version=1)
             self.assertTrue(st.schema_version_file.exists())
-            self.assertEqual(int(info.get("schema_version", -1)), 3)
+            self.assertEqual(int(info.get("schema_version", -1)), 4)
+            self.assertTrue(st.sqlite_index_file.exists())
+            self.assertFalse(st.state_file.exists())
+            self.assertFalse(st.bucket_tree_file.exists())
+            self.assertFalse(st.meta_file.exists())
+            self.assertFalse(st.cache_file.exists())
+            st.close()
 
     def test_data_newer_than_code_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -92,6 +99,7 @@ class SchemaMigrationTests(unittest.TestCase):
             ):
                 eng = _create_engine(td)
                 status = asyncio.run(eng.migration_status())
+                eng.shutdown(wait=True)
             st = MemoryStorageV3(td)
             info = st.read_schema_version(default_schema_version=1)
             self.assertEqual(int(info.get("schema_version", -1)), 2)
@@ -166,10 +174,15 @@ class SchemaMigrationTests(unittest.TestCase):
             self.assertGreater(float(child_info.last_event_at), 0.0)
             self.assertGreaterEqual(float(root_info.last_event_at), float(child_info.last_event_at))
             self.assertGreaterEqual(float(root_info.last_event_at), root_before)
+            eng.shutdown(wait=True)
 
     def test_v1_to_v2_migration_patches_old_dataset_fields(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
+            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096), patch.object(
+                memory_engine,
+                "__data_version__",
+                1,
+            ):
                 eng = _create_engine(td)
             root = eng.root_bucket_id()
             child = asyncio.run(
@@ -184,6 +197,7 @@ class SchemaMigrationTests(unittest.TestCase):
             record = eng.storage.get_record(add.key)
             self.assertIsNotNone(record)
 
+            # Simulate legacy v1 dataset by stripping new fields.
             latest_path = eng.storage._resolve_root_path(eng.storage.load_state()["keys"][add.key]["latest_path"])
             record_payload = json.loads(latest_path.read_text(encoding="utf-8"))
             record_payload.pop("confidence_type", None)
@@ -241,9 +255,11 @@ class SchemaMigrationTests(unittest.TestCase):
                 eng.storage.save_bucket_tree(tree)
 
             eng.storage.write_schema_version(schema_version=1, engine_version="legacy")
+            eng.shutdown(wait=True)
 
             with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                _create_engine(td)
+                migrated_engine = _create_engine(td)
+            migrated_engine.shutdown(wait=True)
 
             st = MemoryStorageV3(td)
             rec_after = st.get_record(add.key)
@@ -267,6 +283,7 @@ class SchemaMigrationTests(unittest.TestCase):
                 evt = json.loads(raw)
                 if isinstance(evt, dict):
                     self.assertTrue(str(evt.get("confidence_type", "")).strip())
+            st.close()
 
 
 if __name__ == "__main__":

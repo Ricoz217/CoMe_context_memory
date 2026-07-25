@@ -5,6 +5,7 @@ import json
 import re
 import tempfile
 import unittest
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
@@ -62,6 +63,16 @@ def _create_engine(base_dir: str | Path):
         auto_resume_pending_jobs=False,
     )
 
+@contextmanager
+def _temporary_engine(prefix: str):
+    with tempfile.TemporaryDirectory(prefix=prefix) as td:
+        with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
+            engine = _create_engine(td)
+        try:
+            yield engine
+        finally:
+            engine.shutdown(wait=True)
+
 
 class AliasTableTests(unittest.TestCase):
     def test_callback_storage_fallback_uses_the_same_generic_converter(self) -> None:
@@ -112,9 +123,7 @@ class AliasTableTests(unittest.TestCase):
             table.to_real_many(memory_alias)
 
     def test_scalar_mapping_is_append_only_and_bucket_scoped(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_table_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_table_") as eng:
             root = eng.root_bucket_id()
             child = asyncio.run(eng.create_bucket(root, title="child", summary="child"))
             store = AliasStore(eng.storage)
@@ -132,9 +141,7 @@ class AliasTableTests(unittest.TestCase):
                 root_table.to_real("memory_999")
 
     def test_encode_tree_converts_keys_lists_and_embedded_ids(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_tree_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_tree_") as eng:
             root = eng.root_bucket_id()
             table = AliasStore(eng.storage).open(root)
             mem_id = eng.storage.generate_key()
@@ -161,9 +168,7 @@ class AliasTableTests(unittest.TestCase):
             table.assert_safe(encoded)
 
     def test_decode_tree_restores_structured_aliases_without_rewriting_prose(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_decode_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_decode_") as eng:
             root = eng.root_bucket_id()
             table = AliasStore(eng.storage).open(root)
             mem_id = eng.storage.generate_key()
@@ -188,9 +193,7 @@ class AliasTableTests(unittest.TestCase):
             self.assertEqual(decoded[mem_id]["comment"], "memory_1 is a display label")
 
     def test_decode_tree_rejects_unknown_aliases_and_key_collisions(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_decode_strict_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_decode_strict_") as eng:
             table = AliasStore(eng.storage).open(eng.root_bucket_id())
             mem_id = eng.storage.generate_key()
             self.assertEqual(table.to_alias(mem_id), "memory_1")
@@ -206,9 +209,7 @@ class AliasTableTests(unittest.TestCase):
             )
 
     def test_assert_safe_detects_real_ids_in_any_key_or_string(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_safe_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_safe_") as eng:
             table = AliasStore(eng.storage).open(eng.root_bucket_id())
             mem_id = eng.storage.generate_key()
 
@@ -218,9 +219,7 @@ class AliasTableTests(unittest.TestCase):
                 table.assert_safe({"label": f"prefix:{mem_id}:suffix"})
 
     def test_encode_tree_rejects_alias_key_collisions(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_collision_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_collision_") as eng:
             table = AliasStore(eng.storage).open(eng.root_bucket_id())
             mem_id = eng.storage.generate_key()
 
@@ -228,9 +227,7 @@ class AliasTableTests(unittest.TestCase):
                 table.encode_tree({mem_id: "first", "memory_1": "second"})
 
     def test_failed_commit_does_not_publish_mapping_to_cache(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_commit_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_commit_") as eng:
             root = eng.root_bucket_id()
             table = AliasStore(eng.storage).open(root)
             mem_id = eng.storage.generate_key()
@@ -242,9 +239,7 @@ class AliasTableTests(unittest.TestCase):
             self.assertIsNone(eng.storage.find_alias(root, mem_id, "memory"))
 
     def test_sealed_table_rejects_new_aliases(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_sealed_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_sealed_") as eng:
             root = eng.root_bucket_id()
             table = AliasStore(eng.storage).open(root)
             table.to_alias(eng.storage.generate_key())
@@ -259,9 +254,7 @@ class AliasTableTests(unittest.TestCase):
             self.assertEqual(table.snapshot_hash(), sealed_hash)
 
     def test_validation_read_only_and_async_store_paths(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_validation_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_validation_") as eng:
             root = eng.root_bucket_id()
             store = AliasStore(eng.storage)
             table = store.open(root)
@@ -293,9 +286,7 @@ class AliasTableTests(unittest.TestCase):
                 table.decode_tree({"safe": True}, map_version=stale_version)
 
     def test_engine_async_paths_use_alias_table_instead_of_compatibility_codec(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_engine_core_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_engine_core_") as eng:
             root = eng.root_bucket_id()
             mem_id = eng.storage.generate_key()
 
@@ -318,9 +309,7 @@ class AliasTableTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             AliasTable(object(), "")
 
-        with tempfile.TemporaryDirectory(prefix="cm_alias_corrupt_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_corrupt_") as eng:
             root = eng.root_bucket_id()
             table = AliasStore(eng.storage).open(root)
             amap = eng.storage.load_alias_map(root)
@@ -329,9 +318,7 @@ class AliasTableTests(unittest.TestCase):
             with self.assertRaises(AliasPayloadError):
                 table.encode_tree({"value": "safe"})
 
-        with tempfile.TemporaryDirectory(prefix="cm_alias_structure_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_structure_") as eng:
             root = eng.root_bucket_id()
             table = AliasStore(eng.storage).open(root)
             eng.storage.load_alias_map(root)["alias_to_real"] = []
@@ -339,9 +326,7 @@ class AliasTableTests(unittest.TestCase):
             with self.assertRaises(AliasPayloadError):
                 table.encode_tree({"value": "safe"})
 
-        with tempfile.TemporaryDirectory(prefix="cm_alias_counter_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_counter_") as eng:
             root = eng.root_bucket_id()
             table = AliasStore(eng.storage).open(root)
             first = eng.storage.generate_key()
@@ -353,9 +338,7 @@ class AliasTableTests(unittest.TestCase):
                 table.to_alias(second)
 
     def test_concurrent_allocation_has_no_duplicates_or_lost_entries(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_concurrency_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_concurrency_") as eng:
             root = eng.root_bucket_id()
             table = AliasStore(eng.storage).open(root)
             real_ids = [eng.storage.generate_key() for _ in range(40)]
@@ -372,9 +355,7 @@ class AliasTableTests(unittest.TestCase):
                 self.assertEqual(reloaded.to_real(alias), real_id)
 
     def test_async_prepare_does_not_block_event_loop(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cm_alias_async_") as td:
-            with patch.object(memory_engine, "_resolve_effective_max_context_window", return_value=4096):
-                eng = _create_engine(td)
+        with _temporary_engine("cm_alias_async_") as eng:
             table = AliasStore(eng.storage).open(eng.root_bucket_id())
             mem_id = eng.storage.generate_key()
 

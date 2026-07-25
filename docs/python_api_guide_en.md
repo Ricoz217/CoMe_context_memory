@@ -150,7 +150,7 @@ This releases internal resources such as query CPU thread pools.
 2. `create_child_bucket(...)` when not parse in `parent_bucket_id`, use active bucket by default.
 ## 11. Schema Migration (Brief)
 
-Release build now includes a built-in schema migration system (current `__data_version__ = 3`) to upgrade old stores before runtime operations.
+Release build now includes a built-in schema migration system (current `__data_version__ = 4`) to upgrade old stores before runtime operations.
 
 1. Auto trigger point
    - After storage binding, `ContextMemoryEngineV3` runs migration checks before exposing normal operations.
@@ -282,3 +282,13 @@ Resolve aliases through the same target bucket handle that generated them becaus
 - Recreating a deleted parent with the same title creates a new parent and subtree instead of restoring children from the old parent's historical mapping.
 - Schema v3 migrates legacy `bucket_mapping.json` into `bucket_tree.json.child_title_maps`. The live legacy file is removed only after success, while the pre-upgrade backup retains it.
 - The `alias_map.json` format is unchanged. Valid aliases are never renumbered; only safe metadata is normalized, and mapping corruption or topology errors abort and roll back migration.
+
+## 14. SQLite Index (Schema v4)
+
+- Starting with v0.5.0, `index/memory_index.sqlite3` is the only runtime source of truth for record indexes, bucket topology, engine metadata, and the query cache.
+- After a successful v3 -> v4 migration, `state.json`, `bucket_tree.json`, `meta.json`, and `query_cache.json` leave the live directory and remain in `index/migration_backups/pre_upgrade_latest/`.
+- Revision JSON, bucket `context.json`, evidence, Markdown, `alias_map.json`, and events NDJSON remain file-backed. Memory bodies are neither copied into SQLite nor fully retained in memory.
+- The engine keeps only minimal `RecordLocator` values and bucket topology resident. `list_memories()`, `BucketHandle.__contains__`, and topology lookups do not read revision files.
+- All SQLite and memory-file I/O runs on the dedicated single-thread storage worker instead of the caller's event loop.
+- The store remains single-process and single-writer. Multiple writer processes must not share one `base_dir`.
+- Failed migrations preserve the live v3 store and write a failed journal. A successfully migrated v4 store requires restoring the complete pre-upgrade backup before using older code.
